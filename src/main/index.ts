@@ -26,18 +26,18 @@ let isOfflineMode = false;
  * Create the setup window for pre-flight checks
  */
 function getPreloadPath(): string {
-  const mjs = path.join(__dirname, '../preload/index.mjs');
-  const js = path.join(__dirname, '../preload/index.js');
-  const preloadPath = fs.existsSync(mjs) ? mjs : js;
-  console.log('[Main] Preload path:', preloadPath, 'exists:', fs.existsSync(preloadPath));
-  return preloadPath;
+  const base = path.join(__dirname, '../preload/index');
+  if (fs.existsSync(base + '.cjs')) return base + '.cjs';
+  if (fs.existsSync(base + '.mjs')) return base + '.mjs';
+  return base + '.js';
 }
 
 function createSetupWindow() {
   setupWindow = new BrowserWindow({
-    width: 420,
-    height: 580,
-    frame: false,
+    width: 480,
+    height: 640,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
     resizable: false,
     center: true,
     show: false,
@@ -46,6 +46,7 @@ function createSetupWindow() {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
     },
   });
 
@@ -88,6 +89,7 @@ function createMainWindow() {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false,
       webSecurity: false,
     },
   });
@@ -265,6 +267,14 @@ ipcMain.on('setup:close-window', () => {
 // Minimize setup window
 ipcMain.on('setup:minimize-window', () => {
   setupWindow?.minimize();
+});
+
+// Resize setup window
+ipcMain.on('setup:resize-window', (_event, { height }: { height: number }) => {
+  if (setupWindow) {
+    const [width] = setupWindow.getSize();
+    setupWindow.setSize(width, height, true);
+  }
 });
 
 // ============================================

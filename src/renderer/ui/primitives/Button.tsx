@@ -1,6 +1,6 @@
 import type { FunctionalComponent, JSX } from 'preact';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 type ButtonProps = {
@@ -14,15 +14,16 @@ type ButtonProps = {
 };
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
-  primary: 'bg-dora-blue text-white hover:bg-dora-blue-dark active:scale-[0.98]',
-  secondary: 'bg-white/80 text-slate-800 border border-slate-200 hover:bg-white active:scale-[0.98]',
-  ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 active:scale-[0.98]',
+  primary: 'bg-dora-blue text-white shadow-sm hover:brightness-105 active:brightness-95',
+  secondary: 'bg-slate-100 text-slate-700 hover:bg-slate-200 active:bg-slate-200/80',
+  ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 active:bg-slate-100/80',
+  destructive: 'bg-red-500 text-white shadow-sm hover:brightness-105 active:brightness-95',
 };
 
 const SIZE_STYLES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs rounded-lg',
-  md: 'px-4 py-2 text-sm rounded-xl',
-  lg: 'px-6 py-3 text-base rounded-xl',
+  sm: 'h-7 px-3 text-[12px] rounded-md',
+  md: 'h-8 px-4 text-[13px] rounded-lg',
+  lg: 'h-10 px-5 text-[14px] rounded-lg',
 };
 
 export const Button: FunctionalComponent<ButtonProps> = ({
@@ -42,31 +43,19 @@ export const Button: FunctionalComponent<ButtonProps> = ({
       disabled={isDisabled}
       onClick={onClick}
       class={`
-        inline-flex items-center justify-center gap-2
-        font-medium transition-all duration-150
-        focus:outline-none focus:ring-2 focus:ring-dora-blue/40 focus:ring-offset-1
-        disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100
+        inline-flex items-center justify-center gap-1.5
+        font-medium transition-all duration-100
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-dora-blue/50 focus-visible:ring-offset-1
+        disabled:opacity-40 disabled:pointer-events-none
         ${VARIANT_STYLES[variant]}
         ${SIZE_STYLES[size]}
         ${className}
       `}
     >
       {loading && (
-        <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-          <circle
-            class="opacity-20"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="3"
-          />
-          <path
-            d="M12 2a10 10 0 0 1 10 10"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-          />
+        <svg class="animate-spin w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+          <circle class="opacity-25" cx="8" cy="8" r="6" stroke="currentColor" stroke-width="2" />
+          <path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
       )}
       {children}

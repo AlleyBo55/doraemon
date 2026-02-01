@@ -62,9 +62,10 @@ npm run build
 | Document | Description |
 |----------|-------------|
 | [⚙️ Configuration](docs/CONFIGURATION.md) | Environment variables, OpenClaw connection |
+| [🦞 OpenClaw Local](docs/OPENCLAW-LOCAL.md) | Quick setup guide for local OpenClaw |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
-| [� Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
-| [�🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
+| [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
+| [🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## 🎭 Emotions & Behaviors
 
