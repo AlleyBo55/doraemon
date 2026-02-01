@@ -156,26 +156,50 @@ Doraemon works without OpenClaw! When disconnected:
 - ✅ Shows connection status in UI
 
 Offline chat responses:
-- *"I can't reach OpenClaw right now... but I'm still here! �"*
+- *"I can't reach OpenClaw right now... but I'm still here! 💙"*
 - *"My 4D pocket can't connect... OpenClaw might be sleeping! 💤"*
 - *"I'm in offline mode! Start OpenClaw and I'll be smarter~ ✨"*
 
 ## 🛠️ Development
+
+### Tech Stack
+
+- Electron 28
+- Preact + Signals
+- Tailwind CSS
+- TypeScript
+- electron-vite
 
 ### Project Structure
 
 ```
 doraemon/
 ├── src/
-│   ├── main/index.ts          # Electron main process
+│   ├── main/
+│   │   ├── index.ts           # Electron main process
+│   │   └── daemon/            # OpenClaw daemon management
+│   │       ├── types.ts
+│   │       ├── node-checker.ts
+│   │       ├── openclaw-checker.ts
+│   │       ├── port-checker.ts
+│   │       ├── process-manager.ts
+│   │       └── instructions.ts
 │   ├── preload/index.ts       # IPC bridge
 │   └── renderer/
-│       ├── main.ts            # App entry, chat UI
-│       ├── shimeji-engine.ts  # Physics & behaviors
-│       ├── sprite-config.ts   # All 80 sprite mappings
-│       ├── sprite-loader.ts   # Sprite loading
-│       ├── emotion-engine.ts  # OpenClaw → emotions
-│       └── openclaw-client.ts # WebSocket client
+│       ├── core/
+│       │   ├── types/         # Branded types, emotion, connection
+│       │   ├── constants/     # Timing, gateway, sprite
+│       │   └── utils/         # Result type pattern
+│       ├── services/          # Gateway, emotion, sprite-loader
+│       ├── stores/            # Preact signals stores
+│       ├── hooks/             # Custom hooks
+│       ├── ui/
+│       │   ├── primitives/    # Button, Spinner, Badge, Icon
+│       │   ├── components/    # Setup, Mascot components
+│       │   └── layouts/
+│       ├── styles/
+│       ├── app.tsx            # Main mascot app
+│       └── setup-app.tsx      # Setup wizard
 ├── assets/
 │   └── dora-sprites/          # All 80 Shimeji sprites
 └── package.json
@@ -186,7 +210,17 @@ doraemon/
 ```bash
 npm run dev      # Development with hot reload
 npm run build    # Production build
-npm run lint     # Run linter
+npm start        # Run production build
+```
+
+### Skip Setup Wizard
+
+```bash
+# Via flag
+npm run dev -- --skip-setup
+
+# Via environment variable
+DORAEMON_SKIP_SETUP=1 npm run dev
 ```
 
 ### Building for Distribution
@@ -255,7 +289,7 @@ MIT
 
 **Doraemon Shimeji sprites by [Cachomon](https://www.deviantart.com/cachomon)**
 
-The beautiful Doraemon sprites used in this project are from the **[Doraemon Shimeji FREE](https://www.deviantart.com/cachomon/art/Doraemon-Shimeji-FREE-505596307)** pack created by **Cachomon** on DeviantArt. 
+The beautiful Doraemon sprites used in this project are from the **[Doraemon Shimeji FREE](https://www.deviantart.com/cachomon/art/Doraemon-Shimeji-FREE-505596307)** pack created by **Cachomon** on DeviantArt.
 
 Thank you Cachomon for creating and sharing these wonderful sprites with the community! 💙
 
