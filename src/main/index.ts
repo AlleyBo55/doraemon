@@ -25,6 +25,14 @@ let isOfflineMode = false;
 /**
  * Create the setup window for pre-flight checks
  */
+function getPreloadPath(): string {
+  const mjs = path.join(__dirname, '../preload/index.mjs');
+  const js = path.join(__dirname, '../preload/index.js');
+  const preloadPath = fs.existsSync(mjs) ? mjs : js;
+  console.log('[Main] Preload path:', preloadPath, 'exists:', fs.existsSync(preloadPath));
+  return preloadPath;
+}
+
 function createSetupWindow() {
   setupWindow = new BrowserWindow({
     width: 420,
@@ -35,15 +43,15 @@ function createSetupWindow() {
     show: false,
     backgroundColor: '#F5F5F7',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
+      preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  // Load the setup page
   if (process.env['NODE_ENV'] === 'development') {
     setupWindow.loadURL('http://localhost:5173/setup.html');
+    setupWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     setupWindow.loadFile(path.join(__dirname, '../renderer/setup.html'));
   }
@@ -77,10 +85,10 @@ function createMainWindow() {
     hasShadow: false,
     focusable: true,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.mjs'),
+      preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false, // Allow loading local files
+      webSecurity: false,
     },
   });
 
