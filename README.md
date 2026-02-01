@@ -249,7 +249,7 @@ MIT
     <img src="assets/dora-sprites/shime1.png" width="64" height="64">
     <img src="assets/dora-sprites/shime22.png" width="64" height="64">
     <img src="assets/dora-sprites/shime38.png" width="64" height="64">
-    <img src="assets/dora-sprites/shime41n.png" width="64" height="64">
+    <img src="assets/dora-sprites/shime41e.png" width="64" height="64">
   </a>
 </p>
 
@@ -280,7 +280,7 @@ To everyone who grew up with Doraemon — this one's for us. For the kids we wer
 ---
 
 <p align="center">
-  <img src="assets/dora-sprites/shime41n.png" width="64" height="64">
+  <img src="assets/dora-sprites/shime41e.png" width="64" height="64">
 </p>
 
 <p align="center">
