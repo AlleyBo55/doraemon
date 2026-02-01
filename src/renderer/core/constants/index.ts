@@ -1,3 +1,3 @@
 export * from './timing';
 export * from './gateway';
-export * from './sprite';
+export * from './sprites';

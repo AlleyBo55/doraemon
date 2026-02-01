@@ -42,8 +42,7 @@ doraemon/
 │       ├── styles/
 │       ├── app.tsx            # Main mascot app
 │       └── setup-app.tsx      # Setup wizard
-├── assets/
-│   └── dora-sprites/          # All 80 Shimeji sprites
+├── assets/                    # (empty - sprites moved to renderer/public)
 └── package.json
 ```
 

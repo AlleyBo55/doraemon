@@ -18,6 +18,19 @@ contextBridge.exposeInMainWorld('doraemon', {
   },
 });
 
+// Electron API (for renderer)
+contextBridge.exposeInMainWorld('electronAPI', {
+  setMouseEvents: (enabled: boolean) => {
+    ipcRenderer.send('set-mouse-events', enabled);
+  },
+  focusWindow: () => {
+    ipcRenderer.send('focus-window');
+  },
+  onResetPosition: (callback: (pos: { x: number; y: number }) => void) => {
+    ipcRenderer.on('reset-position', (_event: IpcRendererEvent, pos: { x: number; y: number }) => callback(pos));
+  },
+});
+
 // Setup API (for setup window)
 contextBridge.exposeInMainWorld('setupAPI', {
   // System checks

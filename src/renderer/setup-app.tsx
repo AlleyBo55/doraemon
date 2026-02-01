@@ -190,7 +190,7 @@ const SetupApp = () => {
       
       <div class="flex-1 flex flex-col items-center px-10 pb-6">
         <div class="w-[64px] h-[64px] rounded-[16px] bg-white flex items-center justify-center mb-4 shadow-lg overflow-hidden">
-          <img src="/shime20.png" alt="Doraemon" class="w-14 h-14 object-contain" />
+          <img src="/dora-sprites/shime1a.png" alt="Doraemon" class="w-14 h-14 object-contain" />
         </div>
 
         <h1 class="text-[18px] font-semibold text-[#1D1D1F] tracking-tight text-center">

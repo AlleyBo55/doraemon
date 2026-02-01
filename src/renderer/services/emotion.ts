@@ -10,6 +10,14 @@ const EMOTION_METADATA: Record<EmotionType, EmotionMetadata> = {
   confused: { intensity: 0.6, duration: 4000, color: '#fb923c' },
   sleepy: { intensity: 0.3, duration: null, color: '#6b7280' },
   surprised: { intensity: 0.9, duration: 2000, color: '#34d399' },
+  working: { intensity: 0.8, duration: null, color: '#3b82f6' },
+  frustrated: { intensity: 0.7, duration: 4000, color: '#ef4444' },
+  proud: { intensity: 0.9, duration: 5000, color: '#eab308' },
+  curious: { intensity: 0.6, duration: 3000, color: '#8b5cf6' },
+  playful: { intensity: 0.8, duration: 4000, color: '#ec4899' },
+  determined: { intensity: 0.9, duration: null, color: '#f97316' },
+  relaxed: { intensity: 0.4, duration: null, color: '#22c55e' },
+  anxious: { intensity: 0.7, duration: 5000, color: '#f59e0b' },
 };
 
 export const getMetadata = (emotion: EmotionType): EmotionMetadata =>
@@ -38,8 +46,8 @@ export const transition = (
 
 export const computeIdleEmotion = (idleMs: number): EmotionType => {
   if (idleMs >= IDLE_THRESHOLDS.SLEEPING) return 'sleepy';
-  if (idleMs >= IDLE_THRESHOLDS.SLEEPY) return 'sleepy';
-  if (idleMs >= IDLE_THRESHOLDS.BORED) return 'neutral';
+  if (idleMs >= IDLE_THRESHOLDS.SLEEPY) return 'relaxed';
+  if (idleMs >= IDLE_THRESHOLDS.BORED) return 'curious';
   return 'neutral';
 };
 

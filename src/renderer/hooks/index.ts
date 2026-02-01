@@ -1,4 +1,5 @@
 export { useGateway } from './useGateway';
 export { useEmotion } from './useEmotion';
-export { useSprites } from './useSprites';
 export { useIdleDetection } from './useIdleDetection';
+export { useOpenClaw } from './useOpenClaw';
+export { useRandomThoughts } from './useRandomThoughts';

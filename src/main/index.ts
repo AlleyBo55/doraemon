@@ -74,10 +74,10 @@ function createMainWindow() {
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
 
   mainWindow = new BrowserWindow({
-    width: 320,
-    height: 450,
-    x: screenWidth - 350,
-    y: screenHeight - 480,
+    width: screenWidth,
+    height: screenHeight,
+    x: 0,
+    y: 0,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -96,6 +96,11 @@ function createMainWindow() {
 
   // Make window click-through except for the mascot
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
+  
+  // Ensure window stays fullscreen on display changes
+  mainWindow.on('moved', () => {
+    mainWindow?.setBounds({ x: 0, y: 0, width: screenWidth, height: screenHeight });
+  });
 
   // Load the renderer
   if (process.env['NODE_ENV'] === 'development') {
@@ -152,7 +157,7 @@ function createTray() {
       label: 'Reset Position', 
       click: () => {
         const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-        mainWindow?.setPosition(width - 350, height - 480);
+        mainWindow?.webContents.send('reset-position', { x: width / 2 - 64, y: height / 2 - 64 });
       }
     },
     { type: 'separator' },
@@ -305,6 +310,15 @@ ipcMain.on('set-position', (_event: IpcMainEvent, { x, y }: { x: number; y: numb
 ipcMain.on('set-mouse-events', (_event: IpcMainEvent, enabled: boolean) => {
   if (mainWindow) {
     mainWindow.setIgnoreMouseEvents(!enabled, { forward: true });
+    if (enabled) {
+      mainWindow.setFocusable(true);
+    }
+  }
+});
+
+ipcMain.on('focus-window', () => {
+  if (mainWindow) {
+    mainWindow.focus();
   }
 });
 
