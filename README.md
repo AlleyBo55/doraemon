@@ -1,7 +1,7 @@
 # 🐱 Doraemon Desktop
 
 <p align="center">
-  <img src="assets/dora-sprites/shime20b.png" alt="Doraemon" width="128" height="128">
+  <img src="src/renderer/public/dora-sprites/shime20b.png" alt="Doraemon" width="128" height="128">
 </p>
 
 <p align="center">
@@ -63,6 +63,7 @@ npm run build
 |----------|-------------|
 | [⚙️ Configuration](docs/CONFIGURATION.md) | Environment variables, OpenClaw connection |
 | [🦞 OpenClaw Local](docs/OPENCLAW-LOCAL.md) | Quick setup guide for local OpenClaw |
+| [🐱 Doraemon Persona](docs/DORAEMON-PERSONA.md) | Inject Doraemon's soul into the AI |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
 | [🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
@@ -109,10 +110,10 @@ MIT
 
 <p align="center">
   <a href="https://www.deviantart.com/cachomon/art/Doraemon-Shimeji-FREE-505596307">
-    <img src="assets/dora-sprites/shime1.png" width="64" height="64">
-    <img src="assets/dora-sprites/shime22.png" width="64" height="64">
-    <img src="assets/dora-sprites/shime38.png" width="64" height="64">
-    <img src="assets/dora-sprites/shime41e.png" width="64" height="64">
+    <img src="src/renderer/public/dora-sprites/shime1.png" width="64" height="64">
+    <img src="src/renderer/public/dora-sprites/shime22.png" width="64" height="64">
+    <img src="src/renderer/public/dora-sprites/shime38.png" width="64" height="64">
+    <img src="src/renderer/public/dora-sprites/shime41e.png" width="64" height="64">
   </a>
 </p>
 
@@ -143,7 +144,7 @@ To everyone who grew up with Doraemon — this one's for us. For the kids we wer
 ---
 
 <p align="center">
-  <img src="assets/dora-sprites/shime41e.png" width="64" height="64">
+  <img src="src/renderer/public/dora-sprites/shime41e.png" width="64" height="64">
 </p>
 
 <p align="center">

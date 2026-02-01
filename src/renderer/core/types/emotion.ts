@@ -6,7 +6,15 @@ export type EmotionType =
   | 'thinking'
   | 'confused'
   | 'sleepy'
-  | 'surprised';
+  | 'surprised'
+  | 'working'
+  | 'frustrated'
+  | 'proud'
+  | 'curious'
+  | 'playful'
+  | 'determined'
+  | 'relaxed'
+  | 'anxious';
 
 export type EmotionState = {
   current: EmotionType;

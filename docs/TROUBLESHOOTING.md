@@ -14,7 +14,7 @@
 ## Doraemon doesn't animate
 
 1. Check console for errors (View → Developer Tools)
-2. Verify sprites exist in `assets/dora-sprites/`
+2. Verify sprites exist in `src/renderer/public/dora-sprites/`
 3. Try `npm run build` and restart
 
 ## Connection keeps dropping

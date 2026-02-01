@@ -37,11 +37,11 @@ export const ChatBubble: FunctionalComponent<ChatBubbleProps> = ({
     >
       <div
         class="
-          relative px-3 py-2 rounded-xl
+          relative px-4 py-2.5 rounded-xl
           bg-white/95 backdrop-blur-sm
           shadow-sm border border-slate-100
           text-sm text-slate-700
-          max-w-48 text-center
+          min-w-40 max-w-md whitespace-pre-wrap
         "
       >
         {isThinking ? <ThinkingDots /> : message}
