@@ -4,6 +4,51 @@
 
 ---
 
+## OpenClaw Setup
+
+Before using Doraemon, you need to configure OpenClaw:
+
+### 1. Install OpenClaw
+
+```bash
+npm install -g openclaw
+```
+
+### 2. Configure Gateway Mode
+
+```bash
+openclaw config set gateway.mode local
+```
+
+### 3. Set Authentication Token
+
+```bash
+openclaw config set gateway.auth.token localdev
+```
+
+> **Note:** Doraemon uses `localdev` as the default token. You can use any token, just make sure it matches in both OpenClaw config and Doraemon's `.env` file.
+
+### 4. Install and Start the Service
+
+```bash
+openclaw gateway install
+openclaw gateway restart
+```
+
+### 5. Verify It's Running
+
+```bash
+openclaw status
+```
+
+You should see `Runtime: running` and `RPC probe: ok`.
+
+### 6. Access Dashboard
+
+Open in browser: `http://127.0.0.1:18789/?token=localdev`
+
+---
+
 ## Environment Variables
 
 Create a `.env` file or set environment variables:
@@ -11,6 +56,9 @@ Create a `.env` file or set environment variables:
 ```bash
 # OpenClaw Gateway URL (required for AI features)
 OPENCLAW_URL=ws://127.0.0.1:18789
+
+# Gateway auth token (must match OpenClaw config)
+OPENCLAW_TOKEN=localdev
 ```
 
 ## Connecting to OpenClaw

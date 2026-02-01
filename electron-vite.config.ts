@@ -1,9 +1,10 @@
-import { defineConfig } from 'electron-vite';
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { resolve } from 'path';
 import preact from '@preact/preset-vite';
 
 export default defineConfig({
   main: {
+    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/main',
       rollupOptions: {
@@ -12,10 +13,13 @@ export default defineConfig({
     },
   },
   preload: {
+    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/preload',
-      rollupOptions: {
-        input: 'src/preload/index.ts',
+      lib: {
+        entry: resolve(__dirname, 'src/preload/index.ts'),
+        formats: ['cjs'],
+        fileName: () => 'index.cjs',
       },
     },
   },
@@ -31,6 +35,11 @@ export default defineConfig({
         },
       },
     },
-    publicDir: resolve(__dirname, 'assets'),
+    publicDir: resolve(__dirname, 'src/renderer/public'),
+    server: {
+      fs: {
+        allow: [resolve(__dirname, 'assets'), resolve(__dirname, 'src')],
+      },
+    },
   },
 });

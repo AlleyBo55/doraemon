@@ -1,5 +1,4 @@
 import type { FunctionalComponent } from 'preact';
-import { ProgressBar } from '../../primitives';
 
 type SetupProgressProps = {
   current: number;
@@ -10,19 +9,17 @@ type SetupProgressProps = {
 export const SetupProgress: FunctionalComponent<SetupProgressProps> = ({
   current,
   total,
-  label,
 }) => {
-  const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+  const percentage = total > 0 ? (current / total) * 100 : 0;
 
   return (
-    <div class="space-y-2">
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-slate-600">{label || 'Progress'}</span>
-        <span class="text-slate-500 tabular-nums">
-          {current}/{total}
-        </span>
+    <div class="mb-6">
+      <div class="h-1 bg-slate-200/80 rounded-full overflow-hidden">
+        <div
+          class="h-full bg-dora-blue rounded-full transition-all duration-500 ease-out"
+          style={{ width: `${percentage}%` }}
+        />
       </div>
-      <ProgressBar value={percentage} />
     </div>
   );
 };

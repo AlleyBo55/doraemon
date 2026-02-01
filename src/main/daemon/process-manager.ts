@@ -89,7 +89,7 @@ export async function startDaemon(
   port: number = DEFAULT_PORT,
   onProgress?: (message: string) => void
 ): Promise<StartDaemonResult> {
-  onProgress?.('Starting OpenClaw Gateway...');
+  onProgress?.('Checking OpenClaw Gateway...');
 
   try {
     const openclawCheck = await checkOpenClawInstalled();
@@ -97,26 +97,34 @@ export async function startDaemon(
       return { success: false, error: 'OpenClaw is not installed' };
     }
 
+    const portCheck = await checkPort(port);
+    
+    if (portCheck.inUse && portCheck.isOpenClaw) {
+      onProgress?.('Gateway already running!');
+      return { success: true, pid: portCheck.pid ?? undefined };
+    }
+
+    onProgress?.('Starting OpenClaw Gateway...');
     const child = spawn('openclaw', ['gateway', '--port', String(port)], {
       shell: true,
       detached: true,
       stdio: 'ignore',
       env: { ...process.env },
     });
-
     child.unref();
+
     onProgress?.('Waiting for Gateway to be ready...');
 
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 20; i++) {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const portCheck = await checkPort(port);
-      if (portCheck.inUse && portCheck.isOpenClaw) {
+      const check = await checkPort(port);
+      if (check.inUse && check.isOpenClaw) {
         onProgress?.('Gateway is ready!');
-        return { success: true, pid: portCheck.pid ?? undefined };
+        return { success: true, pid: check.pid ?? undefined };
       }
     }
 
-    return { success: false, error: 'Gateway did not start within 15 seconds' };
+    return { success: false, error: 'Gateway did not start within 10 seconds' };
   } catch (e) {
     return { success: false, error: String(e) };
   }
