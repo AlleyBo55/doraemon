@@ -245,18 +245,44 @@ class DoraemonApp {
   private handleOpenClawEvent(event: OpenClawFrame) {
     this.emotionEngine.processEvent(event);
     
+    // Handle chat events
     if (event.event === 'chat') {
-      const payload = event.payload as { state?: string; message?: string; content?: string };
+      const payload = event.payload as { 
+        state?: string; 
+        message?: { role?: string; content?: Array<{ type?: string; text?: string }> } | string;
+        content?: string;
+      };
       
       if (payload?.state === 'delta') {
+        // Show thinking indicator and stream the text if available
         this.showThinking();
+        
+        // Extract text from message if available (streaming delta)
+        const message = payload.message;
+        if (message && typeof message === 'object' && message.content) {
+          const textContent = message.content.find(c => c.type === 'text');
+          if (textContent?.text) {
+            this.updateThinkingText(textContent.text);
+          }
+        }
       } else if (payload?.state === 'final') {
         // Response received - stop waiting
         this.emotionEngine.stopWaitingForResponse();
         
-        const message = payload.message || payload.content || '';
-        if (message) {
-          this.showMessage(String(message));
+        // Extract final message
+        const message = payload.message;
+        let finalText = '';
+        if (message && typeof message === 'object' && message.content) {
+          const textContent = message.content.find(c => c.type === 'text');
+          finalText = textContent?.text || '';
+        } else if (typeof message === 'string') {
+          finalText = message;
+        } else if (payload.content) {
+          finalText = payload.content;
+        }
+        
+        if (finalText) {
+          this.showMessage(finalText);
         }
         this.hideThinking();
       } else if (payload?.state === 'error' || payload?.state === 'aborted') {
@@ -266,6 +292,24 @@ class DoraemonApp {
         if (payload?.state === 'error') {
           this.showMessage("Oops! Something went wrong... 😢");
         }
+      }
+    }
+    
+    // Handle agent events - show reasoning/thinking stream
+    if (event.event === 'agent') {
+      const payload = event.payload as {
+        stream?: string;
+        data?: { text?: string; phase?: string; tool?: string };
+      };
+      
+      // Show assistant stream (chain of thought / reasoning)
+      if (payload?.stream === 'assistant' && payload.data?.text) {
+        this.updateThinkingText(payload.data.text);
+      }
+      
+      // Show tool usage
+      if (payload?.stream === 'tool' && payload.data?.tool) {
+        this.updateThinkingText(`🔧 Using: ${payload.data.tool}...`);
       }
     }
   }
@@ -418,9 +462,32 @@ class DoraemonApp {
     this.cancelHideTimeout();
   }
 
+  /**
+   * Update the thinking text with streaming content (chain of thought / reasoning)
+   */
+  private updateThinkingText(text: string) {
+    if (!this.isThinking) {
+      this.showThinking();
+    }
+    
+    // Show the streaming text alongside the thinking indicator
+    // Truncate if too long for the bubble
+    const maxLength = 200;
+    const displayText = text.length > maxLength 
+      ? '...' + text.slice(-maxLength) 
+      : text;
+    
+    this.speechText.textContent = displayText;
+    this.speechText.classList.add('thinking-stream');
+    
+    // Auto-scroll to bottom if content overflows
+    this.speechBubble.scrollTop = this.speechBubble.scrollHeight;
+  }
+
   private hideThinking() {
     this.isThinking = false;
     this.thinkingIndicator.classList.remove('visible');
+    this.speechText.classList.remove('thinking-stream');
   }
 
   private sendMessage() {
@@ -540,13 +607,14 @@ class DoraemonApp {
     this.connectionDot.classList.add('reconnecting');
     this.statusText.textContent = `Reconnecting... (${attempt})`;
     
+    // Trigger reconnecting animation (sad laying loop)
+    this.emotionEngine.onReconnecting();
+    
     // Show a message if many attempts
     if (attempt === 3) {
       this.showMessage("Can't reach OpenClaw... I'll keep trying! 🔄");
-      this.emotionEngine.triggerEmotion('nervous', 0.6);
     } else if (attempt === 10) {
       this.showMessage("OpenClaw seems to be offline. I'll wait here! 😴");
-      this.emotionEngine.triggerEmotion('sad', 0.5);
     }
   }
 

@@ -48,7 +48,7 @@ export type Emotion =
   | 'hanging'
   | 'climbing';
 
-// Special animations (one-time)
+// Special animations (one-time or looping)
 export type SpecialAnimation =
   | 'clone'
   | 'pocket_pull'
@@ -58,6 +58,7 @@ export type SpecialAnimation =
   | 'loading'
   | 'connected'
   | 'disconnected'
+  | 'reconnecting'
   | 'throw_window'
   | 'wakeup'
   | 'fall_asleep';
@@ -720,11 +721,22 @@ export class EmotionEngine {
       // Check if we lost connection mid-operation
       if (wasConnected && this.isWaitingForResponse) {
         this.onConnectionLostMidOperation();
-      } else {
+      } else if (wasConnected) {
+        // Just disconnected - show sad then start reconnecting animation
         this.triggerSpecial('disconnected');
         this.setEmotion('sad', 0.7);
       }
+      // Note: reconnecting animation is triggered by onReconnecting()
     }
+  }
+
+  /**
+   * Called when actively trying to reconnect
+   */
+  onReconnecting() {
+    // Play the sad laying loop while reconnecting
+    this.triggerSpecial('reconnecting');
+    this.setEmotion('sad', 0.6);
   }
 
   // Manual emotion triggers

@@ -178,13 +178,13 @@ export const DORAEMON_SPRITES: SpriteConfig = {
       loop: false,
     },
     
-    // Thinking/Pocket check - searching the 4D pocket (for random behavior)
+    // Thinking/Pocket check - looking up and pondering (for random behavior)
     thinking: {
       frames: [
-        'shime38.png', 'shime38a.png', 'shime38.png', 'shime38a.png',
-        'shime39.png', 'shime40.png', 'shime38.png'
+        'shime26.png', 'shime27.png', 'shime28.png', 'shime29.png',
+        'shime28.png', 'shime27.png'
       ],
-      frameDelay: 200,
+      frameDelay: 250,
       loop: true,
     },
   },
@@ -231,13 +231,13 @@ export const DORAEMON_SPRITES: SpriteConfig = {
       loop: true,
     },
     
-    // Thinking - searching the 4D pocket
+    // Thinking - looking up and pondering
     thinking: {
       frames: [
-        'shime38.png', 'shime38a.png', 'shime38.png', 'shime38a.png',
-        'shime39.png', 'shime40.png', 'shime38.png'
+        'shime26.png', 'shime27.png', 'shime28.png', 'shime29.png',
+        'shime28.png', 'shime27.png'
       ],
-      frameDelay: 200,
+      frameDelay: 250,
       loop: true,
     },
     
@@ -465,6 +465,17 @@ export const DORAEMON_SPRITES: SpriteConfig = {
       frames: ['shime4.png', 'shime18.png', 'shime20.png', 'shime20a.png'],
       frameDelay: 200,
       loop: false,
+    },
+    
+    // Reconnecting - sad laying loop while trying to reconnect
+    reconnecting: {
+      frames: [
+        'shime20.png', 'shime20a.png', 'shime20b.png',
+        'shime21.png', 'shime21a.png', 'shime21.png',
+        'shime20b.png', 'shime20a.png'
+      ],
+      frameDelay: 300,
+      loop: true,
     },
     
     // Throw window - for fun interaction
