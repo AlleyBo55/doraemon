@@ -57,61 +57,14 @@ npm run dev
 npm run build
 ```
 
-## ⚙️ Configuration
+## 📚 Documentation
 
-### Environment Variables
-
-Create a `.env` file or set environment variables:
-
-```bash
-# OpenClaw Gateway URL (required for AI features)
-OPENCLAW_URL=ws://127.0.0.1:18789
-```
-
-### Connecting to OpenClaw
-
-#### Local Deployment
-
-If you're running OpenClaw locally:
-
-```bash
-# Default local gateway
-OPENCLAW_URL=ws://127.0.0.1:18789
-```
-
-#### Cloud Deployment
-
-For cloud-hosted OpenClaw instances:
-
-```bash
-# Secure WebSocket for cloud
-OPENCLAW_URL=wss://your-openclaw-server.com:18789
-
-# With custom port
-OPENCLAW_URL=wss://openclaw.example.com:443/gateway
-```
-
-#### Connection Examples
-
-| Deployment | URL |
-|------------|-----|
-| Local (default) | `ws://127.0.0.1:18789` |
-| Local (custom port) | `ws://localhost:8080` |
-| Cloud (secure) | `wss://api.openclaw.io:18789` |
-| Cloud (behind proxy) | `wss://openclaw.mycompany.com/ws` |
-
-### Running with Environment Variables
-
-```bash
-# macOS / Linux
-OPENCLAW_URL=wss://my-server.com:18789 npm run dev
-
-# Windows (PowerShell)
-$env:OPENCLAW_URL="wss://my-server.com:18789"; npm run dev
-
-# Windows (CMD)
-set OPENCLAW_URL=wss://my-server.com:18789 && npm run dev
-```
+| Document | Description |
+|----------|-------------|
+| [⚙️ Configuration](docs/CONFIGURATION.md) | Environment variables, OpenClaw connection |
+| [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
+| [� Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
+| [�🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## 🎭 Emotions & Behaviors
 
@@ -145,132 +98,7 @@ Doraemon feels alive even when idle:
 - **Yawning** — When getting sleepy
 - **Emotion flickers** — Brief happy, curious, or mischievous moments
 
-## 🔌 Offline Mode
-
-Doraemon works without OpenClaw! When disconnected:
-
-- ✅ All animations and physics work
-- ✅ Random emotions and behaviors continue
-- ✅ Chat responds with personality messages
-- ✅ Auto-reconnects with exponential backoff
-- ✅ Shows connection status in UI
-
-Offline chat responses:
-- *"I can't reach OpenClaw right now... but I'm still here! 💙"*
-- *"My 4D pocket can't connect... OpenClaw might be sleeping! 💤"*
-- *"I'm in offline mode! Start OpenClaw and I'll be smarter~ ✨"*
-
-## 🛠️ Development
-
-### Tech Stack
-
-- Electron 28
-- Preact + Signals
-- Tailwind CSS
-- TypeScript
-- electron-vite
-
-### Project Structure
-
-```
-doraemon/
-├── src/
-│   ├── main/
-│   │   ├── index.ts           # Electron main process
-│   │   └── daemon/            # OpenClaw daemon management
-│   │       ├── types.ts
-│   │       ├── node-checker.ts
-│   │       ├── openclaw-checker.ts
-│   │       ├── port-checker.ts
-│   │       ├── process-manager.ts
-│   │       └── instructions.ts
-│   ├── preload/index.ts       # IPC bridge
-│   └── renderer/
-│       ├── core/
-│       │   ├── types/         # Branded types, emotion, connection
-│       │   ├── constants/     # Timing, gateway, sprite
-│       │   └── utils/         # Result type pattern
-│       ├── services/          # Gateway, emotion, sprite-loader
-│       ├── stores/            # Preact signals stores
-│       ├── hooks/             # Custom hooks
-│       ├── ui/
-│       │   ├── primitives/    # Button, Spinner, Badge, Icon
-│       │   ├── components/    # Setup, Mascot components
-│       │   └── layouts/
-│       ├── styles/
-│       ├── app.tsx            # Main mascot app
-│       └── setup-app.tsx      # Setup wizard
-├── assets/
-│   └── dora-sprites/          # All 80 Shimeji sprites
-└── package.json
-```
-
-### Scripts
-
-```bash
-npm run dev      # Development with hot reload
-npm run build    # Production build
-npm start        # Run production build
-```
-
-### Skip Setup Wizard
-
-```bash
-# Via flag
-npm run dev -- --skip-setup
-
-# Via environment variable
-DORAEMON_SKIP_SETUP=1 npm run dev
-```
-
-### Building for Distribution
-
-```bash
-# Build the app
-npm run build
-
-# Package with electron-builder (add to package.json)
-npm run package
-```
-
-## 🎮 Controls
-
-| Action | How |
-|--------|-----|
-| Open chat | Click on Doraemon |
-| Send message | Type + Enter |
-| Special animation | Double-click |
-| Move | Drag and drop |
-| Menu | Right-click tray icon |
-
-### Tray Menu
-
-- **Show/Hide** — Toggle visibility
-- **Reset Position** — Move to default location
-- **Quit** — Exit application
-
-## 🐛 Troubleshooting
-
-### Can't connect to OpenClaw
-
-1. Check if OpenClaw Gateway is running
-2. Verify the URL in `OPENCLAW_URL`
-3. For cloud: ensure WebSocket port is open
-4. Check firewall settings
-
-### Doraemon doesn't animate
-
-1. Check console for errors (View → Developer Tools)
-2. Verify sprites exist in `assets/dora-sprites/`
-3. Try `npm run build` and restart
-
-### Connection keeps dropping
-
-- Check network stability
-- For cloud: verify SSL certificate
-- Doraemon auto-reconnects with backoff (1s → 30s max)
-
-## 📝 License
+## � License 
 
 MIT
 
