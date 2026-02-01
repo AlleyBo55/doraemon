@@ -1,9 +1,41 @@
 {
   "name": "doraemon-desktop",
   "version": "0.1.0",
-  "description": "Desktop mascot companion for OpenClaw - Doraemon style",
+  "description": "AI-powered desktop mascot companion for OpenClaw - Doraemon Shimeji style with emotions, chat, and real-time AI integration",
+  "keywords": [
+    "openclaw",
+    "ai",
+    "ai-agent",
+    "ai-chat",
+    "agent",
+    "chat",
+    "desktop-mascot",
+    "shimeji",
+    "doraemon",
+    "anime",
+    "electron",
+    "desktop-pet",
+    "virtual-assistant",
+    "ai-companion",
+    "mascot",
+    "desktop-buddy",
+    "llm",
+    "chatbot",
+    "websocket",
+    "real-time"
+  ],
   "type": "module",
   "main": "out/main/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlleyBo55/doraemon.git"
+  },
+  "homepage": "https://github.com/AlleyBo55/doraemon#readme",
+  "bugs": {
+    "url": "https://github.com/AlleyBo55/doraemon/issues"
+  },
+  "author": "AlleyBo55",
+  "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
