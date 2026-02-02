@@ -177,21 +177,26 @@ const SetupApp = () => {
     }
     updateStep('daemon', { status: 'success', detail: 'Running' });
 
-    // Full Disk Access check (optional - for native notifications)
+    // Full Disk Access check (required for native notifications)
     updateStep('fulldisk', { status: 'running' });
     const hasFullDisk = await api.checkFullDiskAccess();
-    if (hasFullDisk) {
-      updateStep('fulldisk', { status: 'success', detail: 'Enabled' });
-    } else {
-      updateStep('fulldisk', { 
-        status: 'success', 
-        detail: 'Optional',
+    if (!hasFullDisk) {
+      const step: Step = {
+        id: 'fulldisk',
+        label: 'Native Notifications',
+        status: 'error',
+        detail: 'Permission needed',
         help: {
-          title: 'Enable Native Notifications',
-          description: 'Grant Full Disk Access to receive notifications from native apps like WhatsApp. Click "Open Settings" below, add Doraemon to the list, then restart the app.',
+          title: 'Grant Full Disk Access',
+          description: 'Doraemon needs Full Disk Access to read notifications from apps like WhatsApp, Slack, and Discord. Click "Open Settings" below, click the + button, add Doraemon to the list, then click "Try Again".',
         },
-      });
+      };
+      updateStep('fulldisk', step);
+      setFailedStep(step);
+      setPhase('failed');
+      return;
     }
+    updateStep('fulldisk', { status: 'success', detail: 'Enabled' });
 
     setPhase('complete');
     setTimeout(() => api.setupComplete(), 600);
@@ -267,24 +272,15 @@ const SetupApp = () => {
             )}
             
             <p class="text-[11px] text-[#86868B] leading-relaxed">{failedStep.help.description}</p>
-          </div>
-        )}
-
-        {/* Show Full Disk Access help if it's optional but not enabled */}
-        {phase === 'complete' && steps.find(s => s.id === 'fulldisk' && s.detail === 'Optional')?.help && (
-          <div class="w-full max-w-[300px] mt-4 p-3 bg-white rounded-xl border border-[#E8E8ED]">
-            <h3 class="text-[12px] font-semibold text-[#1D1D1F] mb-1.5">
-              {steps.find(s => s.id === 'fulldisk')?.help?.title}
-            </h3>
-            <p class="text-[11px] text-[#86868B] leading-relaxed mb-2">
-              {steps.find(s => s.id === 'fulldisk')?.help?.description}
-            </p>
-            <button
-              onClick={handleOpenFullDiskSettings}
-              class="text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors"
-            >
-              Open Settings →
-            </button>
+            
+            {failedStep.id === 'fulldisk' && (
+              <button
+                onClick={handleOpenFullDiskSettings}
+                class="mt-2 text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors"
+              >
+                Open Settings →
+              </button>
+            )}
           </div>
         )}
 
