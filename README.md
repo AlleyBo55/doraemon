@@ -66,6 +66,8 @@ npm run build
 | [🐱 Doraemon Persona](docs/DORAEMON-PERSONA.md) | Inject Doraemon's soul into the AI |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
+| [🔐 Full Disk Access](docs/FULL-DISK-ACCESS.md) | Enable native macOS notifications |
+| [🌐 Browser Extension](browser-extension/README.md) | Web notifications from Twitter, WhatsApp, etc. |
 | [🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## 🎭 Emotions & Behaviors
