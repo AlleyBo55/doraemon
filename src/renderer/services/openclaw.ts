@@ -57,13 +57,30 @@ export const detectEmotion = (text: string): EmotionType => {
 };
 
 export const extractThought = (text: string): string | null => {
-  if (text.length < 20) return text;
+  if (!text || text.length === 0) return null;
   
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  if (sentences.length === 0) return null;
+  // Clean up the text - remove markdown, extra whitespace
+  let cleaned = text
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\n+/g, ' ')
+    .trim();
+  
+  if (cleaned.length < 30) return cleaned;
+  
+  // Try to get first sentence
+  const sentences = cleaned.split(/[.!?]+/).filter(s => s.trim().length > 5);
+  if (sentences.length === 0) return cleaned.substring(0, 100) + '...';
   
   const first = sentences[0].trim();
-  return first.length > 50 ? first.substring(0, 47) + '...' : first;
+  
+  // Keep it short for bubble display
+  if (first.length > 120) {
+    return first.substring(0, 117) + '...';
+  }
+  
+  return first;
 };
 
 export const isDoraemonResponse = (text: string): boolean => {

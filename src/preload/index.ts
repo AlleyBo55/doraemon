@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onResetPosition: (callback: (pos: { x: number; y: number }) => void) => {
     ipcRenderer.on('reset-position', (_event: IpcRendererEvent, pos: { x: number; y: number }) => callback(pos));
   },
+  onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => {
+    ipcRenderer.on('notification', (_event: IpcRendererEvent, data: { app: string; title: string; message: string }) => callback(data));
+  },
+  onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => {
+    ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; thought: string }) => callback(data));
+  },
 });
 
 // Setup API (for setup window)

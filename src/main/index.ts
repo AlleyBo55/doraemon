@@ -12,6 +12,13 @@ import {
   startDaemon,
   getInstallInstructions,
 } from './daemon/index.js';
+import {
+  startNotificationWatcher,
+  stopNotificationWatcher,
+  startEditorWatcher,
+  stopEditorWatcher,
+  getEditorThought,
+} from './watchers/index.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -109,6 +116,23 @@ function createMainWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  // Start watchers
+  startNotificationWatcher(mainWindow, (notification) => {
+    mainWindow?.webContents.send('notification', {
+      app: notification.app,
+      title: notification.title,
+      message: notification.message,
+    });
+  });
+
+  startEditorWatcher(mainWindow, (activity) => {
+    const thought = getEditorThought(activity);
+    mainWindow?.webContents.send('editor-activity', {
+      ...activity,
+      thought,
+    });
+  });
 }
 
 function createTray() {
