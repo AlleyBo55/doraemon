@@ -18,6 +18,8 @@ import {
   startEditorWatcher,
   stopEditorWatcher,
   getEditorThought,
+  checkFullDiskAccess,
+  requestFullDiskAccess,
 } from './watchers/index.js';
 import {
   startWebNotificationServer,
@@ -440,6 +442,17 @@ ipcMain.on('sync-model-mode', (_event: IpcMainEvent, mode: 'single' | 'multi') =
 // Get current model mode
 ipcMain.handle('get-model-mode', () => {
   return currentModelMode;
+});
+
+// Check Full Disk Access permission for native notifications
+ipcMain.handle('check-full-disk-access', async () => {
+  return await checkFullDiskAccess();
+});
+
+// Request Full Disk Access (opens System Preferences)
+ipcMain.handle('request-full-disk-access', async () => {
+  await requestFullDiskAccess();
+  return true;
 });
 
 // ============================================

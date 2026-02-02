@@ -1,11 +1,13 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, shell } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
 const execAsync = promisify(exec);
+
+const FULL_DISK_ACCESS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles';
 
 export type NotificationInfo = {
   app: string;
@@ -40,13 +42,17 @@ const NOTIFICATION_DB_PATH = path.join(
   'Library/Group Containers/group.com.apple.usernoted/db2/db'
 );
 
-async function checkFullDiskAccess(): Promise<boolean> {
+export async function checkFullDiskAccess(): Promise<boolean> {
   try {
     await fs.promises.access(NOTIFICATION_DB_PATH, fs.constants.R_OK);
     return true;
   } catch {
     return false;
   }
+}
+
+export async function requestFullDiskAccess(): Promise<void> {
+  await shell.openExternal(FULL_DISK_ACCESS_URL);
 }
 
 async function getRecentNotifications(): Promise<NotificationInfo[]> {

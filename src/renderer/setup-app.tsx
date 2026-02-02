@@ -17,6 +17,7 @@ const INITIAL_STEPS: Step[] = [
   { id: 'openclaw', label: 'OpenClaw CLI', status: 'pending' },
   { id: 'port', label: 'Network Port', status: 'pending' },
   { id: 'daemon', label: 'Background Service', status: 'pending' },
+  { id: 'fulldisk', label: 'Native Notifications', status: 'pending' },
 ];
 
 const CheckIcon = () => (
@@ -176,9 +177,32 @@ const SetupApp = () => {
     }
     updateStep('daemon', { status: 'success', detail: 'Running' });
 
+    // Full Disk Access check (optional - for native notifications)
+    updateStep('fulldisk', { status: 'running' });
+    const hasFullDisk = await api.checkFullDiskAccess();
+    if (hasFullDisk) {
+      updateStep('fulldisk', { status: 'success', detail: 'Enabled' });
+    } else {
+      updateStep('fulldisk', { 
+        status: 'success', 
+        detail: 'Optional',
+        help: {
+          title: 'Enable Native Notifications',
+          description: 'Grant Full Disk Access to receive notifications from native apps like WhatsApp. Click "Open Settings" below, add Doraemon to the list, then restart the app.',
+        },
+      });
+    }
+
     setPhase('complete');
     setTimeout(() => api.setupComplete(), 600);
   }, [updateStep]);
+
+  const handleOpenFullDiskSettings = async () => {
+    const api = (window as any).setupAPI;
+    if (api?.requestFullDiskAccess) {
+      await api.requestFullDiskAccess();
+    }
+  };
 
   useEffect(() => { runSetup(); }, [runSetup]);
 
@@ -243,6 +267,24 @@ const SetupApp = () => {
             )}
             
             <p class="text-[11px] text-[#86868B] leading-relaxed">{failedStep.help.description}</p>
+          </div>
+        )}
+
+        {/* Show Full Disk Access help if it's optional but not enabled */}
+        {phase === 'complete' && steps.find(s => s.id === 'fulldisk' && s.detail === 'Optional')?.help && (
+          <div class="w-full max-w-[300px] mt-4 p-3 bg-white rounded-xl border border-[#E8E8ED]">
+            <h3 class="text-[12px] font-semibold text-[#1D1D1F] mb-1.5">
+              {steps.find(s => s.id === 'fulldisk')?.help?.title}
+            </h3>
+            <p class="text-[11px] text-[#86868B] leading-relaxed mb-2">
+              {steps.find(s => s.id === 'fulldisk')?.help?.description}
+            </p>
+            <button
+              onClick={handleOpenFullDiskSettings}
+              class="text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors"
+            >
+              Open Settings →
+            </button>
           </div>
         )}
 
