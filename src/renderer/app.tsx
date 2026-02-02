@@ -16,6 +16,8 @@ declare global {
       onResetPosition: (callback: (pos: { x: number; y: number }) => void) => void;
       setMouseEvents: (enabled: boolean) => void;
       focusWindow: () => void;
+      onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
+      onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => void;
     };
   }
 }
@@ -28,6 +30,7 @@ const App = () => {
   const [showChat, setShowChat] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
+  const [externalThought, setExternalThought] = useState<string | null>(null);
   
   const { current: emotion } = useEmotion();
   const {
@@ -47,8 +50,35 @@ const App = () => {
   const frameIndexRef = useRef<number>(0);
   const frameTimerRef = useRef<number>(0);
   const currentAnimRef = useRef<string>('idle');
+  const externalThoughtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useIdleDetection();
+
+  // Listen for notifications and editor activity
+  useEffect(() => {
+    const showExternalThought = (thought: string, duration = 5000) => {
+      if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+      setExternalThought(thought);
+      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
+    };
+
+    window.electronAPI?.onNotification?.((data) => {
+      const thought = `📱 ${data.app}: "${data.title}"${data.message ? ` - ${data.message.slice(0, 50)}...` : ''}`;
+      showExternalThought(thought, 6000);
+      triggerEmotion('curious');
+    });
+
+    window.electronAPI?.onEditorActivity?.((data) => {
+      console.log('[App] Editor activity received:', data);
+      if (data.thought) {
+        showExternalThought(data.thought, 4000);
+      }
+    });
+
+    return () => {
+      if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+    };
+  }, [triggerEmotion]);
 
   useEffect(() => {
     const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
@@ -110,6 +140,10 @@ const App = () => {
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
   }, []);
 
+  // Sprite flip logic - engine handles all flip logic based on state
+  // No additional inversion needed here
+  const actualFlip = flip;
+
   useEffect(() => {
     if (engineRef.current && !isDragging) {
       engineRef.current.setEmotion(emotion);
@@ -143,20 +177,14 @@ const App = () => {
 
   const closeChat = useCallback(() => {
     setShowChat(false);
-    window.electronAPI?.setMouseEvents?.(false);
-  }, []);
+    // Re-enable click-through when chat closes
+    if (!isHovering && !contextMenu) {
+      window.electronAPI?.setMouseEvents?.(false);
+    }
+  }, [isHovering, contextMenu]);
 
   const handleDoubleClick = useCallback(() => {
-    setShowChat(prev => {
-      const newState = !prev;
-      if (newState) {
-        window.electronAPI?.setMouseEvents?.(true);
-        window.electronAPI?.focusWindow?.();
-      } else {
-        window.electronAPI?.setMouseEvents?.(false);
-      }
-      return newState;
-    });
+    setShowChat(prev => !prev);
   }, []);
 
   const handleMouseEnter = useCallback(() => {
@@ -165,18 +193,19 @@ const App = () => {
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    // Don't disable mouse events if chat or context menu is open
     if (!isDragging && !contextMenu && !showChat) {
       setIsHovering(false);
       window.electronAPI?.setMouseEvents?.(false);
     }
   }, [isDragging, contextMenu, showChat]);
 
-  // Keep mouse events enabled when chat or context menu is open
+  // Keep mouse events enabled when context menu or chat is open
   useEffect(() => {
-    if (showChat || contextMenu) {
+    if (contextMenu || showChat) {
       window.electronAPI?.setMouseEvents?.(true);
     }
-  }, [showChat, contextMenu]);
+  }, [contextMenu, showChat]);
 
   useEffect(() => {
     if (isDragging) {
@@ -189,13 +218,16 @@ const App = () => {
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const displayMessage = currentThought || randomThought || null;
+  // Show bubble when: thinking, has thought, has external thought, or has random thought
+  const displayMessage = currentThought || externalThought || randomThought || null;
+  const showThinkingBubble = isThinking || displayMessage;
+  const isShowingReasoning = isThinking && currentThought && !currentThought.includes('My AI backend');
 
   return (
     <MascotLayout>
       <div
         class={`fixed select-none transition-transform duration-75 ${isDragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
-        style={{ left: `${position.x}px`, top: `${position.y}px` }}
+        style={{ left: `${position.x}px`, top: `${position.y}px`, pointerEvents: 'auto' }}
         onMouseDown={handleMouseDown}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -203,14 +235,18 @@ const App = () => {
         onDblClick={handleDoubleClick}
       >
         <div class="relative">
-          {displayMessage && (
-            <ChatBubble message={displayMessage} isThinking={isThinking} />
+          {showThinkingBubble && (
+            <ChatBubble 
+              message={displayMessage || ''} 
+              isThinking={isThinking && !displayMessage} 
+              isReasoning={isShowingReasoning}
+            />
           )}
           <img
             src={`${SPRITE_BASE}/${currentFrame}`}
             alt="Doraemon"
             class="pointer-events-none"
-            style={{ transform: flip ? 'scaleX(-1)' : 'none', width: '128px', height: '128px' }}
+            style={{ transform: actualFlip ? 'scaleX(-1)' : 'none', width: '128px', height: '128px' }}
             draggable={false}
           />
           <EmotionIndicator emotion={emotion} className="absolute bottom-1 right-1" />
@@ -222,16 +258,11 @@ const App = () => {
       </div>
 
       {showChat && (
-        <div 
-          class="fixed bottom-4 left-4"
-          onMouseEnter={() => window.electronAPI?.setMouseEvents?.(true)}
-        >
-          <ChatInput
-            onSend={sendMessage}
-            isThinking={isThinking}
-            onClose={closeChat}
-          />
-        </div>
+        <ChatInput
+          onSend={sendMessage}
+          isThinking={isThinking}
+          onClose={closeChat}
+        />
       )}
 
       {contextMenu && (

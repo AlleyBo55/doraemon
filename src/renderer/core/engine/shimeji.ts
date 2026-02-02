@@ -2,7 +2,7 @@ import { PHYSICS } from '../constants/sprites';
 import type { EmotionType } from '../types/emotion';
 
 export type ShimejiState =
-  | 'stand' | 'walk' | 'run' | 'dash'
+  | 'stand' | 'walk' | 'run' | 'dash' | 'fly'
   | 'sit' | 'sit_lookup' | 'sit_spin_head' | 'sit_dangle'
   | 'sprawl' | 'sleep' | 'grab_ceiling' | 'climb_ceiling'
   | 'grab_wall' | 'climb_wall'
@@ -49,12 +49,13 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'stand', weight: 30, duration: [1000, 2000] },
   ],
   excited: [
-    { state: 'run', weight: 200, duration: [1000, 2000] },
-    { state: 'dash', weight: 150, duration: [500, 1000] },
-    { state: 'jump', weight: 150, duration: [500, 500] },
-    { state: 'cheer', weight: 120, duration: [1000, 2000] },
-    { state: 'celebrate', weight: 100, duration: [1500, 2500] },
-    { state: 'victory', weight: 80, duration: [1000, 1500] },
+    { state: 'fly', weight: 200, duration: [2000, 4000] },
+    { state: 'run', weight: 150, duration: [1000, 2000] },
+    { state: 'dash', weight: 100, duration: [500, 1000] },
+    { state: 'jump', weight: 100, duration: [500, 500] },
+    { state: 'cheer', weight: 80, duration: [1000, 2000] },
+    { state: 'celebrate', weight: 60, duration: [1500, 2500] },
+    { state: 'victory', weight: 40, duration: [1000, 1500] },
   ],
   thinking: [
     { state: 'sit_spin_head', weight: 200, duration: [2000, 4000] },
@@ -216,7 +217,20 @@ export class ShimejiEngine {
       neutral: () => { this.state = 'stand'; this.behaviorDuration = 1000; },
       happy: () => { this.state = Math.random() > 0.5 ? 'wave' : 'jump'; this.behaviorDuration = 1000; },
       sad: () => { this.state = 'sprawl'; this.behaviorDuration = 3000; },
-      excited: () => { this.state = Math.random() > 0.5 ? 'cheer' : 'run'; this.behaviorDuration = 1500; },
+      excited: () => { 
+        const roll = Math.random();
+        if (roll > 0.6) {
+          this.state = 'fly';
+          this.behaviorDuration = 3000;
+          this.isOnGround = false;
+        } else if (roll > 0.3) {
+          this.state = 'run';
+          this.behaviorDuration = 1500;
+        } else {
+          this.state = 'cheer';
+          this.behaviorDuration = 1500;
+        }
+      },
       thinking: () => { this.state = 'pocket_search'; this.behaviorDuration = 2000; },
       confused: () => { this.state = Math.random() > 0.5 ? 'sit_spin_head' : 'trip'; this.behaviorDuration = 1500; },
       sleepy: () => { this.state = 'sleep'; this.behaviorDuration = 5000; },
@@ -256,7 +270,10 @@ export class ShimejiEngine {
     this.position.y += this.velocity.vy;
     this.checkBoundaries();
 
+    // All sprites use the same flip logic: flip when facing right
+    // The issue with flying/ceiling sprites moving backward is in the velocity, not flip
     const flip = this.facingRight;
+    
     this.onPositionChange?.(this.position);
     this.onStateChange?.(this.state, 0, flip);
   }
@@ -299,6 +316,14 @@ export class ShimejiEngine {
         if (!this.isOnGround) this.state = 'fall';
         break;
 
+      case 'fly':
+        // Flying sprites face LEFT in original image (like walk sprites)
+        // When facingRight=true, sprite is flipped to face right, so move right
+        this.velocity.vx = this.facingRight ? RUN_SPEED : -RUN_SPEED;
+        this.velocity.vy = -1;
+        this.isOnGround = false;
+        break;
+
       case 'trip':
         this.velocity.vx = this.facingRight ? -8 : 8;
         this.velocity.vy = 0;
@@ -310,6 +335,8 @@ export class ShimejiEngine {
         break;
 
       case 'climb_ceiling':
+        // Ceiling sprites face LEFT in original image (like walk sprites)
+        // When facingRight=true, sprite is flipped to face right, so move right
         this.velocity.vx = this.facingRight ? CEILING_SPEED : -CEILING_SPEED;
         this.velocity.vy = 0;
         break;

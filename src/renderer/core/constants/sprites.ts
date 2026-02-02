@@ -148,11 +148,16 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // RUNNING (shime15-17)
+  // FLYING (shime15-17) - Doraemon with Take-copter
   // ═══════════════════════════════════════════════════════════════
-  run: {
+  fly: {
     frames: ['shime15.png', 'shime16.png', 'shime15.png', 'shime17.png'],
-    frameDelay: 33,
+    frameDelay: 100,
+    loop: true,
+  },
+  run: {
+    frames: ['shime1.png', 'shime2.png', 'shime1.png', 'shime3.png'],
+    frameDelay: 50,
     loop: true,
   },
 
@@ -320,9 +325,9 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
     loop: true,
   },
 
-  // Excited - running, cheering
+  // Excited - jumping, cheering
   excited: {
-    frames: ['shime15.png', 'shime16.png', 'shime17.png', 'shime22.png', 'shime46.png', 'shime47.png'],
+    frames: ['shime22.png', 'shime1.png', 'shime46.png', 'shime47.png', 'shime48.png', 'shime49.png'],
     frameDelay: 80,
     loop: true,
   },
@@ -383,16 +388,16 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
     loop: true,
   },
 
-  // Playful - bouncing, waving, running
+  // Playful - bouncing, waving
   playful: {
-    frames: ['shime18.png', 'shime19.png', 'shime22.png', 'shime42.png', 'shime43.png', 'shime15.png', 'shime16.png'],
+    frames: ['shime18.png', 'shime19.png', 'shime22.png', 'shime42.png', 'shime43.png', 'shime44.png', 'shime45.png'],
     frameDelay: 100,
     loop: true,
   },
 
   // Determined - focused walking, climbing
   determined: {
-    frames: ['shime14.png', 'shime13.png', 'shime12.png', 'shime15.png', 'shime16.png', 'shime17.png'],
+    frames: ['shime14.png', 'shime13.png', 'shime12.png', 'shime1.png', 'shime2.png', 'shime3.png'],
     frameDelay: 80,
     loop: true,
   },
