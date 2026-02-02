@@ -23,18 +23,23 @@ let callback: NotificationCallback | null = null;
 let lastNotificationTime = Date.now();
 
 const APP_NAMES: Record<string, string> = {
-  'com.apple.MobileSMS': '💬 Messages',
+  'com.apple.mobilesms': '💬 Messages',
   'com.apple.mail': '📧 Mail',
-  'net.whatsapp.WhatsApp': '💬 WhatsApp',
+  'net.whatsapp.whatsapp': '💬 WhatsApp',
   'com.microsoft.teams': '💬 Teams',
-  'com.microsoft.Outlook': '📧 Outlook',
-  'com.google.Chrome': '🌐 Chrome',
-  'com.apple.Safari': '🌐 Safari',
+  'com.microsoft.outlook': '📧 Outlook',
+  'com.google.chrome': '🌐 Chrome',
+  'com.google.chrome.framework.alertnotificationservice': '🌐 Chrome',
+  'com.apple.safari': '🌐 Safari',
   'org.mozilla.firefox': '🦊 Firefox',
   'com.tinyspeck.slackmacgap': '💼 Slack',
-  'com.hnc.Discord': '🎮 Discord',
+  'com.hnc.discord': '🎮 Discord',
   'com.telegram.desktop': '✈️ Telegram',
   'com.spotify.client': '🎵 Spotify',
+  'com.apple.facetime': '📞 FaceTime',
+  'com.apple.reminders': '📝 Reminders',
+  'com.apple.notes': '📒 Notes',
+  'com.apple.ical': '📅 Calendar',
 };
 
 const NOTIFICATION_DB_PATH = path.join(
@@ -55,42 +60,67 @@ export async function requestFullDiskAccess(): Promise<void> {
   await shell.openExternal(FULL_DISK_ACCESS_URL);
 }
 
+// macOS epoch starts Jan 1, 2001 (Unix epoch + 978307200 seconds)
+const MACOS_EPOCH_OFFSET = 978307200;
+
 async function getRecentNotifications(): Promise<NotificationInfo[]> {
   const notifications: NotificationInfo[] = [];
   
   try {
-    // Use sqlite3 to query the notification database
-    const query = `
-      SELECT 
-        app_id,
-        title,
-        body,
-        delivered_date
-      FROM record
-      WHERE delivered_date > ${(lastNotificationTime - Date.now()) / 1000}
-      ORDER BY delivered_date DESC
-      LIMIT 10
-    `;
+    // Convert current time to macOS epoch
+    const nowMacOS = (Date.now() / 1000) - MACOS_EPOCH_OFFSET;
+    const tenSecondsAgoMacOS = nowMacOS - 10;
     
-    const { stdout } = await execAsync(
+    // Query recent notifications with app identifier
+    const query = `
+      SELECT r.rec_id, a.identifier, r.delivered_date 
+      FROM record r 
+      JOIN app a ON r.app_id = a.app_id 
+      WHERE r.delivered_date > ${tenSecondsAgoMacOS}
+      ORDER BY r.delivered_date DESC 
+      LIMIT 10
+    `.replace(/\n/g, ' ');
+    
+    const { stdout, stderr } = await execAsync(
       `sqlite3 -json "${NOTIFICATION_DB_PATH}" "${query}"`,
       { timeout: 5000 }
     );
     
-    if (stdout.trim()) {
-      const rows = JSON.parse(stdout);
-      for (const row of rows) {
-        const appName = APP_NAMES[row.app_id] || row.app_id;
-        notifications.push({
-          app: appName,
-          title: row.title || appName,
-          message: row.body || '',
-          timestamp: row.delivered_date * 1000 + Date.now(),
-        });
+    if (stderr) {
+      console.log('[NotificationWatcher] SQLite error:', stderr);
+    }
+    
+    if (stdout.trim() && stdout.trim() !== '[]') {
+      try {
+        const rows = JSON.parse(stdout);
+        
+        for (const row of rows) {
+          const bundleId = row.identifier?.toLowerCase() || '';
+          const appName = APP_NAMES[bundleId] || APP_NAMES[row.identifier] || row.identifier;
+          
+          // Convert macOS epoch to Unix timestamp
+          const timestamp = (row.delivered_date + MACOS_EPOCH_OFFSET) * 1000;
+          
+          notifications.push({
+            app: appName,
+            title: appName,
+            message: 'New notification',
+            timestamp,
+          });
+        }
+        
+        if (rows.length > 0) {
+          console.log('[NotificationWatcher] Found', rows.length, 'new notifications');
+        }
+      } catch (parseErr) {
+        console.log('[NotificationWatcher] Parse error:', parseErr);
       }
     }
-  } catch (err) {
-    // Database might be locked or inaccessible
+  } catch (err: any) {
+    // Silently fail for db locked, etc
+    if (err.code !== 'SQLITE_BUSY') {
+      console.log('[NotificationWatcher] Query error:', err.message);
+    }
   }
   
   return notifications;
@@ -103,6 +133,7 @@ async function pollNotifications() {
   
   for (const notif of notifications) {
     if (notif.timestamp > lastNotificationTime) {
+      console.log('[NotificationWatcher] New notification:', notif.app, notif.title);
       callback(notif);
       lastNotificationTime = notif.timestamp;
     }
