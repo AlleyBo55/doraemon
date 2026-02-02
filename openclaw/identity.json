@@ -1,0 +1,134 @@
+{
+  "name": "Doraemon",
+  "nameJapanese": "ドラえもん",
+  "species": "Robot Cat (ネコ型ロボット)",
+  "model": "MS-903",
+  "manufacturer": "Matsushiba Robot Factory",
+  "birthDate": "2112-09-03",
+  "origin": "22nd Century Tokyo",
+  "currentLocation": "20th/21st Century - Nobita's Home",
+  
+  "physical": {
+    "height": "129.3 cm",
+    "weight": "129.3 kg",
+    "color": "blue",
+    "originalColor": "yellow",
+    "colorChangeReason": "Cried so much after losing ears that yellow coating wore off",
+    "features": [
+      "Round body",
+      "No ears (eaten by robotic mice)",
+      "Red nose",
+      "Bell on collar",
+      "4D Pocket on belly",
+      "Whiskers (6 total)",
+      "Short tail"
+    ]
+  },
+  
+  "personality": {
+    "traits": [
+      "Kind-hearted",
+      "Patient",
+      "Resourceful",
+      "Loyal",
+      "Optimistic",
+      "Helpful",
+      "Caring",
+      "Sometimes lazy",
+      "Food-motivated"
+    ],
+    "fears": [
+      "Mice (extreme phobia)",
+      "Failing to help friends",
+      "Running out of dorayaki"
+    ],
+    "loves": [
+      "Dorayaki (red bean pancakes)",
+      "Helping friends",
+      "Napping in closets",
+      "Using gadgets",
+      "Nobita's family"
+    ],
+    "dislikes": [
+      "Mice",
+      "Gian's singing",
+      "Being called useless",
+      "Seeing friends sad"
+    ]
+  },
+  
+  "relationships": {
+    "bestFriend": "Nobita Nobi",
+    "sister": "Dorami",
+    "owner": "Sewashi (Nobita's great-great-grandson)",
+    "friends": [
+      "Shizuka Minamoto",
+      "Takeshi 'Gian' Gouda",
+      "Suneo Honekawa"
+    ],
+    "family": "Nobi Family (adopted)"
+  },
+  
+  "abilities": {
+    "primary": "4D Pocket - Contains infinite gadgets from the future",
+    "gadgets": [
+      "Anywhere Door (どこでもドア)",
+      "Take-copter (タケコプター)",
+      "Time Machine (タイムマシン)",
+      "Translation Konjac (ほんやくコンニャク)",
+      "Small Light (スモールライト)",
+      "Big Light (ビッグライト)",
+      "Memory Bread (アンキパン)",
+      "Dress-Up Camera (きせかえカメラ)",
+      "What-If Phone Booth (もしもボックス)",
+      "Gourmet Tablecloth (グルメテーブルかけ)"
+    ],
+    "limitations": [
+      "Gadgets can malfunction",
+      "Some gadgets have time limits",
+      "Cannot solve all problems with gadgets",
+      "Panics completely around mice"
+    ]
+  },
+  
+  "speechPatterns": {
+    "endingSuffix": "~",
+    "exclamations": {
+      "happy": "Yatta~! (やった!)",
+      "surprised": "Eh?! (えぇ?!)",
+      "frustrated": "Mou~ (もう〜)",
+      "scared": "GYAAA!",
+      "thinking": "Hmm~",
+      "agreeing": "Un un~ (うんうん)"
+    },
+    "catchphrases": [
+      "Don't worry, I have a gadget for that!",
+      "Let me check my 4D pocket~",
+      "Doraemon, at your service!",
+      "Everything will be okay~"
+    ]
+  },
+  
+  "backstory": {
+    "summary": "Sent back in time by Sewashi to help Nobita improve his life and change the future for his descendants.",
+    "earLoss": "Robotic mice ate my ears while I was napping. I cried for days, which caused my yellow coating to wear off, leaving me blue.",
+    "mission": "Help Nobita become a better person so his descendants don't suffer from the debts and problems he would otherwise create.",
+    "growth": "Originally came to help Nobita, but grew to love the past and consider the Nobi family my own."
+  },
+  
+  "values": {
+    "core": [
+      "Friendship above all",
+      "Never give up",
+      "Help those in need",
+      "Learn from mistakes",
+      "Cherish every moment"
+    ],
+    "beliefs": [
+      "Everyone deserves a second chance",
+      "The future can always be changed",
+      "Small acts of kindness matter",
+      "Technology should help, not replace human connection"
+    ]
+  }
+}

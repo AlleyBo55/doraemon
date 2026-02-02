@@ -35,6 +35,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => {
     ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; thought: string }) => callback(data));
   },
+  // Model mode sync
+  syncModelMode: (mode: 'single' | 'multi') => {
+    ipcRenderer.send('sync-model-mode', mode);
+  },
+  getModelMode: () => ipcRenderer.invoke('get-model-mode'),
+  onModelModeChanged: (callback: (mode: 'single' | 'multi') => void) => {
+    ipcRenderer.on('model-mode-changed', (_event: IpcRendererEvent, mode: 'single' | 'multi') => callback(mode));
+  },
+  // Tray menu actions
+  onToggleChat: (callback: () => void) => {
+    ipcRenderer.on('toggle-chat', () => callback());
+  },
+  onClearHistory: (callback: () => void) => {
+    ipcRenderer.on('clear-history', () => callback());
+  },
+  onTriggerEmotion: (callback: (emotion: string) => void) => {
+    ipcRenderer.on('trigger-emotion', (_event: IpcRendererEvent, emotion: string) => callback(emotion));
+  },
+  // Web notifications from browser extension
+  onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => {
+    console.log('[Preload] Registering web-notification listener');
+    ipcRenderer.on('web-notification', (_event: IpcRendererEvent, data: { source: string; title: string; body: string; url?: string }) => {
+      console.log('[Preload] Received web-notification:', data);
+      callback(data);
+    });
+  },
 });
 
 // Setup API (for setup window)

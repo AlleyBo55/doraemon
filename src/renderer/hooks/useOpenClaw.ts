@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'preact/hooks';
-import { emotionStore } from '../stores';
+import { emotionStore, configState } from '../stores';
 import { detectEmotion, extractThought } from '../services/openclaw';
 import type { EmotionType } from '../core/types/emotion';
 import { GATEWAY } from '../core/constants/gateway';
+import { DORAEMON_SOUL, DORAEMON_SYSTEM_PROMPT, getRandomCatchphrase } from '../core/constants/soul';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -41,6 +42,21 @@ export const useOpenClaw = () => {
   const responseBufferRef = useRef('');
   const currentRunIdRef = useRef<string | null>(null);
   const messagesRef = useRef<Message[]>([]);
+  const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearBubbleTimeout = useCallback(() => {
+    if (bubbleTimeoutRef.current) {
+      clearTimeout(bubbleTimeoutRef.current);
+      bubbleTimeoutRef.current = null;
+    }
+  }, []);
+
+  const setBubbleTimeout = useCallback((delay = 50000) => {
+    clearBubbleTimeout();
+    bubbleTimeoutRef.current = setTimeout(() => {
+      setState(prev => ({ ...prev, currentThought: null }));
+    }, delay);
+  }, [clearBubbleTimeout]);
 
   const sendWsRequest = useCallback(<T = unknown>(method: string, params?: unknown): Promise<T> => {
     return new Promise((resolve, reject) => {
@@ -204,6 +220,7 @@ export const useOpenClaw = () => {
   }, [connect]);
 
   const sendMessage = useCallback(async (text: string): Promise<string | null> => {
+    clearBubbleTimeout();
     const userMessage: Message = { role: 'user', content: text, timestamp: Date.now() };
     messagesRef.current = [...messagesRef.current, userMessage];
     
@@ -302,7 +319,7 @@ export const useOpenClaw = () => {
             error: null,
           }));
           emotionStore.actions.setEmotion(detectEmotion(content), 'ai');
-          setTimeout(() => setState(prev => ({ ...prev, currentThought: null })), 8000);
+          setBubbleTimeout(50000);
           return content;
         }
       }
@@ -323,7 +340,7 @@ export const useOpenClaw = () => {
       }));
 
       emotionStore.actions.setEmotion('confused', 'ai');
-      setTimeout(() => setState(prev => ({ ...prev, currentThought: null })), 5000);
+      setBubbleTimeout(50000);
       return fallbackMsg;
 
     } catch (error) {
@@ -338,39 +355,47 @@ export const useOpenClaw = () => {
       }));
 
       emotionStore.actions.setEmotion('confused', 'ai');
-      setTimeout(() => {
-        setState(prev => ({ ...prev, currentThought: null }));
-        emotionStore.actions.setEmotion('neutral', 'idle');
-      }, 3000);
+      setBubbleTimeout(50000);
 
       return null;
     } finally {
       currentRunIdRef.current = null;
     }
-  }, [sendWsRequest]);
+  }, [sendWsRequest, clearBubbleTimeout, setBubbleTimeout]);
 
   const triggerEmotion = useCallback((emotion: EmotionType) => {
     emotionStore.actions.setEmotion(emotion, 'user');
     const thoughts: Record<EmotionType, string> = {
-      happy: 'Yatta~! 🎉', sad: 'Oh no...', excited: 'This is amazing!',
-      thinking: 'Hmm, let me think...', confused: 'Eh?! What happened?',
-      sleepy: '*yawn* So sleepy~', surprised: 'Wow! Unexpected!',
-      working: 'Working on it~', frustrated: 'Mou~ This is difficult!',
-      proud: 'I did it! ✨', curious: 'Interesting...', playful: 'Hehe~ Fun!',
-      determined: "I won't give up!", relaxed: 'Ahh~ So peaceful~',
-      anxious: 'I hope this works...', neutral: '',
+      happy: `${DORAEMON_SOUL.speechPatterns.exclamations.happy} 🎉`,
+      sad: 'Oh no...',
+      excited: 'This is amazing!',
+      thinking: `${DORAEMON_SOUL.speechPatterns.exclamations.thinking} Let me think...`,
+      confused: `${DORAEMON_SOUL.speechPatterns.exclamations.surprised} What happened?`,
+      sleepy: '*yawn* So sleepy~',
+      surprised: 'Wow! Unexpected!',
+      working: 'Working on it~',
+      frustrated: `${DORAEMON_SOUL.speechPatterns.exclamations.frustrated} This is difficult!`,
+      proud: 'I did it! ✨',
+      curious: 'Interesting...',
+      playful: 'Hehe~ Fun!',
+      determined: "I won't give up!",
+      relaxed: 'Ahh~ So peaceful~',
+      anxious: 'I hope this works...',
+      neutral: '',
     };
     if (thoughts[emotion]) {
       setState(prev => ({ ...prev, currentThought: thoughts[emotion] }));
-      setTimeout(() => setState(prev => ({ ...prev, currentThought: null })), 3000);
+      setBubbleTimeout(50000);
     }
-  }, []);
+  }, [setBubbleTimeout]);
 
   const clearHistory = useCallback(() => {
     messagesRef.current = [];
-    setState(prev => ({ ...prev, messages: [], currentThought: 'Fresh start~!' }));
-    setTimeout(() => setState(prev => ({ ...prev, currentThought: null })), 2000);
-  }, []);
+    setState(prev => ({ ...prev, messages: [], currentThought: getRandomCatchphrase() }));
+    setBubbleTimeout(50000);
+  }, [setBubbleTimeout]);
 
-  return { ...state, sendMessage, triggerEmotion, clearHistory };
+  const getModelMode = useCallback(() => configState.modelMode.value, []);
+
+  return { ...state, sendMessage, triggerEmotion, clearHistory, getModelMode };
 };

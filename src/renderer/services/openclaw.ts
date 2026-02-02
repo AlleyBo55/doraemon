@@ -1,4 +1,5 @@
 import type { EmotionType } from '../core/types/emotion';
+import { DORAEMON_SOUL } from '../core/constants/soul';
 
 export type OpenClawMessage = {
   role: 'user' | 'assistant';
@@ -13,21 +14,21 @@ export type OpenClawSession = {
 };
 
 const EMOTION_KEYWORDS: Record<EmotionType, string[]> = {
-  happy: ['happy', 'glad', 'yay', 'great', 'wonderful', 'yatta', 'excited', '😊', '🎉', '✨'],
+  happy: ['happy', 'glad', 'yay', 'great', 'wonderful', 'yatta', 'excited', '😊', '🎉', '✨', ...DORAEMON_SOUL.personality.loves],
   sad: ['sad', 'sorry', 'unfortunately', 'regret', 'apologize', 'miss', '😢', '😔'],
-  excited: ['amazing', 'wow', 'incredible', 'fantastic', 'awesome', '!', '🎊', '🚀'],
-  thinking: ['hmm', 'let me think', 'considering', 'perhaps', 'maybe', 'wondering', '🤔'],
-  confused: ['confused', 'unclear', 'not sure', "don't understand", 'strange', '❓'],
-  sleepy: ['tired', 'sleepy', 'rest', 'nap', 'yawn', '😴', '💤'],
+  excited: ['amazing', 'wow', 'incredible', 'fantastic', 'awesome', '!', '🎊', '🚀', 'gadget'],
+  thinking: ['hmm', 'let me think', 'considering', 'perhaps', 'maybe', 'wondering', '🤔', 'pocket'],
+  confused: ['confused', 'unclear', 'not sure', "don't understand", 'strange', '❓', 'eh?!'],
+  sleepy: ['tired', 'sleepy', 'rest', 'nap', 'yawn', '😴', '💤', 'closet'],
   surprised: ['oh!', 'wow', 'unexpected', 'really?', 'eh?!', '😮', '😲'],
   working: ['working', 'processing', 'calculating', 'searching', 'looking', '⚙️'],
-  frustrated: ['difficult', 'challenging', 'stuck', 'problem', 'error', '😤'],
+  frustrated: ['difficult', 'challenging', 'stuck', 'problem', 'error', '😤', 'mou~'],
   proud: ['done', 'completed', 'success', 'achieved', 'finished', '🏆', '✅'],
-  curious: ['interesting', 'curious', 'wonder', 'explore', 'discover', '🔍'],
-  playful: ['fun', 'play', 'joke', 'haha', 'lol', '😄', '🎮'],
-  determined: ['will', 'must', 'definitely', 'certainly', 'absolutely', '💪'],
+  curious: ['interesting', 'curious', 'wonder', 'explore', 'discover', '🔍', '22nd century'],
+  playful: ['fun', 'play', 'joke', 'haha', 'lol', '😄', '🎮', 'hehe'],
+  determined: ['will', 'must', 'definitely', 'certainly', 'absolutely', '💪', "won't give up"],
   relaxed: ['calm', 'peaceful', 'easy', 'simple', 'no problem', '😌'],
-  anxious: ['worried', 'concern', 'careful', 'warning', 'caution', '⚠️'],
+  anxious: ['worried', 'concern', 'careful', 'warning', 'caution', '⚠️', ...DORAEMON_SOUL.personality.fears],
   neutral: [],
 };
 

@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
-import { ChatBubble, EmotionIndicator, ChatInput, ContextMenu } from './ui/components/mascot';
+import { ChatBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
 import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts } from './hooks';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
@@ -18,6 +18,10 @@ declare global {
       focusWindow: () => void;
       onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
       onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => void;
+      onToggleChat: (callback: () => void) => void;
+      onClearHistory: (callback: () => void) => void;
+      onTriggerEmotion: (callback: (emotion: string) => void) => void;
+      onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
     };
   }
 }
@@ -28,7 +32,6 @@ const App = () => {
   const [flip, setFlip] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [externalThought, setExternalThought] = useState<string | null>(null);
   
@@ -42,7 +45,8 @@ const App = () => {
     clearHistory,
   } = useOpenClaw();
 
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected);
+  // Pass externalThought to pause random thoughts when showing notifications
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -51,17 +55,40 @@ const App = () => {
   const frameTimerRef = useRef<number>(0);
   const currentAnimRef = useRef<string>('idle');
   const externalThoughtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerEmotionRef = useRef(triggerEmotion);
+  
+  // Keep refs updated
+  useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
 
   useIdleDetection();
 
-  // Listen for notifications and editor activity
+  // Helper to show external thoughts
+  const showExternalThought = useCallback((thought: string, duration = 5000) => {
+    if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+    setExternalThought(thought);
+    externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
+  }, []);
+
+  // Listen for web notifications from browser extension - separate effect, runs once
   useEffect(() => {
-    const showExternalThought = (thought: string, duration = 5000) => {
+    console.log('[App] Registering web notification listener');
+    window.electronAPI?.onWebNotification?.((data) => {
+      console.log('[App] Web notification received:', data);
+      const thought = data.body && data.body.trim() 
+        ? `${data.title}\n${data.body}` 
+        : data.title;
+      console.log('[App] Setting external thought:', thought);
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
       setExternalThought(thought);
-      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
-    };
+      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), 8000);
+      // Don't call triggerEmotion here - it would overwrite currentThought with "Interesting..."
+      // Just set the emotion directly without the thought
+      // The emotion indicator will show curious, but the bubble shows the notification
+    });
+  }, []);
 
+  // Listen for other notifications and editor activity
+  useEffect(() => {
     window.electronAPI?.onNotification?.((data) => {
       const thought = `📱 ${data.app}: "${data.title}"${data.message ? ` - ${data.message.slice(0, 50)}...` : ''}`;
       showExternalThought(thought, 6000);
@@ -75,10 +102,23 @@ const App = () => {
       }
     });
 
+    // Listen for tray menu actions
+    window.electronAPI?.onToggleChat?.(() => {
+      setShowChat(prev => !prev);
+    });
+
+    window.electronAPI?.onClearHistory?.(() => {
+      clearHistory();
+    });
+
+    window.electronAPI?.onTriggerEmotion?.((emotion) => {
+      triggerEmotion(emotion as any);
+    });
+
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
     };
-  }, [triggerEmotion]);
+  }, [triggerEmotion, clearHistory, showExternalThought]);
 
   useEffect(() => {
     const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
@@ -170,22 +210,16 @@ const App = () => {
     }
   }, [isDragging]);
 
-  const handleContextMenu = useCallback((e: MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+  const handleDoubleClick = useCallback(() => {
+    setShowChat(prev => !prev);
   }, []);
 
   const closeChat = useCallback(() => {
     setShowChat(false);
-    // Re-enable click-through when chat closes
-    if (!isHovering && !contextMenu) {
+    if (!isHovering) {
       window.electronAPI?.setMouseEvents?.(false);
     }
-  }, [isHovering, contextMenu]);
-
-  const handleDoubleClick = useCallback(() => {
-    setShowChat(prev => !prev);
-  }, []);
+  }, [isHovering]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true);
@@ -193,19 +227,18 @@ const App = () => {
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    // Don't disable mouse events if chat or context menu is open
-    if (!isDragging && !contextMenu && !showChat) {
+    if (!isDragging && !showChat) {
       setIsHovering(false);
       window.electronAPI?.setMouseEvents?.(false);
     }
-  }, [isDragging, contextMenu, showChat]);
+  }, [isDragging, showChat]);
 
-  // Keep mouse events enabled when context menu or chat is open
+  // Keep mouse events enabled when chat is open
   useEffect(() => {
-    if (contextMenu || showChat) {
+    if (showChat) {
       window.electronAPI?.setMouseEvents?.(true);
     }
-  }, [contextMenu, showChat]);
+  }, [showChat]);
 
   useEffect(() => {
     if (isDragging) {
@@ -219,7 +252,14 @@ const App = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
-  const displayMessage = currentThought || externalThought || randomThought || null;
+  // externalThought (notifications) takes priority over currentThought when not actively thinking
+  const displayMessage = externalThought || currentThought || randomThought || null;
+  
+  // Debug log to see what's happening
+  useEffect(() => {
+    console.log('[App] Display state:', { currentThought, externalThought, randomThought, displayMessage });
+  }, [currentThought, externalThought, randomThought, displayMessage]);
+  
   const showThinkingBubble = isThinking || displayMessage;
   const isShowingReasoning = isThinking && currentThought && !currentThought.includes('My AI backend');
 
@@ -231,7 +271,6 @@ const App = () => {
         onMouseDown={handleMouseDown}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onContextMenu={handleContextMenu}
         onDblClick={handleDoubleClick}
       >
         <div class="relative">
@@ -262,17 +301,6 @@ const App = () => {
           onSend={sendMessage}
           isThinking={isThinking}
           onClose={closeChat}
-        />
-      )}
-
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-          onTriggerEmotion={triggerEmotion}
-          onClearHistory={clearHistory}
-          onToggleChat={() => setShowChat(prev => !prev)}
         />
       )}
     </MascotLayout>
