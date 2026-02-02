@@ -19,6 +19,11 @@ import {
   stopEditorWatcher,
   getEditorThought,
 } from './watchers/index.js';
+import {
+  startWebNotificationServer,
+  stopWebNotificationServer,
+  type WebNotification,
+} from './watchers/web-notification-server.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +33,7 @@ let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isOfflineMode = false;
+let currentModelMode: 'single' | 'multi' = 'single';
 
 /**
  * Create the setup window for pre-flight checks
@@ -133,17 +139,47 @@ function createMainWindow() {
       thought,
     });
   });
+
+  // Start web notification server for browser extension
+  startWebNotificationServer(mainWindow, (notification: WebNotification) => {
+    const emoji = {
+      twitter: '🐦',
+      outlook: '📧',
+      teams: '💬',
+      github: '🐙',
+      unknown: '🔔',
+    }[notification.source];
+    
+    mainWindow?.webContents.send('web-notification', {
+      source: notification.source,
+      title: `${emoji} ${notification.title}`,
+      body: notification.body,
+      url: notification.url,
+    });
+  });
 }
 
 function createTray() {
-  // Try to load the Doraemon icon
-  const iconPath = path.join(__dirname, '../../assets/dora-sprites/icon.png');
-  let icon: Electron.NativeImage;
+  // Try multiple icon paths
+  const iconPaths = [
+    path.join(__dirname, '../renderer/public/dora-sprites/icon.png'),
+    path.join(__dirname, '../../src/renderer/public/dora-sprites/icon.png'),
+    path.join(__dirname, '../../assets/dora-sprites/icon.png'),
+  ];
   
-  if (fs.existsSync(iconPath)) {
-    icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-  } else {
+  let icon: Electron.NativeImage | null = null;
+  
+  for (const iconPath of iconPaths) {
+    if (fs.existsSync(iconPath)) {
+      icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+      console.log('Tray icon loaded from:', iconPath);
+      break;
+    }
+  }
+  
+  if (!icon) {
     // Fallback: Create a simple blue circle
+    console.log('Creating fallback tray icon');
     const size = 16;
     const canvas = Buffer.alloc(size * size * 4);
     for (let y = 0; y < size; y++) {
@@ -165,6 +201,13 @@ function createTray() {
   
   tray = new Tray(icon);
   
+  updateTrayMenu();
+  tray.setToolTip('Doraemon');
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  
   const contextMenu = Menu.buildFromTemplate([
     { 
       label: 'Show/Hide', 
@@ -175,6 +218,56 @@ function createTray() {
           mainWindow?.show();
         }
       }
+    },
+    { type: 'separator' },
+    {
+      label: 'Chat',
+      click: () => {
+        mainWindow?.webContents.send('toggle-chat');
+      }
+    },
+    {
+      label: 'Clear History',
+      click: () => {
+        mainWindow?.webContents.send('clear-history');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Model Mode',
+      submenu: [
+        {
+          label: 'Single Model (Haiku 4.5)',
+          type: 'radio',
+          checked: currentModelMode === 'single',
+          click: () => {
+            currentModelMode = 'single';
+            mainWindow?.webContents.send('model-mode-changed', 'single');
+            updateTrayMenu();
+          }
+        },
+        {
+          label: 'Multi-Model Routing',
+          type: 'radio',
+          checked: currentModelMode === 'multi',
+          click: () => {
+            currentModelMode = 'multi';
+            mainWindow?.webContents.send('model-mode-changed', 'multi');
+            updateTrayMenu();
+          }
+        },
+      ]
+    },
+    { type: 'separator' },
+    {
+      label: 'Emotions',
+      submenu: [
+        { label: '😊 Happy', click: () => mainWindow?.webContents.send('trigger-emotion', 'happy') },
+        { label: '🎉 Excited', click: () => mainWindow?.webContents.send('trigger-emotion', 'excited') },
+        { label: '🤔 Thinking', click: () => mainWindow?.webContents.send('trigger-emotion', 'thinking') },
+        { label: '😴 Sleepy', click: () => mainWindow?.webContents.send('trigger-emotion', 'sleepy') },
+        { label: '🎮 Playful', click: () => mainWindow?.webContents.send('trigger-emotion', 'playful') },
+      ]
     },
     { type: 'separator' },
     { 
@@ -188,7 +281,6 @@ function createTray() {
     { label: 'Quit', click: () => app.quit() },
   ]);
 
-  tray.setToolTip('Doraemon');
   tray.setContextMenu(contextMenu);
 }
 
@@ -344,6 +436,17 @@ ipcMain.on('focus-window', () => {
   if (mainWindow) {
     mainWindow.focus();
   }
+});
+
+// Sync model mode from renderer
+ipcMain.on('sync-model-mode', (_event: IpcMainEvent, mode: 'single' | 'multi') => {
+  currentModelMode = mode;
+  updateTrayMenu();
+});
+
+// Get current model mode
+ipcMain.handle('get-model-mode', () => {
+  return currentModelMode;
 });
 
 // ============================================

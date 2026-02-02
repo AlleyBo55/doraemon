@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
-import { ChatBubble, EmotionIndicator, ChatInput, ContextMenu } from './ui/components/mascot';
+import { ChatBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
 import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts } from './hooks';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
@@ -18,6 +18,10 @@ declare global {
       focusWindow: () => void;
       onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
       onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => void;
+      onToggleChat: (callback: () => void) => void;
+      onClearHistory: (callback: () => void) => void;
+      onTriggerEmotion: (callback: (emotion: string) => void) => void;
+      onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
     };
   }
 }
@@ -28,7 +32,6 @@ const App = () => {
   const [flip, setFlip] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [externalThought, setExternalThought] = useState<string | null>(null);
   
@@ -75,10 +78,30 @@ const App = () => {
       }
     });
 
+    // Listen for tray menu actions
+    window.electronAPI?.onToggleChat?.(() => {
+      setShowChat(prev => !prev);
+    });
+
+    window.electronAPI?.onClearHistory?.(() => {
+      clearHistory();
+    });
+
+    window.electronAPI?.onTriggerEmotion?.((emotion) => {
+      triggerEmotion(emotion as any);
+    });
+
+    // Listen for web notifications from browser extension
+    window.electronAPI?.onWebNotification?.((data) => {
+      const thought = `${data.title}\n${data.body}`;
+      showExternalThought(thought, 8000);
+      triggerEmotion('curious');
+    });
+
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
     };
-  }, [triggerEmotion]);
+  }, [triggerEmotion, clearHistory]);
 
   useEffect(() => {
     const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
@@ -170,22 +193,16 @@ const App = () => {
     }
   }, [isDragging]);
 
-  const handleContextMenu = useCallback((e: MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+  const handleDoubleClick = useCallback(() => {
+    setShowChat(prev => !prev);
   }, []);
 
   const closeChat = useCallback(() => {
     setShowChat(false);
-    // Re-enable click-through when chat closes
-    if (!isHovering && !contextMenu) {
+    if (!isHovering) {
       window.electronAPI?.setMouseEvents?.(false);
     }
-  }, [isHovering, contextMenu]);
-
-  const handleDoubleClick = useCallback(() => {
-    setShowChat(prev => !prev);
-  }, []);
+  }, [isHovering]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovering(true);
@@ -193,19 +210,18 @@ const App = () => {
   }, []);
 
   const handleMouseLeave = useCallback(() => {
-    // Don't disable mouse events if chat or context menu is open
-    if (!isDragging && !contextMenu && !showChat) {
+    if (!isDragging && !showChat) {
       setIsHovering(false);
       window.electronAPI?.setMouseEvents?.(false);
     }
-  }, [isDragging, contextMenu, showChat]);
+  }, [isDragging, showChat]);
 
-  // Keep mouse events enabled when context menu or chat is open
+  // Keep mouse events enabled when chat is open
   useEffect(() => {
-    if (contextMenu || showChat) {
+    if (showChat) {
       window.electronAPI?.setMouseEvents?.(true);
     }
-  }, [contextMenu, showChat]);
+  }, [showChat]);
 
   useEffect(() => {
     if (isDragging) {
@@ -231,7 +247,6 @@ const App = () => {
         onMouseDown={handleMouseDown}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onContextMenu={handleContextMenu}
         onDblClick={handleDoubleClick}
       >
         <div class="relative">
@@ -262,17 +277,6 @@ const App = () => {
           onSend={sendMessage}
           isThinking={isThinking}
           onClose={closeChat}
-        />
-      )}
-
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => setContextMenu(null)}
-          onTriggerEmotion={triggerEmotion}
-          onClearHistory={clearHistory}
-          onToggleChat={() => setShowChat(prev => !prev)}
         />
       )}
     </MascotLayout>
