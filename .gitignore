@@ -26,3 +26,9 @@ npm-debug.log*
 
 # Electron
 *.asar
+
+
+.kiro
+.antigravity
+.amazonq
+.cursor

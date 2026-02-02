@@ -1,16 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Doraemon Web Notifications",
-  "version": "1.0.0",
-  "description": "Send web notifications from Twitter, Outlook, Teams, and GitHub to Doraemon desktop mascot",
-  "permissions": ["notifications"],
+  "version": "1.1.0",
+  "description": "Send web notifications from Twitter, Outlook, Teams, GitHub, WhatsApp, Slack, and Discord to Doraemon desktop mascot",
+  "permissions": ["notifications", "tabs"],
   "host_permissions": [
     "https://twitter.com/*",
     "https://x.com/*",
     "https://outlook.office.com/*",
     "https://outlook.live.com/*",
     "https://teams.microsoft.com/*",
-    "https://github.com/*"
+    "https://github.com/*",
+    "https://web.whatsapp.com/*",
+    "https://*.slack.com/*",
+    "https://discord.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -23,7 +26,10 @@
         "https://outlook.office.com/*",
         "https://outlook.live.com/*",
         "https://teams.microsoft.com/*",
-        "https://github.com/*"
+        "https://github.com/*",
+        "https://web.whatsapp.com/*",
+        "https://*.slack.com/*",
+        "https://discord.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_start"
