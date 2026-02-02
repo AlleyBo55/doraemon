@@ -142,17 +142,10 @@ function createMainWindow() {
 
   // Start web notification server for browser extension
   startWebNotificationServer(mainWindow, (notification: WebNotification) => {
-    const emoji = {
-      twitter: '🐦',
-      outlook: '📧',
-      teams: '💬',
-      github: '🐙',
-      unknown: '🔔',
-    }[notification.source];
-    
+    console.log('[Main] Forwarding web notification to renderer:', notification);
     mainWindow?.webContents.send('web-notification', {
       source: notification.source,
-      title: `${emoji} ${notification.title}`,
+      title: notification.title,
       body: notification.body,
       url: notification.url,
     });

@@ -127,10 +127,9 @@ export function startWebNotificationServer(
         const notification = JSON.parse(data) as WebNotification;
         notification.timestamp = Date.now();
         
-        console.log('[WebNotificationServer] Received:', notification.source, notification.title);
+        console.log('[WebNotificationServer] Received:', notification.source, notification.title, notification.body);
         
         onNotification(notification);
-        mainWindow.webContents.send('web-notification', notification);
       } catch (err) {
         console.error('[WebNotificationServer] Parse error:', err);
       }

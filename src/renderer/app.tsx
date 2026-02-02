@@ -45,7 +45,8 @@ const App = () => {
     clearHistory,
   } = useOpenClaw();
 
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected);
+  // Pass externalThought to pause random thoughts when showing notifications
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -54,17 +55,40 @@ const App = () => {
   const frameTimerRef = useRef<number>(0);
   const currentAnimRef = useRef<string>('idle');
   const externalThoughtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerEmotionRef = useRef(triggerEmotion);
+  
+  // Keep refs updated
+  useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
 
   useIdleDetection();
 
-  // Listen for notifications and editor activity
+  // Helper to show external thoughts
+  const showExternalThought = useCallback((thought: string, duration = 5000) => {
+    if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+    setExternalThought(thought);
+    externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
+  }, []);
+
+  // Listen for web notifications from browser extension - separate effect, runs once
   useEffect(() => {
-    const showExternalThought = (thought: string, duration = 5000) => {
+    console.log('[App] Registering web notification listener');
+    window.electronAPI?.onWebNotification?.((data) => {
+      console.log('[App] Web notification received:', data);
+      const thought = data.body && data.body.trim() 
+        ? `${data.title}\n${data.body}` 
+        : data.title;
+      console.log('[App] Setting external thought:', thought);
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
       setExternalThought(thought);
-      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
-    };
+      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), 8000);
+      // Don't call triggerEmotion here - it would overwrite currentThought with "Interesting..."
+      // Just set the emotion directly without the thought
+      // The emotion indicator will show curious, but the bubble shows the notification
+    });
+  }, []);
 
+  // Listen for other notifications and editor activity
+  useEffect(() => {
     window.electronAPI?.onNotification?.((data) => {
       const thought = `📱 ${data.app}: "${data.title}"${data.message ? ` - ${data.message.slice(0, 50)}...` : ''}`;
       showExternalThought(thought, 6000);
@@ -91,17 +115,10 @@ const App = () => {
       triggerEmotion(emotion as any);
     });
 
-    // Listen for web notifications from browser extension
-    window.electronAPI?.onWebNotification?.((data) => {
-      const thought = `${data.title}\n${data.body}`;
-      showExternalThought(thought, 8000);
-      triggerEmotion('curious');
-    });
-
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
     };
-  }, [triggerEmotion, clearHistory]);
+  }, [triggerEmotion, clearHistory, showExternalThought]);
 
   useEffect(() => {
     const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
@@ -235,7 +252,14 @@ const App = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
-  const displayMessage = currentThought || externalThought || randomThought || null;
+  // externalThought (notifications) takes priority over currentThought when not actively thinking
+  const displayMessage = externalThought || currentThought || randomThought || null;
+  
+  // Debug log to see what's happening
+  useEffect(() => {
+    console.log('[App] Display state:', { currentThought, externalThought, randomThought, displayMessage });
+  }, [currentThought, externalThought, randomThought, displayMessage]);
+  
   const showThinkingBubble = isThinking || displayMessage;
   const isShowingReasoning = isThinking && currentThought && !currentThought.includes('My AI backend');
 

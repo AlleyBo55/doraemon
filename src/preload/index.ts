@@ -55,7 +55,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   // Web notifications from browser extension
   onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => {
-    ipcRenderer.on('web-notification', (_event: IpcRendererEvent, data: { source: string; title: string; body: string; url?: string }) => callback(data));
+    console.log('[Preload] Registering web-notification listener');
+    ipcRenderer.on('web-notification', (_event: IpcRendererEvent, data: { source: string; title: string; body: string; url?: string }) => {
+      console.log('[Preload] Received web-notification:', data);
+      callback(data);
+    });
   },
 });
 

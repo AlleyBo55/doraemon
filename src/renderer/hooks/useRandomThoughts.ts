@@ -34,7 +34,7 @@ interface ThoughtHistory {
   cycleUsed: number;
 }
 
-export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: boolean) => {
+export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: boolean, isPaused = false) => {
   const [thought, setThought] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -42,6 +42,15 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
   const currentCycleRef = useRef<number>(0);
   const thoughtsInCycleRef = useRef<number>(0);
   const historyRef = useRef<ThoughtHistory[]>([]);
+  
+  // Use refs to avoid stale closures in setTimeout
+  const isPausedRef = useRef(isPaused);
+  const isConnectedRef = useRef(isConnected);
+  const emotionRef = useRef(currentEmotion);
+  
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  useEffect(() => { isConnectedRef.current = isConnected; }, [isConnected]);
+  useEffect(() => { emotionRef.current = currentEmotion; }, [currentEmotion]);
 
   const isThoughtAvailable = useCallback((text: string): boolean => {
     const currentCycle = currentCycleRef.current;
@@ -127,8 +136,10 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
   }, [recordThought]);
 
   const triggerRandomThought = useCallback(() => {
-    if (!isConnected) {
-      const randomThought = getRandomThought(currentEmotion);
+    // Show random thoughts when not paused (regardless of connection status)
+    // The display priority in app.tsx handles which message to show
+    if (!isPausedRef.current) {
+      const randomThought = getRandomThought(emotionRef.current);
       showThought(randomThought);
       
       thoughtsInCycleRef.current++;
@@ -139,7 +150,7 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     }
     
     timeoutRef.current = setTimeout(triggerRandomThought, THOUGHT_INTERVAL);
-  }, [currentEmotion, isConnected, getRandomThought, showThought]);
+  }, [getRandomThought, showThought]);
 
   useEffect(() => {
     const initialDelay = 1000 + Math.random() * 2000;
@@ -155,6 +166,26 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(triggerRandomThought, THOUGHT_INTERVAL);
   }, [currentEmotion]);
+
+  // Clear random thought when paused (external notification showing)
+  // Resume with a new thought when unpaused
+  const wasPausedRef = useRef(isPaused);
+  useEffect(() => {
+    if (isPaused) {
+      setThought(null);
+      if (displayTimeoutRef.current) {
+        clearTimeout(displayTimeoutRef.current);
+        displayTimeoutRef.current = null;
+      }
+    } else if (wasPausedRef.current && !isPaused) {
+      // Was paused, now unpaused - trigger a new thought after short delay
+      setTimeout(() => {
+        const newThought = getRandomThought(emotionRef.current);
+        showThought(newThought);
+      }, 2000);
+    }
+    wasPausedRef.current = isPaused;
+  }, [isPaused, getRandomThought, showThought]);
 
   return {
     thought,
