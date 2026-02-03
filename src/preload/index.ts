@@ -32,9 +32,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => {
     ipcRenderer.on('notification', (_event: IpcRendererEvent, data: { app: string; title: string; message: string }) => callback(data));
   },
-  onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => {
-    ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; thought: string }) => callback(data));
+  onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => void) => {
+    ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => callback(data));
   },
+  // Break reminders
+  onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => {
+    ipcRenderer.on('break-reminder', (_event: IpcRendererEvent, data: { minutes: number; message: string }) => callback(data));
+  },
+  // Coding streak notifications
+  onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => {
+    ipcRenderer.on('coding-streak', (_event: IpcRendererEvent, data: { minutes: number; message: string }) => callback(data));
+  },
+  // Get coding stats
+  getCodingStats: () => ipcRenderer.invoke('get-coding-stats'),
+  // Get daily summary
+  getDailySummary: () => ipcRenderer.invoke('get-daily-summary'),
   // Model mode sync
   syncModelMode: (mode: 'single' | 'multi') => {
     ipcRenderer.send('sync-model-mode', mode);

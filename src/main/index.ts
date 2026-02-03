@@ -18,6 +18,12 @@ import {
   startEditorWatcher,
   stopEditorWatcher,
   getEditorThought,
+  getStreakMessage,
+  getBreakMessage,
+  getDailySummary,
+  getCodingStats,
+  setStatsCallback,
+  setBreakCallback,
   checkFullDiskAccess,
   requestFullDiskAccess,
 } from './watchers/index.js';
@@ -153,11 +159,30 @@ function createMainWindow() {
   });
 
   startEditorWatcher(mainWindow, (activity) => {
-    const thought = getEditorThought(activity);
+    const { thought, emotion, animation } = getEditorThought(activity);
     mainWindow?.webContents.send('editor-activity', {
       ...activity,
       thought,
+      emotion,
+      animation,
     });
+  });
+
+  // Set up break reminder callback
+  setBreakCallback((minutes) => {
+    const message = getBreakMessage(minutes);
+    mainWindow?.webContents.send('break-reminder', { minutes, message });
+  });
+
+  // Set up stats callback for productivity tracking
+  setStatsCallback((stats) => {
+    const streakMessage = getStreakMessage();
+    if (streakMessage) {
+      mainWindow?.webContents.send('coding-streak', { 
+        minutes: stats.currentStreak, 
+        message: streakMessage 
+      });
+    }
   });
 
   // Start web notification server for browser extension
@@ -492,6 +517,26 @@ ipcMain.handle('check-full-disk-access', async () => {
 ipcMain.handle('request-full-disk-access', async () => {
   await requestFullDiskAccess();
   return true;
+});
+
+// Get coding stats
+ipcMain.handle('get-coding-stats', () => {
+  const stats = getCodingStats();
+  return {
+    sessionStart: stats.sessionStart,
+    totalCodingTime: stats.totalCodingTime,
+    lastActivityTime: stats.lastActivityTime,
+    filesEdited: stats.filesEdited.size,
+    languagesUsed: Array.from(stats.languagesUsed),
+    commitCount: stats.commitCount,
+    currentStreak: stats.currentStreak,
+    longestStreak: stats.longestStreak,
+  };
+});
+
+// Get daily summary
+ipcMain.handle('get-daily-summary', () => {
+  return getDailySummary();
 });
 
 // ============================================

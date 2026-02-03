@@ -17,7 +17,11 @@ declare global {
       setMouseEvents: (enabled: boolean) => void;
       focusWindow: () => void;
       onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
-      onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => void;
+      onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => void) => void;
+      onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => void;
+      onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => void;
+      getCodingStats: () => Promise<{ sessionStart: number; totalCodingTime: number; filesEdited: number; languagesUsed: string[]; commitCount: number; currentStreak: number; longestStreak: number }>;
+      getDailySummary: () => Promise<string>;
       onToggleChat: (callback: () => void) => void;
       onClearHistory: (callback: () => void) => void;
       onTriggerEmotion: (callback: (emotion: string) => void) => void;
@@ -64,11 +68,25 @@ const App = () => {
   const externalThoughtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerEmotionRef = useRef(triggerEmotion);
+  const codingAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Keep refs updated
   useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
 
   useIdleDetection();
+
+  // Helper to trigger coding animation temporarily
+  const triggerCodingAnimation = useCallback((animation: string, duration = 8000) => {
+    if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
+    currentAnimRef.current = animation;
+    frameIndexRef.current = 0;
+    frameTimerRef.current = 0;
+    codingAnimTimerRef.current = setTimeout(() => {
+      // Return to idle or emotion-based animation
+      currentAnimRef.current = 'idle';
+      frameIndexRef.current = 0;
+    }, duration);
+  }, []);
 
   // Helper to show external thoughts
   const showExternalThought = useCallback((thought: string, duration = 5000) => {
@@ -142,6 +160,28 @@ const App = () => {
       if (data.thought) {
         showExternalThought(data.thought, 4000);
       }
+      if (data.emotion) {
+        triggerEmotion(data.emotion as any);
+      }
+      if (data.animation) {
+        triggerCodingAnimation(data.animation, 6000);
+      }
+    });
+
+    // Listen for break reminders
+    window.electronAPI?.onBreakReminder?.((data) => {
+      console.log('[App] Break reminder:', data);
+      showExternalThought(data.message, 10000);
+      triggerEmotion('thinking');
+    });
+
+    // Listen for coding streak notifications
+    window.electronAPI?.onCodingStreak?.((data) => {
+      console.log('[App] Coding streak:', data);
+      if (data.minutes >= 60) {
+        showExternalThought(data.message, 5000);
+        triggerEmotion('proud');
+      }
     });
 
     // Listen for tray menu actions
@@ -160,8 +200,9 @@ const App = () => {
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+      if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
     };
-  }, [triggerEmotion, clearHistory, showExternalThought]);
+  }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
 
   useEffect(() => {
     const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);

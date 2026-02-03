@@ -415,6 +415,40 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
     frameDelay: 100,
     loop: true,
   },
+
+  // ═══════════════════════════════════════════════════════════════
+  // CODING ANIMATIONS (coding, coding2-8) - Special IDE integration
+  // ═══════════════════════════════════════════════════════════════
+  coding: {
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png'],
+    frameDelay: 200,
+    loop: true,
+  },
+  coding_intense: {
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png'],
+    frameDelay: 150,
+    loop: true,
+  },
+  coding_focused: {
+    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frameDelay: 180,
+    loop: true,
+  },
+  coding_typing: {
+    frames: ['coding.png', 'coding2.png', 'coding.png', 'coding3.png', 'coding.png', 'coding4.png'],
+    frameDelay: 100,
+    loop: true,
+  },
+  coding_thinking: {
+    frames: ['coding5.png', 'coding6.png', 'coding5.png', 'coding7.png', 'coding8.png', 'coding7.png'],
+    frameDelay: 250,
+    loop: true,
+  },
+  coding_celebrate: {
+    frames: ['coding.png', 'coding8.png', 'shime50.png', 'shime49.png', 'coding8.png', 'coding.png'],
+    frameDelay: 120,
+    loop: true,
+  },
 };
 
 export function getAnimation(name: string): SpriteAnimation | null {
