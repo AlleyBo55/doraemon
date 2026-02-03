@@ -192,6 +192,7 @@ export class ShimejiEngine {
   private emotionChangedAt = 0;
   private onPositionChange: ((pos: Position) => void) | null = null;
   private onStateChange: ((state: ShimejiState, frame: number, flip: boolean) => void) | null = null;
+  public _codingLock = false;
 
   constructor(screenWidth: number, screenHeight: number) {
     this.screenWidth = screenWidth;
@@ -442,6 +443,12 @@ export class ShimejiEngine {
   }
 
   private chooseBehavior() {
+    // Don't change behavior if coding animation is locked
+    if (this._codingLock) {
+      this.behaviorTimer = 0;
+      return;
+    }
+    
     let behaviors: BehaviorDef[];
 
     if (this.isOnCeiling) {

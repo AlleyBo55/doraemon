@@ -45,6 +45,7 @@ const App = () => {
   const [isHovering, setIsHovering] = useState(false);
   const [externalThought, setExternalThought] = useState<string | null>(null);
   const [notificationData, setNotificationData] = useState<NotificationData>(null);
+  const [isCodingMode, setIsCodingMode] = useState(false);
   
   const { current: emotion } = useEmotion();
   const {
@@ -56,8 +57,8 @@ const App = () => {
     clearHistory,
   } = useOpenClaw();
 
-  // Pass externalThought to pause random thoughts when showing notifications
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null);
+  // Pass externalThought and isCodingMode to pause random thoughts
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null || isCodingMode);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -69,20 +70,32 @@ const App = () => {
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerEmotionRef = useRef(triggerEmotion);
   const codingAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const codingModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Keep refs updated
   useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
 
   useIdleDetection();
 
-  // Helper to trigger coding animation temporarily
+  // Helper to trigger coding animation temporarily - this LOCKS the animation
   const triggerCodingAnimation = useCallback((animation: string, duration = 8000) => {
     if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
+    
+    // Lock the animation by setting it directly and preventing engine override
     currentAnimRef.current = animation;
     frameIndexRef.current = 0;
     frameTimerRef.current = 0;
+    
+    // Tell the engine to pause behavior changes during coding
+    if (engineRef.current) {
+      (engineRef.current as any)._codingLock = true;
+    }
+    
     codingAnimTimerRef.current = setTimeout(() => {
-      // Return to idle or emotion-based animation
+      // Unlock and return to normal behavior
+      if (engineRef.current) {
+        (engineRef.current as any)._codingLock = false;
+      }
       currentAnimRef.current = 'idle';
       frameIndexRef.current = 0;
     }, duration);
@@ -157,14 +170,22 @@ const App = () => {
 
     window.electronAPI?.onEditorActivity?.((data) => {
       console.log('[App] Editor activity received:', data);
+      
+      // Enter coding mode - suppress random thoughts for 15 seconds after activity
+      setIsCodingMode(true);
+      if (codingModeTimerRef.current) clearTimeout(codingModeTimerRef.current);
+      codingModeTimerRef.current = setTimeout(() => {
+        setIsCodingMode(false);
+      }, 15000);
+      
       if (data.thought) {
-        showExternalThought(data.thought, 4000);
+        showExternalThought(data.thought, 6000);
       }
       if (data.emotion) {
         triggerEmotion(data.emotion as any);
       }
       if (data.animation) {
-        triggerCodingAnimation(data.animation, 6000);
+        triggerCodingAnimation(data.animation, 8000);
       }
     });
 
@@ -201,6 +222,7 @@ const App = () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
       if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
+      if (codingModeTimerRef.current) clearTimeout(codingModeTimerRef.current);
     };
   }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
 

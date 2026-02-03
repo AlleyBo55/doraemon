@@ -583,50 +583,60 @@ async function pollHistoryFolders() {
     try {
       const entries = await readdir(historyPath, { withFileTypes: true });
       
-      for (const entry of entries) {
+      for (const entry of entries.slice(-20)) {
         if (!entry.isDirectory()) continue;
         
         const subDir = join(historyPath, entry.name);
+        const entriesJsonPath = join(subDir, 'entries.json');
+        
         try {
-          const files = await readdir(subDir);
+          const subDirStats = await stat(subDir);
+          const mtime = subDirStats.mtimeMs;
+          const key = `history:${subDir}`;
+          const lastMtime = lastModTimes.get(key);
           
-          for (const file of files) {
-            const filePath = join(subDir, file);
-            try {
-              const stats = await stat(filePath);
-              const mtime = stats.mtimeMs;
-              const lastMtime = lastModTimes.get(filePath);
-              
-              if (lastMtime === undefined) {
-                lastModTimes.set(filePath, mtime);
-                continue;
-              }
-              
-              if (mtime > lastMtime) {
-                lastModTimes.set(filePath, mtime);
-                
-                const fileName = basename(file);
-                const language = getLanguage(fileName);
-                const fileType = getFileType(fileName);
-                
-                console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor})`);
-                
-                const activity: EditorActivity = {
-                  editor,
-                  action: 'file_saved',
-                  file: fileName,
-                  language,
-                  fileType,
-                  timestamp: Date.now(),
-                };
-                
-                updateCodingStats(activity);
-                callback?.(activity);
-                return;
-              }
-            } catch { /* ignore individual file errors */ }
+          if (lastMtime === undefined) {
+            lastModTimes.set(key, mtime);
+            continue;
           }
-        } catch { /* ignore subdirectory errors */ }
+          
+          if (mtime > lastMtime) {
+            lastModTimes.set(key, mtime);
+            
+            let fileName = 'file';
+            let language = 'Unknown';
+            let fileType: EditorActivity['fileType'] = 'code';
+            
+            if (existsSync(entriesJsonPath)) {
+              try {
+                const entriesContent = await readFile(entriesJsonPath, 'utf-8');
+                const entriesData = JSON.parse(entriesContent);
+                if (entriesData.resource) {
+                  const resourcePath = entriesData.resource;
+                  fileName = basename(resourcePath);
+                  language = getLanguage(fileName);
+                  fileType = getFileType(fileName);
+                }
+              } catch { /* ignore parse errors */ }
+            }
+            
+            console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor})`);
+            
+            const activity: EditorActivity = {
+              editor,
+              action: 'file_saved',
+              file: fileName,
+              language,
+              fileType,
+              timestamp: Date.now(),
+            };
+            
+            lastActivity = activity;
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+        } catch { /* ignore individual file errors */ }
       }
     } catch (e) {
       console.error(`[EditorWatcher] Error polling history: ${e}`);
