@@ -110,7 +110,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'JavaScript': { 
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'JavaScript time!',
       'Classic JS~',
@@ -121,7 +121,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'JavaScript React': {
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_intense',
     thoughts: [
       'React components!',
       'JSX is so expressive~',
@@ -176,7 +176,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'CSS': { 
     emotion: 'curious',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'Making things pretty~',
       'Flexbox or Grid?',
@@ -187,7 +187,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'SCSS': {
     emotion: 'curious',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'SCSS! Variables and nesting~',
       'Mixins are powerful!',
@@ -196,7 +196,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'HTML': { 
     emotion: 'relaxed',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'HTML structure~',
       'Building the skeleton!',
@@ -218,7 +218,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'Markdown': { 
     emotion: 'relaxed',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Documentation!',
       'Writing docs~',
@@ -251,7 +251,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'Vue': {
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_intense',
     thoughts: [
       'Vue.js! So elegant~',
       'Composition API!',
@@ -311,7 +311,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   style: { 
     emotion: 'playful',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'Styling!',
       'Making it pretty~',
@@ -323,7 +323,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   docs: { 
     emotion: 'proud',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Documentation! So responsible~',
       'Helping future devs!',
@@ -335,7 +335,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   code: { 
     emotion: 'working',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Coding coding~',
       'Building features!',
@@ -980,7 +980,7 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `What's in ${activity.file}?`,
       ],
       emotion: langReaction?.emotion || 'curious',
-      animation: langReaction?.animation || 'coding',
+      animation: langReaction?.animation || 'coding_focused',
     },
     file_saved: {
       thoughts: [
