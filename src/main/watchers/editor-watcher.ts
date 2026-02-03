@@ -1819,17 +1819,24 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
     },
     ai_chat: {
       thoughts: [
-        `Talking to AI? I'm jealous~ 😤`,
-        `AI assistant helping out!`,
-        `Pair programming with AI~`,
-        `Getting some AI help!`,
-        `Claude? Copilot? Who's helping?`,
-        `AI-powered coding!`,
-        `Smart assistant time~`,
-        `Two AIs are better than one!`,
+        `AI pair programming! 🤖`,
+        `Coding with AI assistance~`,
+        `AI-powered development!`,
+        `Smart coding session!`,
+        `Two minds are better than one!`,
+        `AI helping with the code~`,
+        `Collaborative coding!`,
+        `Let's build something great!`,
+        `Code is flowing with AI~`,
+        `Intense coding session!`,
+        `Deep in the code~`,
+        `Algorithm thinking with AI!`,
+        `Debugging together~`,
+        `Feature development time!`,
+        `Refactoring with help~`,
       ],
-      emotion: 'curious',
-      animation: 'coding_thinking', // Will be randomized below
+      emotion: 'excited',
+      animation: 'coding_intense',
     },
   };
 
@@ -1844,9 +1851,9 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
     animation = actionData.animation;
   }
 
-  // Randomize AI chat animation
+  // Randomize AI chat animation - prefer coding_intense
   if (activity.action === 'ai_chat') {
-    const aiAnimations = ['coding_thinking', 'coding_intense', 'coding_typing'];
+    const aiAnimations = ['coding_intense', 'coding_intense', 'coding_intense', 'coding_typing', 'coding_thinking'];
     animation = aiAnimations[Math.floor(Math.random() * aiAnimations.length)];
   }
 
