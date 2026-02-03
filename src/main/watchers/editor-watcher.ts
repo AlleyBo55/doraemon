@@ -760,7 +760,121 @@ async function pollWorkspaceStorage() {
 async function pollTerminalHistory() {
   const home = homedir();
   
-  // Method 1: Check VS Code/Kiro terminal state (more reliable than shell history)
+  // Method 1: Check running processes for build/dev commands (most reliable)
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Check for running node/npm processes
+    const { stdout } = await execAsync('ps aux | grep -E "(npm|node|yarn|pnpm|git|eslint|tsc|vite|webpack)" | grep -v grep | head -20', { timeout: 2000 });
+    
+    if (stdout.trim()) {
+      const lines = stdout.trim().split('\n');
+      
+      for (const line of lines) {
+        const lineLower = line.toLowerCase();
+        
+        // Detect build commands
+        if (lineLower.includes('npm run build') || 
+            lineLower.includes('yarn build') || 
+            lineLower.includes('pnpm build') ||
+            lineLower.includes('vite build') ||
+            lineLower.includes('webpack') ||
+            lineLower.includes('tsc')) {
+          
+          const key = 'process:build';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          // Only trigger once per 30 seconds for same process type
+          if (!lastTime || now - lastTime > 30000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🔨 Build process detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect dev server
+        if (lineLower.includes('npm run dev') || 
+            lineLower.includes('npm start') ||
+            lineLower.includes('yarn dev') ||
+            lineLower.includes('vite') ||
+            lineLower.includes('next dev')) {
+          
+          const key = 'process:dev';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 60000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🚀 Dev server detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect git operations
+        if (lineLower.includes('git commit') || 
+            lineLower.includes('git push') ||
+            lineLower.includes('git pull') ||
+            lineLower.includes('git add')) {
+          
+          const key = 'process:git';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 10000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 📝 Git operation detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect eslint/lint
+        if (lineLower.includes('eslint') || lineLower.includes('npm run lint')) {
+          const key = 'process:lint';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 30000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🔍 Linting detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+      }
+    }
+  } catch { /* ignore process check errors */ }
+  
+  // Method 2: Check VS Code/Kiro terminal state files
   const terminalStatePaths = [
     { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
     { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
