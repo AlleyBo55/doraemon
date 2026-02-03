@@ -2,12 +2,39 @@ import { useState, useEffect, useCallback } from 'preact/hooks';
 import { actions as emotionActions } from '../stores/emotion';
 import type { EmotionType } from '../core/types/emotion';
 
-interface ExperienceEmotion {
-  emotion: EmotionType;
+type ExperienceEmotion = {
+  emotion: string;
   intensity: number;
   valence: number;
   arousal: number;
   trigger: string;
+};
+
+const EXPERIENCE_TO_SPRITE_EMOTION: Record<string, EmotionType> = {
+  joy: 'happy',
+  pride: 'proud',
+  satisfaction: 'proud',
+  curiosity: 'curious',
+  wonder: 'curious',
+  determination: 'determined',
+  focus: 'working',
+  calm: 'relaxed',
+  contemplation: 'thinking',
+  concern: 'anxious',
+  frustration: 'frustrated',
+  fatigue: 'sleepy',
+  longing: 'sad',
+  gratitude: 'happy',
+  connection: 'happy',
+  confusion: 'confused',
+  excitement: 'excited',
+  melancholy: 'sad',
+  hope: 'curious',
+  awe: 'surprised',
+};
+
+function mapExperienceEmotionToSprite(emotion: string): EmotionType {
+  return EXPERIENCE_TO_SPRITE_EMOTION[emotion] || 'neutral';
 }
 
 interface ExperienceThought {
@@ -59,7 +86,8 @@ export function useExperienceSystem(
 
   const handleExperienceEmotion = useCallback((event: ExperienceEmotion) => {
     if (event.intensity > 0.5) {
-      emotionActions.setEmotion(event.emotion, 'interaction');
+      const spriteEmotion = mapExperienceEmotionToSprite(event.emotion);
+      emotionActions.setEmotion(spriteEmotion, 'interaction');
     }
   }, []);
 
