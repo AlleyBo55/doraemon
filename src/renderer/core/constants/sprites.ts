@@ -435,7 +435,7 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
     loop: true,
   },
   coding_typing: {
-    frames: ['coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png','coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png','coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png'],
+    frames: ['coding.png', 'coding3.png', 'coding4.png', 'coding9.png', 'coding3.png', 'coding10.png', 'coding2.png', 'coding11.png', 'coding.png', 'coding3.png', 'coding4.png', 'coding9.png', 'coding10.png', 'coding11.png', 'coding.png', 'coding3.png', 'coding4.png', 'coding9.png', 'coding3.png', 'coding10.png', 'coding2.png', 'coding11.png', 'coding.png', 'coding3.png', 'coding4.png', 'coding9.png', 'coding10.png', 'coding11.png'],
     frameDelay: 100,
     loop: true,
   },

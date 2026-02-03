@@ -583,61 +583,80 @@ async function pollHistoryFolders() {
     try {
       const entries = await readdir(historyPath, { withFileTypes: true });
       
-      // Sort by name to get most recent (they're sorted by modification)
-      const sortedEntries = entries
-        .filter(e => e.isDirectory())
-        .slice(-30);
-      
-      for (const entry of sortedEntries) {
-        const subDir = join(historyPath, entry.name);
-        const entriesJsonPath = join(subDir, 'entries.json');
-        
-        if (!existsSync(entriesJsonPath)) continue;
-        
-        try {
-          const jsonStats = await stat(entriesJsonPath);
-          const mtime = jsonStats.mtimeMs;
-          const key = `history-json:${entriesJsonPath}`;
-          const lastMtime = lastModTimes.get(key);
-          
-          if (lastMtime === undefined) {
-            lastModTimes.set(key, mtime);
-            continue;
-          }
-          
-          if (mtime > lastMtime) {
-            lastModTimes.set(key, mtime);
-            
-            let fileName = 'file';
-            let language = 'Unknown';
-            let fileType: EditorActivity['fileType'] = 'code';
-            
+      // Get all directories and check their modification times
+      const dirsWithStats = await Promise.all(
+        entries
+          .filter(e => e.isDirectory())
+          .map(async (entry) => {
+            const dirPath = join(historyPath, entry.name);
+            const entriesJsonPath = join(dirPath, 'entries.json');
+            if (!existsSync(entriesJsonPath)) return null;
             try {
-              const entriesContent = await readFile(entriesJsonPath, 'utf-8');
-              const entriesData = JSON.parse(entriesContent);
-              if (entriesData.resource && typeof entriesData.resource === 'string') {
-                let resourcePath = entriesData.resource;
-                // Remove file:// prefix and decode URI
-                if (resourcePath.startsWith('file://')) {
-                  resourcePath = resourcePath.substring(7); // Remove 'file://'
-                }
-                resourcePath = decodeURIComponent(resourcePath);
-                fileName = basename(resourcePath);
-                language = getLanguage(fileName);
-                fileType = getFileType(fileName);
-                
-                console.log(`[EditorWatcher] Parsed resource: ${resourcePath} -> ${fileName}`);
-              }
-            } catch (e) {
-              console.error(`[EditorWatcher] Error parsing entries.json:`, e);
+              const stats = await stat(entriesJsonPath);
+              return { name: entry.name, mtime: stats.mtimeMs, path: entriesJsonPath };
+            } catch {
+              return null;
             }
+          })
+      );
+      
+      // Sort by modification time (most recent first) and take top 10
+      const sortedDirs = dirsWithStats
+        .filter((d): d is NonNullable<typeof d> => d !== null)
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 10);
+      
+      for (const dir of sortedDirs) {
+        const key = `history-json:${dir.path}`;
+        const lastMtime = lastModTimes.get(key);
+        
+        if (lastMtime === undefined) {
+          lastModTimes.set(key, dir.mtime);
+          continue;
+        }
+        
+        if (dir.mtime > lastMtime) {
+          lastModTimes.set(key, dir.mtime);
+          
+          try {
+            const entriesContent = await readFile(dir.path, 'utf-8');
+            const entriesData = JSON.parse(entriesContent);
             
-            // Skip if we couldn't get a proper filename
-            if (fileName === 'file' || fileName === 'entries.json') {
+            // The resource field contains the actual file path
+            if (!entriesData.resource || typeof entriesData.resource !== 'string') {
+              console.log(`[EditorWatcher] No resource field in ${dir.path}`);
               continue;
             }
             
-            console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor}, ${language})`);
+            let resourcePath = entriesData.resource;
+            
+            // Remove file:// or file:/// prefix
+            if (resourcePath.startsWith('file:///')) {
+              resourcePath = resourcePath.substring(8); // Remove 'file:///'
+            } else if (resourcePath.startsWith('file://')) {
+              resourcePath = resourcePath.substring(7); // Remove 'file://'
+            }
+            
+            // Decode URI components (handles %20 for spaces, etc.)
+            resourcePath = decodeURIComponent(resourcePath);
+            
+            // On macOS, paths start with / so we need to ensure it's there
+            if (!resourcePath.startsWith('/') && process.platform === 'darwin') {
+              resourcePath = '/' + resourcePath;
+            }
+            
+            const fileName = basename(resourcePath);
+            
+            // Skip if we got an invalid filename
+            if (!fileName || fileName === 'entries.json' || fileName === 'file') {
+              console.log(`[EditorWatcher] Invalid filename from resource: ${entriesData.resource}`);
+              continue;
+            }
+            
+            const language = getLanguage(fileName);
+            const fileType = getFileType(fileName);
+            
+            console.log(`[EditorWatcher] File activity: ${fileName} from ${resourcePath} (${editor}, ${language})`);
             
             const activity: EditorActivity = {
               editor,
@@ -652,8 +671,10 @@ async function pollHistoryFolders() {
             updateCodingStats(activity);
             callback?.(activity);
             return;
+          } catch (e) {
+            console.error(`[EditorWatcher] Error parsing ${dir.path}:`, e);
           }
-        } catch { /* ignore individual file errors */ }
+        }
       }
     } catch (e) {
       console.error(`[EditorWatcher] Error polling history: ${e}`);
