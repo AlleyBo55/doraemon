@@ -1,6 +1,6 @@
 import { watch, FSWatcher, existsSync, statSync, readdirSync } from 'fs';
 import { readFile, readdir, stat } from 'fs/promises';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, resolve } from 'path';
 import { homedir } from 'os';
 import { BrowserWindow } from 'electron';
 
@@ -110,7 +110,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'JavaScript': { 
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'JavaScript time!',
       'Classic JS~',
@@ -121,7 +121,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'JavaScript React': {
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_intense',
     thoughts: [
       'React components!',
       'JSX is so expressive~',
@@ -176,7 +176,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'CSS': { 
     emotion: 'curious',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'Making things pretty~',
       'Flexbox or Grid?',
@@ -187,7 +187,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'SCSS': {
     emotion: 'curious',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'SCSS! Variables and nesting~',
       'Mixins are powerful!',
@@ -196,7 +196,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'HTML': { 
     emotion: 'relaxed',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'HTML structure~',
       'Building the skeleton!',
@@ -218,7 +218,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'Markdown': { 
     emotion: 'relaxed',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Documentation!',
       'Writing docs~',
@@ -251,7 +251,7 @@ const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; th
   },
   'Vue': {
     emotion: 'happy',
-    animation: 'coding',
+    animation: 'coding_intense',
     thoughts: [
       'Vue.js! So elegant~',
       'Composition API!',
@@ -311,7 +311,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   style: { 
     emotion: 'playful',
-    animation: 'coding',
+    animation: 'coding_thinking',
     thoughts: [
       'Styling!',
       'Making it pretty~',
@@ -323,7 +323,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   docs: { 
     emotion: 'proud',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Documentation! So responsible~',
       'Helping future devs!',
@@ -335,7 +335,7 @@ const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; 
   },
   code: { 
     emotion: 'working',
-    animation: 'coding',
+    animation: 'coding_typing',
     thoughts: [
       'Coding coding~',
       'Building features!',
@@ -528,6 +528,9 @@ function watchGitDirectories() {
     join(home, 'Code'),
     join(home, 'repos'),
     join(home, 'workspace'),
+    join(home, 'ngoding'),  // Common dev folder
+    join(home, 'dev'),
+    join(home, 'src'),
   ];
 
   for (const basePath of commonPaths) {
@@ -535,28 +538,43 @@ function watchGitDirectories() {
     
     try {
       const dirs = readdirSync(basePath, { withFileTypes: true });
-      for (const dir of dirs.slice(0, 10)) {
+      for (const dir of dirs.slice(0, 15)) {
         if (!dir.isDirectory()) continue;
         const gitPath = join(basePath, dir.name, '.git');
         if (!existsSync(gitPath)) continue;
         
-        const headPath = join(gitPath, 'HEAD');
-        const watcher = safeWatch(headPath, () => {
-          const activity: EditorActivity = {
-            editor: 'unknown',
-            action: 'git_commit',
-            timestamp: Date.now(),
-          };
-          updateCodingStats(activity);
-          callback?.(activity);
-        });
-        if (watcher) {
-          watchers.push(watcher);
-          console.log(`[EditorWatcher] Watching git: ${gitPath}`);
+        // Watch .git/logs/HEAD - this updates on EVERY commit
+        const logsHeadPath = join(gitPath, 'logs', 'HEAD');
+        if (existsSync(logsHeadPath)) {
+          const watcher = safeWatch(logsHeadPath, () => {
+            console.log(`[EditorWatcher] Git commit detected in ${dir.name}`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          });
+          if (watcher) {
+            watchers.push(watcher);
+            console.log(`[EditorWatcher] Watching git logs: ${logsHeadPath}`);
+          }
+        }
+        
+        // Also watch .git/index - updates on staging
+        const indexPath = join(gitPath, 'index');
+        if (existsSync(indexPath)) {
+          const indexWatcher = safeWatch(indexPath, () => {
+            // Don't trigger for every staging, just log
+            console.log(`[EditorWatcher] Git staging activity in ${dir.name}`);
+          });
+          if (indexWatcher) watchers.push(indexWatcher);
         }
 
         const mergePath = join(gitPath, 'MERGE_HEAD');
         const mergeWatcher = safeWatch(mergePath, () => {
+          console.log(`[EditorWatcher] Git merge conflict in ${dir.name}`);
           const activity: EditorActivity = {
             editor: 'unknown',
             action: 'git_conflict',
@@ -578,59 +596,399 @@ async function pollHistoryFolders() {
   ];
 
   for (const { path: historyPath, editor } of historyPaths) {
-    if (!existsSync(historyPath)) continue;
+    if (!existsSync(historyPath)) {
+      console.log(`[EditorWatcher] History path not found: ${historyPath}`);
+      continue;
+    }
 
     try {
       const entries = await readdir(historyPath, { withFileTypes: true });
       
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        
-        const subDir = join(historyPath, entry.name);
-        try {
-          const files = await readdir(subDir);
-          
-          for (const file of files) {
-            const filePath = join(subDir, file);
+      // Get all directories and check their modification times
+      const dirsWithStats = await Promise.all(
+        entries
+          .filter(e => e.isDirectory())
+          .map(async (entry) => {
+            const dirPath = join(historyPath, entry.name);
+            const entriesJsonPath = join(dirPath, 'entries.json');
+            if (!existsSync(entriesJsonPath)) return null;
             try {
-              const stats = await stat(filePath);
-              const mtime = stats.mtimeMs;
-              const lastMtime = lastModTimes.get(filePath);
-              
-              if (lastMtime === undefined) {
-                lastModTimes.set(filePath, mtime);
-                continue;
-              }
-              
-              if (mtime > lastMtime) {
-                lastModTimes.set(filePath, mtime);
-                
-                const fileName = basename(file);
-                const language = getLanguage(fileName);
-                const fileType = getFileType(fileName);
-                
-                console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor})`);
-                
-                const activity: EditorActivity = {
-                  editor,
-                  action: 'file_saved',
-                  file: fileName,
-                  language,
-                  fileType,
-                  timestamp: Date.now(),
-                };
-                
-                updateCodingStats(activity);
-                callback?.(activity);
-                return;
-              }
-            } catch { /* ignore individual file errors */ }
+              const stats = await stat(entriesJsonPath);
+              return { name: entry.name, mtime: stats.mtimeMs, path: entriesJsonPath };
+            } catch {
+              return null;
+            }
+          })
+      );
+      
+      // Sort by modification time (most recent first) and take top 10
+      const sortedDirs = dirsWithStats
+        .filter((d): d is NonNullable<typeof d> => d !== null)
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 10);
+      
+      for (const dir of sortedDirs) {
+        const key = `history-json:${dir.path}`;
+        const lastMtime = lastModTimes.get(key);
+        
+        if (lastMtime === undefined) {
+          lastModTimes.set(key, dir.mtime);
+          continue;
+        }
+        
+        if (dir.mtime > lastMtime) {
+          lastModTimes.set(key, dir.mtime);
+          
+          try {
+            const entriesContent = await readFile(dir.path, 'utf-8');
+            const entriesData = JSON.parse(entriesContent);
+            
+            console.log(`[EditorWatcher] Parsing entries.json:`, JSON.stringify(entriesData).substring(0, 200));
+            
+            // The resource field contains the actual file path
+            if (!entriesData.resource || typeof entriesData.resource !== 'string') {
+              console.log(`[EditorWatcher] No resource field in ${dir.path}`);
+              continue;
+            }
+            
+            let resourcePath = entriesData.resource;
+            console.log(`[EditorWatcher] Raw resource: ${resourcePath}`);
+            
+            // Remove file:// or file:/// prefix
+            if (resourcePath.startsWith('file:///')) {
+              resourcePath = resourcePath.substring(8); // Remove 'file:///'
+            } else if (resourcePath.startsWith('file://')) {
+              resourcePath = resourcePath.substring(7); // Remove 'file://'
+            }
+            
+            // Decode URI components (handles %20 for spaces, etc.)
+            resourcePath = decodeURIComponent(resourcePath);
+            
+            // On macOS, paths start with / so we need to ensure it's there
+            if (!resourcePath.startsWith('/') && process.platform === 'darwin') {
+              resourcePath = '/' + resourcePath;
+            }
+            
+            const fileName = basename(resourcePath);
+            console.log(`[EditorWatcher] Extracted filename: ${fileName} from ${resourcePath}`);
+            
+            // Skip if we got an invalid filename
+            if (!fileName || fileName === 'entries.json' || fileName === 'file') {
+              console.log(`[EditorWatcher] Invalid filename, skipping`);
+              continue;
+            }
+            
+            const language = getLanguage(fileName);
+            const fileType = getFileType(fileName);
+            
+            console.log(`[EditorWatcher] ✓ File activity: ${fileName} (${editor}, ${language}, ${fileType})`);
+            
+            const activity: EditorActivity = {
+              editor,
+              action: 'file_saved',
+              file: fileName,
+              language,
+              fileType,
+              timestamp: Date.now(),
+            };
+            
+            lastActivity = activity;
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          } catch (e) {
+            console.error(`[EditorWatcher] Error parsing ${dir.path}:`, e);
           }
-        } catch { /* ignore subdirectory errors */ }
+        }
       }
     } catch (e) {
       console.error(`[EditorWatcher] Error polling history: ${e}`);
     }
+  }
+}
+
+// Poll for git operations in active workspaces (detected from IDE workspace storage)
+async function pollActiveWorkspaceGit() {
+  const home = homedir();
+  
+  const storagePaths = [
+    { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: storagePath, editor } of storagePaths) {
+    if (!existsSync(storagePath)) continue;
+
+    try {
+      const workspaces = await readdir(storagePath, { withFileTypes: true });
+      
+      // Check most recently modified workspaces
+      const wsWithStats = await Promise.all(
+        workspaces
+          .filter(ws => ws.isDirectory())
+          .slice(0, 10)
+          .map(async (ws) => {
+            const wsPath = join(storagePath, ws.name);
+            try {
+              const stats = await stat(wsPath);
+              return { name: ws.name, path: wsPath, mtime: stats.mtimeMs };
+            } catch {
+              return null;
+            }
+          })
+      );
+      
+      const sortedWs = wsWithStats
+        .filter((w): w is NonNullable<typeof w> => w !== null)
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 5);
+      
+      for (const ws of sortedWs) {
+        // Try to read workspace.json to get the actual workspace path
+        const workspaceJsonPath = join(ws.path, 'workspace.json');
+        if (!existsSync(workspaceJsonPath)) continue;
+        
+        try {
+          const content = await readFile(workspaceJsonPath, 'utf-8');
+          const data = JSON.parse(content);
+          
+          // Get folder paths - handle both single folder and multi-root workspaces
+          const folderPaths: string[] = [];
+          
+          // Single folder workspace
+          if (data.folder) {
+            folderPaths.push(data.folder);
+          }
+          
+          // Multi-root workspace - need to read the .code-workspace file
+          if (data.workspace) {
+            let workspaceFilePath = data.workspace;
+            if (workspaceFilePath.startsWith('file:///')) {
+              workspaceFilePath = workspaceFilePath.substring(8);
+            } else if (workspaceFilePath.startsWith('file://')) {
+              workspaceFilePath = workspaceFilePath.substring(7);
+            }
+            workspaceFilePath = decodeURIComponent(workspaceFilePath);
+            if (!workspaceFilePath.startsWith('/') && process.platform === 'darwin') {
+              workspaceFilePath = '/' + workspaceFilePath;
+            }
+            
+            // Read the .code-workspace file to get folder paths
+            if (existsSync(workspaceFilePath)) {
+              try {
+                const wsContent = await readFile(workspaceFilePath, 'utf-8');
+                const wsData = JSON.parse(wsContent);
+                if (wsData.folders && Array.isArray(wsData.folders)) {
+                  // Get the directory containing the .code-workspace file
+                  const wsDir = workspaceFilePath.substring(0, workspaceFilePath.lastIndexOf('/'));
+                  
+                  for (const folder of wsData.folders) {
+                    if (folder.path) {
+                      // Paths in .code-workspace can be relative or absolute
+                      let fPath = folder.path;
+                      if (!fPath.startsWith('/')) {
+                        // Relative path - use resolve() for proper path resolution
+                        fPath = resolve(wsDir, fPath);
+                      }
+                      folderPaths.push(`file://${fPath}`);
+                    }
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+          }
+          
+          if (folderPaths.length === 0) continue;
+          
+          // Debug: log the resolved folder paths (only once per workspace)
+          const wsKey = `debug-ws:${ws.path}`;
+          if (!lastModTimes.has(wsKey)) {
+            lastModTimes.set(wsKey, 1);
+            console.log(`[EditorWatcher] Monitoring workspace folders:`, folderPaths.map(p => {
+              let fp = p;
+              if (fp.startsWith('file:///')) fp = fp.substring(8);
+              else if (fp.startsWith('file://')) fp = fp.substring(7);
+              return decodeURIComponent(fp);
+            }));
+          }
+          
+          for (let folderPath of folderPaths) {
+            // Remove file:// prefix
+            if (folderPath.startsWith('file:///')) {
+              folderPath = folderPath.substring(8);
+            } else if (folderPath.startsWith('file://')) {
+              folderPath = folderPath.substring(7);
+            }
+            folderPath = decodeURIComponent(folderPath);
+            if (!folderPath.startsWith('/') && process.platform === 'darwin') {
+              folderPath = '/' + folderPath;
+            }
+            
+            // Check if this folder has a .git directory
+            const gitPath = join(folderPath, '.git');
+            if (!existsSync(gitPath)) continue;
+            
+            // Check .git/logs/HEAD for commits
+            const gitLogsPath = join(gitPath, 'logs', 'HEAD');
+            if (existsSync(gitLogsPath)) {
+              try {
+                const stats = await stat(gitLogsPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-logs:${gitLogsPath}`;
+                const lastMtime = lastModTimes.get(key);
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 🎉 Git commit detected in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'git_commit',
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check .git/index for staging (git add)
+            const gitIndexPath = join(gitPath, 'index');
+            if (existsSync(gitIndexPath)) {
+              try {
+                const stats = await stat(gitIndexPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-index:${gitIndexPath}`;
+                const lastMtime = lastModTimes.get(key);
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 📝 Git staging in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'typing',
+                    timestamp: Date.now(),
+                  };
+                  
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check .git/COMMIT_EDITMSG - created/updated during git commit
+            const commitMsgPath = join(gitPath, 'COMMIT_EDITMSG');
+            if (existsSync(commitMsgPath)) {
+              try {
+                const stats = await stat(commitMsgPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-commitmsg:${commitMsgPath}`;
+                const lastMtime = lastModTimes.get(key);
+                const timeSinceModified = Date.now() - mtime;
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime && timeSinceModified < 10000) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 🎉 Git commit message detected in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'git_commit',
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check .git/ORIG_HEAD - updated after git commit, merge, reset
+            const origHeadPath = join(gitPath, 'ORIG_HEAD');
+            if (existsSync(origHeadPath)) {
+              try {
+                const stats = await stat(origHeadPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-orighead:${origHeadPath}`;
+                const lastMtime = lastModTimes.get(key);
+                const timeSinceModified = Date.now() - mtime;
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime && timeSinceModified < 10000) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 🎉 Git operation detected in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'git_commit',
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check for build output directories
+            const buildDirs = ['dist', 'build', 'out', '.next'];
+            for (const buildDir of buildDirs) {
+              const buildPath = join(folderPath, buildDir);
+              if (!existsSync(buildPath)) continue;
+              
+              try {
+                const stats = await stat(buildPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-build:${buildPath}`;
+                const lastMtime = lastModTimes.get(key);
+                
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime) {
+                  const timeSinceModified = Date.now() - mtime;
+                  if (timeSinceModified < 15000) { // Within 15 seconds
+                    lastModTimes.set(key, mtime);
+                    
+                    console.log(`[EditorWatcher] 🎉 Build completed in active workspace: ${basename(folderPath)}/${buildDir}`);
+                    
+                    const activity: EditorActivity = {
+                      editor,
+                      action: 'git_commit', // Reuse for celebration
+                      timestamp: Date.now(),
+                    };
+                    
+                    lastActivity = activity;
+                    updateCodingStats(activity);
+                    callback?.(activity);
+                    return;
+                  }
+                  lastModTimes.set(key, mtime);
+                }
+              } catch { /* ignore */ }
+            }
+          } // end for folderPaths
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
   }
 }
 
@@ -686,6 +1044,214 @@ async function pollWorkspaceStorage() {
 
 async function pollTerminalHistory() {
   const home = homedir();
+  
+  // Method 1: Check running processes for build/dev commands (most reliable)
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    // Check for running node/npm processes
+    const { stdout } = await execAsync('ps aux | grep -E "(npm|node|yarn|pnpm|git|eslint|tsc|vite|webpack)" | grep -v grep | head -20', { timeout: 2000 });
+    
+    if (stdout.trim()) {
+      const lines = stdout.trim().split('\n');
+      
+      for (const line of lines) {
+        const lineLower = line.toLowerCase();
+        
+        // Detect build commands
+        if (lineLower.includes('npm run build') || 
+            lineLower.includes('yarn build') || 
+            lineLower.includes('pnpm build') ||
+            lineLower.includes('vite build') ||
+            lineLower.includes('webpack') ||
+            lineLower.includes('tsc')) {
+          
+          const key = 'process:build';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          // Only trigger once per 30 seconds for same process type
+          if (!lastTime || now - lastTime > 30000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🔨 Build process detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect dev server
+        if (lineLower.includes('npm run dev') || 
+            lineLower.includes('npm start') ||
+            lineLower.includes('yarn dev') ||
+            lineLower.includes('vite') ||
+            lineLower.includes('next dev')) {
+          
+          const key = 'process:dev';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 60000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🚀 Dev server detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect git operations
+        if (lineLower.includes('git commit') || 
+            lineLower.includes('git push') ||
+            lineLower.includes('git pull') ||
+            lineLower.includes('git add')) {
+          
+          const key = 'process:git';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 10000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 📝 Git operation detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+        
+        // Detect eslint/lint
+        if (lineLower.includes('eslint') || lineLower.includes('npm run lint')) {
+          const key = 'process:lint';
+          const now = Date.now();
+          const lastTime = lastModTimes.get(key);
+          
+          if (!lastTime || now - lastTime > 30000) {
+            lastModTimes.set(key, now);
+            console.log(`[EditorWatcher] 🔍 Linting detected!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'terminal_active',
+              timestamp: now,
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          }
+        }
+      }
+    }
+  } catch { /* ignore process check errors */ }
+  
+  // Method 2: Check VS Code/Kiro terminal state files
+  const terminalStatePaths = [
+    { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: storagePath, editor } of terminalStatePaths) {
+    if (!existsSync(storagePath)) continue;
+
+    try {
+      const workspaces = await readdir(storagePath, { withFileTypes: true });
+      
+      for (const ws of workspaces.slice(0, 10)) {
+        if (!ws.isDirectory()) continue;
+        
+        // Check terminal history file
+        const terminalHistoryPath = join(storagePath, ws.name, 'terminalHistory');
+        if (existsSync(terminalHistoryPath)) {
+          try {
+            const stats = await stat(terminalHistoryPath);
+            const mtime = stats.mtimeMs;
+            const key = `terminal-state:${terminalHistoryPath}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            if (mtime > lastMtime) {
+              lastModTimes.set(key, mtime);
+              
+              // Read terminal history to check for build/commit commands
+              try {
+                const content = await readFile(terminalHistoryPath, 'utf-8');
+                const lines = content.trim().split('\n');
+                const recentLines = lines.slice(-5); // Check last 5 commands
+                
+                for (const line of recentLines) {
+                  const command = line.toLowerCase();
+                  
+                  // Detect build/deploy commands
+                  if (command.includes('npm run build') || 
+                      command.includes('yarn build') || 
+                      command.includes('pnpm build') ||
+                      command.includes('npm run deploy') ||
+                      command.includes('vercel') ||
+                      command.includes('npm publish') ||
+                      command.includes('npx tsc') ||
+                      command.includes('electron-vite build')) {
+                    console.log(`[EditorWatcher] 🎉 Build command detected in ${editor} terminal!`);
+                    const activity: EditorActivity = {
+                      editor,
+                      action: 'git_commit',
+                      timestamp: Date.now(),
+                    };
+                    updateCodingStats(activity);
+                    callback?.(activity);
+                    return;
+                  }
+                  
+                  // Detect git commands
+                  if (command.includes('git commit') || command.includes('git push')) {
+                    console.log(`[EditorWatcher] 🎉 Git command detected in ${editor} terminal!`);
+                    const activity: EditorActivity = {
+                      editor,
+                      action: 'git_commit',
+                      timestamp: Date.now(),
+                    };
+                    updateCodingStats(activity);
+                    callback?.(activity);
+                    return;
+                  }
+                }
+              } catch { /* ignore read errors */ }
+              
+              // General terminal activity
+              const activity: EditorActivity = {
+                editor,
+                action: 'terminal_active',
+                timestamp: Date.now(),
+              };
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  
+  // Method 2: Check zsh/bash history (fallback, may not update immediately)
   const historyFiles = [
     join(home, '.zsh_history'),
     join(home, '.bash_history'),
@@ -707,7 +1273,53 @@ async function pollTerminalHistory() {
       if (mtime > lastMtime) {
         lastModTimes.set(historyFile, mtime);
         
-        console.log(`[EditorWatcher] Terminal activity detected`);
+        // Try to read the last command from history
+        try {
+          const content = await readFile(historyFile, 'utf-8');
+          const lines = content.trim().split('\n');
+          const lastLine = lines[lines.length - 1] || '';
+          
+          // zsh_history format: : timestamp:0;command OR just command
+          // bash_history format: just the command
+          let command = lastLine;
+          if (lastLine.includes(';')) {
+            command = lastLine.split(';').slice(1).join(';');
+          }
+          command = command.toLowerCase().trim();
+          
+          console.log(`[EditorWatcher] Terminal command: ${command.substring(0, 50)}`);
+          
+          // Detect build/deploy commands - trigger celebration!
+          if (command.includes('npm run build') || 
+              command.includes('yarn build') || 
+              command.includes('pnpm build') ||
+              command.includes('npm run deploy') ||
+              command.includes('vercel') ||
+              command.includes('npm publish')) {
+            console.log(`[EditorWatcher] 🎉 Build/deploy command detected!`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit', // Reuse git_commit for celebration
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+          
+          // Detect git commit from terminal
+          if (command.includes('git commit') || command.includes('git push')) {
+            console.log(`[EditorWatcher] 🎉 Git command detected!`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+        } catch { /* ignore read errors */ }
         
         const activity: EditorActivity = {
           editor: 'unknown',
@@ -723,14 +1335,127 @@ async function pollTerminalHistory() {
   }
 }
 
+// Separate function to detect build completion via lock files and output directories
+async function pollBuildActivity() {
+  const home = homedir();
+  const commonPaths = [
+    join(home, 'Developer'),
+    join(home, 'Projects'),
+    join(home, 'Code'),
+    join(home, 'repos'),
+    join(home, 'workspace'),
+    join(home, 'ngoding'),
+    join(home, 'dev'),
+    join(home, 'src'),
+  ];
+
+  for (const basePath of commonPaths) {
+    if (!existsSync(basePath)) continue;
+
+    try {
+      const dirs = readdirSync(basePath, { withFileTypes: true });
+      for (const dir of dirs.slice(0, 15)) {
+        if (!dir.isDirectory()) continue;
+        const projectPath = join(basePath, dir.name);
+        
+        // Check for build output directories that indicate a build just completed
+        const buildIndicators = [
+          { path: join(projectPath, 'dist'), name: 'dist' },
+          { path: join(projectPath, 'build'), name: 'build' },
+          { path: join(projectPath, 'out'), name: 'out' },
+          { path: join(projectPath, '.next'), name: '.next' },
+          { path: join(projectPath, 'node_modules', '.vite'), name: '.vite' },
+        ];
+        
+        for (const { path: buildPath, name: buildName } of buildIndicators) {
+          if (!existsSync(buildPath)) continue;
+          
+          try {
+            const stats = await stat(buildPath);
+            const mtime = stats.mtimeMs;
+            const key = `build:${buildPath}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            // Build directory was modified recently (within 10 seconds)
+            const timeSinceModified = Date.now() - mtime;
+            if (mtime > lastMtime && timeSinceModified < 10000) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 🎉 Build completed in ${dir.name}/${buildName}!`);
+              
+              const activity: EditorActivity = {
+                editor: 'unknown',
+                action: 'git_commit', // Reuse for celebration
+                timestamp: Date.now(),
+              };
+              
+              lastActivity = activity;
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+            
+            lastModTimes.set(key, mtime);
+          } catch { /* ignore */ }
+        }
+        
+        // Also check for package-lock.json changes (npm install completed)
+        const lockFiles = [
+          join(projectPath, 'package-lock.json'),
+          join(projectPath, 'yarn.lock'),
+          join(projectPath, 'pnpm-lock.yaml'),
+        ];
+        
+        for (const lockFile of lockFiles) {
+          if (!existsSync(lockFile)) continue;
+          
+          try {
+            const stats = await stat(lockFile);
+            const mtime = stats.mtimeMs;
+            const key = `lock:${lockFile}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            // Lock file was modified recently
+            const timeSinceModified = Date.now() - mtime;
+            if (mtime > lastMtime && timeSinceModified < 5000) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 📦 Package install completed in ${dir.name}!`);
+              
+              // Don't trigger celebration for npm install, just log
+            }
+            
+            lastModTimes.set(key, mtime);
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
 async function pollAIChatActivity() {
   const home = homedir();
   
   const aiPaths = [
-    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiro'), editor: 'kiro' as const },
+    // Kiro AI agent data - updates when chatting with AI
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data/devdata.sqlite'), editor: 'kiro' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data/tokens_generated.jsonl'), editor: 'kiro' as const },
+    // VS Code Copilot
     { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot'), editor: 'vscode' as const },
     { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot-chat'), editor: 'vscode' as const },
+    // Continue extension
     { path: join(home, '.continue'), editor: 'vscode' as const },
+    // Cursor
     { path: join(home, '.cursor'), editor: 'unknown' as const },
   ];
 
@@ -748,10 +1473,10 @@ async function pollAIChatActivity() {
         continue;
       }
 
-      if (mtime > lastMtime + 2000) {
+      if (mtime > lastMtime + 1000) {
         lastModTimes.set(key, mtime);
         
-        console.log(`[EditorWatcher] AI chat activity detected: ${editor}`);
+        console.log(`[EditorWatcher] AI chat activity detected: ${editor} (${basename(aiPath)})`);
         
         const activity: EditorActivity = {
           editor,
@@ -759,39 +1484,10 @@ async function pollAIChatActivity() {
           timestamp: Date.now(),
         };
         
+        lastActivity = activity;
         updateCodingStats(activity);
         callback?.(activity);
         return;
-      }
-    } catch { /* ignore */ }
-  }
-
-  const kiroLogsPath = join(home, 'Library/Application Support/Kiro/logs');
-  if (existsSync(kiroLogsPath)) {
-    try {
-      const files = await readdir(kiroLogsPath);
-      const mainLog = files.find(f => f.includes('main'));
-      if (mainLog) {
-        const logPath = join(kiroLogsPath, mainLog);
-        const stats = await stat(logPath);
-        const mtime = stats.mtimeMs;
-        const key = `kiro-log:${logPath}`;
-        const lastMtime = lastModTimes.get(key);
-
-        if (lastMtime === undefined) {
-          lastModTimes.set(key, mtime);
-        } else if (mtime > lastMtime + 3000) {
-          lastModTimes.set(key, mtime);
-          
-          const activity: EditorActivity = {
-            editor: 'kiro',
-            action: 'ai_chat',
-            timestamp: Date.now(),
-          };
-          
-          updateCodingStats(activity);
-          callback?.(activity);
-        }
       }
     } catch { /* ignore */ }
   }
@@ -895,6 +1591,186 @@ async function pollRecentlyOpened() {
   }
 }
 
+async function pollGitActivity() {
+  const home = homedir();
+  const commonPaths = [
+    join(home, 'Developer'),
+    join(home, 'Projects'),
+    join(home, 'Code'),
+    join(home, 'repos'),
+    join(home, 'workspace'),
+    join(home, 'ngoding'),
+    join(home, 'dev'),
+    join(home, 'src'),
+  ];
+
+  for (const basePath of commonPaths) {
+    if (!existsSync(basePath)) continue;
+
+    try {
+      const dirs = readdirSync(basePath, { withFileTypes: true });
+      for (const dir of dirs.slice(0, 15)) {
+        if (!dir.isDirectory()) continue;
+        
+        const gitPath = join(basePath, dir.name, '.git');
+        if (!existsSync(gitPath)) continue;
+        
+        // Check .git/logs/HEAD for commits
+        const gitLogsPath = join(gitPath, 'logs', 'HEAD');
+        if (existsSync(gitLogsPath)) {
+          try {
+            const stats = await stat(gitLogsPath);
+            const mtime = stats.mtimeMs;
+            const key = `git-logs:${gitLogsPath}`;
+            const lastMtime = lastModTimes.get(key);
+
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+            } else if (mtime > lastMtime) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 🎉 Git commit detected in ${dir.name}!`);
+              
+              const activity: EditorActivity = {
+                editor: 'unknown',
+                action: 'git_commit',
+                timestamp: Date.now(),
+              };
+              
+              lastActivity = activity;
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+        
+        // Check .git/index for staging activity (git add)
+        const gitIndexPath = join(gitPath, 'index');
+        if (existsSync(gitIndexPath)) {
+          try {
+            const stats = await stat(gitIndexPath);
+            const mtime = stats.mtimeMs;
+            const key = `git-index:${gitIndexPath}`;
+            const lastMtime = lastModTimes.get(key);
+
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+            } else if (mtime > lastMtime) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 📝 Git staging activity in ${dir.name}`);
+              
+              const activity: EditorActivity = {
+                editor: 'unknown',
+                action: 'typing', // Staging is like typing/working
+                timestamp: Date.now(),
+              };
+              
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+// Poll for file changes using git status
+async function pollGitFileChanges() {
+  const home = homedir();
+  const commonPaths = [
+    join(home, 'Developer'),
+    join(home, 'Projects'),
+    join(home, 'Code'),
+    join(home, 'repos'),
+    join(home, 'workspace'),
+    join(home, 'ngoding'),
+    join(home, 'dev'),
+    join(home, 'src'),
+  ];
+
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    for (const basePath of commonPaths) {
+      if (!existsSync(basePath)) continue;
+
+      try {
+        const dirs = readdirSync(basePath, { withFileTypes: true });
+        for (const dir of dirs.slice(0, 10)) {
+          if (!dir.isDirectory()) continue;
+          
+          const projectPath = join(basePath, dir.name);
+          const gitPath = join(projectPath, '.git');
+          if (!existsSync(gitPath)) continue;
+
+          try {
+            // Run git status to get modified files
+            const { stdout } = await execAsync('git status --porcelain 2>/dev/null | head -10', { 
+              cwd: projectPath,
+              timeout: 2000 
+            });
+            
+            if (stdout.trim()) {
+              const key = `git-status:${projectPath}`;
+              const lastStatus = lastModTimes.get(key);
+              const currentHash = stdout.trim().length; // Simple change detection
+              
+              if (lastStatus === undefined) {
+                lastModTimes.set(key, currentHash);
+                continue;
+              }
+              
+              if (currentHash !== lastStatus) {
+                lastModTimes.set(key, currentHash);
+                
+                // Parse the first modified file
+                const lines = stdout.trim().split('\n');
+                const firstLine = lines[0] || '';
+                const status = firstLine.substring(0, 2).trim();
+                const fileName = basename(firstLine.substring(3).trim());
+                
+                if (fileName) {
+                  const language = getLanguage(fileName);
+                  const fileType = getFileType(fileName);
+                  
+                  // Determine action based on git status
+                  let action: EditorActivity['action'] = 'file_saved';
+                  if (status === '??') action = 'file_created';
+                  else if (status === 'D' || status === ' D') action = 'file_saved';
+                  else if (status === 'M' || status === ' M' || status === 'MM') action = 'file_saved';
+                  else if (status === 'A' || status === ' A') action = 'file_created';
+                  
+                  console.log(`[EditorWatcher] 📄 File change detected: ${fileName} (${status}) in ${dir.name}`);
+                  
+                  const activity: EditorActivity = {
+                    editor: 'unknown',
+                    action,
+                    file: fileName,
+                    language,
+                    fileType,
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              }
+            }
+          } catch { /* ignore git errors */ }
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore import errors */ }
+}
+
 export function startEditorWatcher(
   _mainWindow: BrowserWindow,
   onActivity: EditorCallback,
@@ -912,10 +1788,19 @@ export function startEditorWatcher(
   historyPollInterval = setInterval(async () => {
     await pollHistoryFolders();
     await pollWorkspaceStorage();
+    await pollActiveWorkspaceGit(); // Monitor git in active IDE workspaces
     await pollTerminalHistory();
     await pollAIChatActivity();
     await pollRecentlyOpened();
+    await pollGitActivity();
+    await pollGitFileChanges();
+    await pollBuildActivity();
   }, 2000);
+  
+  // Fast poll for git operations (1 second) - catches quick git commit/push
+  pollInterval = setInterval(async () => {
+    await pollActiveWorkspaceGit();
+  }, 1000);
   
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);
   idleCheckInterval = setInterval(checkIdleState, 30 * 1000);
@@ -956,7 +1841,7 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `What's in ${activity.file}?`,
       ],
       emotion: langReaction?.emotion || 'curious',
-      animation: langReaction?.animation || 'coding',
+      animation: langReaction?.animation || 'coding_focused',
     },
     file_saved: {
       thoughts: [
@@ -1060,17 +1945,24 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
     },
     ai_chat: {
       thoughts: [
-        `Talking to AI? I'm jealous~ 😤`,
-        `AI assistant helping out!`,
-        `Pair programming with AI~`,
-        `Getting some AI help!`,
-        `Claude? Copilot? Who's helping?`,
-        `AI-powered coding!`,
-        `Smart assistant time~`,
-        `Two AIs are better than one!`,
+        `AI pair programming! 🤖`,
+        `Coding with AI assistance~`,
+        `AI-powered development!`,
+        `Smart coding session!`,
+        `Two minds are better than one!`,
+        `AI helping with the code~`,
+        `Collaborative coding!`,
+        `Let's build something great!`,
+        `Code is flowing with AI~`,
+        `Intense coding session!`,
+        `Deep in the code~`,
+        `Algorithm thinking with AI!`,
+        `Debugging together~`,
+        `Feature development time!`,
+        `Refactoring with help~`,
       ],
-      emotion: 'curious',
-      animation: 'coding_thinking',
+      emotion: 'excited',
+      animation: 'coding_intense',
     },
   };
 
@@ -1083,6 +1975,12 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
     thoughts = [...actionData.thoughts];
     emotion = actionData.emotion;
     animation = actionData.animation;
+  }
+
+  // Randomize AI chat animation - prefer coding_intense
+  if (activity.action === 'ai_chat') {
+    const aiAnimations = ['coding_intense', 'coding_intense', 'coding_intense', 'coding_typing', 'coding_thinking'];
+    animation = aiAnimations[Math.floor(Math.random() * aiAnimations.length)];
   }
 
   if (langReaction && activity.action === 'file_opened') {

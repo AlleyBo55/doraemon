@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => {
     ipcRenderer.on('coding-streak', (_event: IpcRendererEvent, data: { minutes: number; message: string }) => callback(data));
   },
+  // Daily summary heartbeat (every 3 hours)
+  onDailySummary: (callback: (data: { message: string; duration: number; priority: boolean }) => void) => {
+    ipcRenderer.on('daily-summary', (_event: IpcRendererEvent, data: { message: string; duration: number; priority: boolean }) => callback(data));
+  },
   // Get coding stats
   getCodingStats: () => ipcRenderer.invoke('get-coding-stats'),
   // Get daily summary
@@ -64,6 +68,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onTriggerEmotion: (callback: (emotion: string) => void) => {
     ipcRenderer.on('trigger-emotion', (_event: IpcRendererEvent, emotion: string) => callback(emotion));
+  },
+  onStopCodingMode: (callback: () => void) => {
+    ipcRenderer.on('stop-coding-mode', () => callback());
   },
   // Web notifications from browser extension
   onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => {

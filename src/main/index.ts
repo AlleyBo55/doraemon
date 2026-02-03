@@ -185,6 +185,17 @@ function createMainWindow() {
     }
   });
 
+  // Daily summary heartbeat - every 3 hours, show for 20 seconds (cannot be overridden)
+  setInterval(() => {
+    const summary = getDailySummary();
+    console.log('[Main] Daily summary heartbeat:', summary);
+    mainWindow?.webContents.send('daily-summary', { 
+      message: summary, 
+      duration: 20000,
+      priority: true // Cannot be overridden
+    });
+  }, 3 * 60 * 60 * 1000); // 3 hours
+
   // Start web notification server for browser extension
   startWebNotificationServer(mainWindow, (notification: WebNotification) => {
     console.log('[Main] Forwarding web notification to renderer:', notification);
@@ -315,6 +326,14 @@ function updateTrayMenu() {
         { label: '🤔 Thinking', click: () => mainWindow?.webContents.send('trigger-emotion', 'thinking') },
         { label: '😴 Sleepy', click: () => mainWindow?.webContents.send('trigger-emotion', 'sleepy') },
         { label: '🎮 Playful', click: () => mainWindow?.webContents.send('trigger-emotion', 'playful') },
+        { type: 'separator' },
+        { label: '💻 Coding All Day', click: () => mainWindow?.webContents.send('trigger-emotion', 'coding_allday') },
+        { label: '⌨️ Coding', click: () => mainWindow?.webContents.send('trigger-emotion', 'coding') },
+        { label: '🔥 Coding Intense', click: () => mainWindow?.webContents.send('trigger-emotion', 'coding_intense') },
+        { label: '💭 Coding Thinking', click: () => mainWindow?.webContents.send('trigger-emotion', 'coding_thinking') },
+        { label: '🎊 Coding Celebrate', click: () => mainWindow?.webContents.send('trigger-emotion', 'coding_celebrate') },
+        { type: 'separator' },
+        { label: '⏹️ Stop Coding Mode', click: () => mainWindow?.webContents.send('stop-coding-mode') },
       ]
     },
     { type: 'separator' },
