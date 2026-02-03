@@ -6,7 +6,7 @@ import { BrowserWindow } from 'electron';
 
 export type EditorActivity = {
   editor: 'vscode' | 'kiro' | 'antigravity' | 'unknown';
-  action: 'file_opened' | 'file_saved' | 'file_created' | 'typing' | 'idle' | 'git_commit' | 'git_conflict' | 'error_detected';
+  action: 'file_opened' | 'file_saved' | 'file_created' | 'typing' | 'idle' | 'git_commit' | 'git_conflict' | 'error_detected' | 'terminal_active' | 'ai_chat';
   file?: string;
   language?: string;
   fileType?: 'test' | 'config' | 'component' | 'style' | 'docs' | 'code';
@@ -362,13 +362,6 @@ function getFileType(filename: string): EditorActivity['fileType'] {
   return 'code';
 }
 
-function detectEditor(path: string): EditorActivity['editor'] {
-  if (path.includes('.vscode') || path.includes('Code')) return 'vscode';
-  if (path.includes('.kiro') || path.includes('Kiro')) return 'kiro';
-  if (path.includes('antigravity') || path.includes('Antigravity')) return 'antigravity';
-  return 'unknown';
-}
-
 function safeWatch(filePath: string, onEvent: (event: string) => void): FSWatcher | null {
   try {
     if (!existsSync(filePath)) return null;
@@ -691,10 +684,221 @@ async function pollWorkspaceStorage() {
   }
 }
 
+async function pollTerminalHistory() {
+  const home = homedir();
+  const historyFiles = [
+    join(home, '.zsh_history'),
+    join(home, '.bash_history'),
+  ];
+
+  for (const historyFile of historyFiles) {
+    if (!existsSync(historyFile)) continue;
+
+    try {
+      const stats = await stat(historyFile);
+      const mtime = stats.mtimeMs;
+      const lastMtime = lastModTimes.get(historyFile);
+
+      if (lastMtime === undefined) {
+        lastModTimes.set(historyFile, mtime);
+        continue;
+      }
+
+      if (mtime > lastMtime) {
+        lastModTimes.set(historyFile, mtime);
+        
+        console.log(`[EditorWatcher] Terminal activity detected`);
+        
+        const activity: EditorActivity = {
+          editor: 'unknown',
+          action: 'terminal_active',
+          timestamp: Date.now(),
+        };
+        
+        updateCodingStats(activity);
+        callback?.(activity);
+        return;
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+async function pollAIChatActivity() {
+  const home = homedir();
+  
+  const aiPaths = [
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiro'), editor: 'kiro' as const },
+    { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot-chat'), editor: 'vscode' as const },
+    { path: join(home, '.continue'), editor: 'vscode' as const },
+    { path: join(home, '.cursor'), editor: 'unknown' as const },
+  ];
+
+  for (const { path: aiPath, editor } of aiPaths) {
+    if (!existsSync(aiPath)) continue;
+
+    try {
+      const stats = await stat(aiPath);
+      const mtime = stats.mtimeMs;
+      const key = `ai:${aiPath}`;
+      const lastMtime = lastModTimes.get(key);
+
+      if (lastMtime === undefined) {
+        lastModTimes.set(key, mtime);
+        continue;
+      }
+
+      if (mtime > lastMtime + 2000) {
+        lastModTimes.set(key, mtime);
+        
+        console.log(`[EditorWatcher] AI chat activity detected: ${editor}`);
+        
+        const activity: EditorActivity = {
+          editor,
+          action: 'ai_chat',
+          timestamp: Date.now(),
+        };
+        
+        updateCodingStats(activity);
+        callback?.(activity);
+        return;
+      }
+    } catch { /* ignore */ }
+  }
+
+  const kiroLogsPath = join(home, 'Library/Application Support/Kiro/logs');
+  if (existsSync(kiroLogsPath)) {
+    try {
+      const files = await readdir(kiroLogsPath);
+      const mainLog = files.find(f => f.includes('main'));
+      if (mainLog) {
+        const logPath = join(kiroLogsPath, mainLog);
+        const stats = await stat(logPath);
+        const mtime = stats.mtimeMs;
+        const key = `kiro-log:${logPath}`;
+        const lastMtime = lastModTimes.get(key);
+
+        if (lastMtime === undefined) {
+          lastModTimes.set(key, mtime);
+        } else if (mtime > lastMtime + 3000) {
+          lastModTimes.set(key, mtime);
+          
+          const activity: EditorActivity = {
+            editor: 'kiro',
+            action: 'ai_chat',
+            timestamp: Date.now(),
+          };
+          
+          updateCodingStats(activity);
+          callback?.(activity);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+async function pollRecentlyOpened() {
+  const home = homedir();
+  const recentPaths = [
+    { path: join(home, 'Library/Application Support/Code/User/globalStorage/storage.json'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/storage.json'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: recentPath, editor } of recentPaths) {
+    if (!existsSync(recentPath)) continue;
+
+    try {
+      const stats = await stat(recentPath);
+      const mtime = stats.mtimeMs;
+      const key = `recent:${recentPath}`;
+      const lastMtime = lastModTimes.get(key);
+
+      if (lastMtime === undefined) {
+        lastModTimes.set(key, mtime);
+        continue;
+      }
+
+      if (mtime > lastMtime) {
+        lastModTimes.set(key, mtime);
+
+        try {
+          const content = await readFile(recentPath, 'utf-8');
+          const data = JSON.parse(content);
+          const recentFiles = data.openedPathsList?.entries || [];
+          
+          if (recentFiles.length > 0) {
+            const mostRecent = recentFiles[0];
+            const filePath = mostRecent.folderUri || mostRecent.fileUri || '';
+            const fileName = basename(filePath);
+            
+            if (fileName && fileName !== lastActivity?.file) {
+              const language = getLanguage(fileName);
+              const fileType = getFileType(fileName);
+              
+              console.log(`[EditorWatcher] File opened: ${fileName} (${editor})`);
+              
+              const activity: EditorActivity = {
+                editor,
+                action: 'file_opened',
+                file: fileName,
+                language,
+                fileType,
+                timestamp: Date.now(),
+              };
+              
+              lastActivity = activity;
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  const backupStatePaths = [
+    { path: join(home, 'Library/Application Support/Code/Backups'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/Backups'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: backupPath, editor } of backupStatePaths) {
+    if (!existsSync(backupPath)) continue;
+
+    try {
+      const stats = await stat(backupPath);
+      const mtime = stats.mtimeMs;
+      const key = `backup:${backupPath}`;
+      const lastMtime = lastModTimes.get(key);
+
+      if (lastMtime === undefined) {
+        lastModTimes.set(key, mtime);
+        continue;
+      }
+
+      if (mtime > lastMtime + 1000) {
+        lastModTimes.set(key, mtime);
+        
+        console.log(`[EditorWatcher] Editor backup activity: ${editor}`);
+        
+        const activity: EditorActivity = {
+          editor,
+          action: 'typing',
+          timestamp: Date.now(),
+        };
+        
+        updateCodingStats(activity);
+        callback?.(activity);
+        return;
+      }
+    } catch { /* ignore */ }
+  }
+}
+
 export function startEditorWatcher(
   _mainWindow: BrowserWindow,
   onActivity: EditorCallback,
-  workspacePaths?: string[]
+  _workspacePaths?: string[]
 ) {
   callback = onActivity;
   
@@ -704,10 +908,13 @@ export function startEditorWatcher(
   watchRecentFiles();
   watchGitDirectories();
   
-  // Start polling for History folder changes (more reliable than fs.watch on macOS)
+  // Start polling for various activities (more reliable than fs.watch on macOS)
   historyPollInterval = setInterval(async () => {
     await pollHistoryFolders();
     await pollWorkspaceStorage();
+    await pollTerminalHistory();
+    await pollAIChatActivity();
+    await pollRecentlyOpened();
   }, 2000);
   
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);
@@ -835,6 +1042,34 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `Bug spotted!`,
       ],
       emotion: 'thinking',
+      animation: 'coding_thinking',
+    },
+    terminal_active: {
+      thoughts: [
+        `Terminal time! 🖥️`,
+        `Running commands~`,
+        `npm install? npm run?`,
+        `Shell magic happening!`,
+        `Command line warrior!`,
+        `$ sudo make me a sandwich`,
+        `Bash bash bash~`,
+        `What are we building?`,
+      ],
+      emotion: 'determined',
+      animation: 'coding_focused',
+    },
+    ai_chat: {
+      thoughts: [
+        `Talking to AI? I'm jealous~ 😤`,
+        `AI assistant helping out!`,
+        `Pair programming with AI~`,
+        `Getting some AI help!`,
+        `Claude? Copilot? Who's helping?`,
+        `AI-powered coding!`,
+        `Smart assistant time~`,
+        `Two AIs are better than one!`,
+      ],
+      emotion: 'curious',
       animation: 'coding_thinking',
     },
   };
