@@ -11,7 +11,8 @@ export type ShimejiState =
   | 'carry' | 'work_walk' | 'work_hold' | 'work_throw'
   | 'pocket_search' | 'gadget_pull'
   | 'pull_up' | 'helping' | 'success'
-  | 'wave' | 'greet' | 'cheer' | 'celebrate' | 'victory';
+  | 'wave' | 'greet' | 'cheer' | 'celebrate' | 'victory'
+  | 'coding' | 'coding_intense' | 'coding_focused' | 'coding_typing' | 'coding_thinking' | 'coding_celebrate';
 
 export type Position = { x: number; y: number };
 type Velocity = { vx: number; vy: number };
@@ -31,6 +32,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'sit', weight: 150, duration: [2000, 4000] },
     { state: 'walk', weight: 100, duration: [2000, 4000] },
     { state: 'sit_lookup', weight: 30, duration: [1000, 2000] },
+    { state: 'coding', weight: 40, duration: [3000, 5000] },
   ],
   happy: [
     { state: 'wave', weight: 150, duration: [1000, 2000] },
@@ -40,6 +42,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'celebrate', weight: 80, duration: [1500, 2500] },
     { state: 'greet', weight: 60, duration: [800, 1200] },
     { state: 'success', weight: 50, duration: [1000, 1500] },
+    { state: 'coding_celebrate', weight: 40, duration: [2000, 3000] },
   ],
   sad: [
     { state: 'sprawl', weight: 200, duration: [3000, 6000] },
@@ -56,6 +59,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'cheer', weight: 80, duration: [1000, 2000] },
     { state: 'celebrate', weight: 60, duration: [1500, 2500] },
     { state: 'victory', weight: 40, duration: [1000, 1500] },
+    { state: 'coding_intense', weight: 60, duration: [3000, 5000] },
   ],
   thinking: [
     { state: 'sit_spin_head', weight: 200, duration: [2000, 4000] },
@@ -63,6 +67,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'sit_lookup', weight: 120, duration: [1500, 3000] },
     { state: 'stand', weight: 80, duration: [1000, 2000] },
     { state: 'walk', weight: 50, duration: [1500, 3000] },
+    { state: 'coding_thinking', weight: 100, duration: [3000, 5000] },
   ],
   confused: [
     { state: 'sit_spin_head', weight: 200, duration: [1500, 3000] },
@@ -85,12 +90,15 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'trip', weight: 50, duration: [800, 800] },
   ],
   working: [
-    { state: 'work_walk', weight: 200, duration: [2000, 4000] },
-    { state: 'carry', weight: 150, duration: [1500, 3000] },
-    { state: 'work_hold', weight: 100, duration: [1000, 2000] },
-    { state: 'pocket_search', weight: 80, duration: [1500, 2500] },
-    { state: 'gadget_pull', weight: 60, duration: [1000, 1500] },
-    { state: 'helping', weight: 50, duration: [2000, 3000] },
+    { state: 'work_walk', weight: 150, duration: [2000, 4000] },
+    { state: 'carry', weight: 100, duration: [1500, 3000] },
+    { state: 'work_hold', weight: 80, duration: [1000, 2000] },
+    { state: 'pocket_search', weight: 60, duration: [1500, 2500] },
+    { state: 'gadget_pull', weight: 40, duration: [1000, 1500] },
+    { state: 'helping', weight: 30, duration: [2000, 3000] },
+    { state: 'coding', weight: 150, duration: [4000, 7000] },
+    { state: 'coding_typing', weight: 120, duration: [3000, 5000] },
+    { state: 'coding_focused', weight: 80, duration: [4000, 6000] },
   ],
   frustrated: [
     { state: 'resist', weight: 200, duration: [2000, 4000] },
@@ -105,6 +113,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'celebrate', weight: 150, duration: [2000, 3000] },
     { state: 'cheer', weight: 120, duration: [1500, 2500] },
     { state: 'wave', weight: 80, duration: [1000, 2000] },
+    { state: 'coding_celebrate', weight: 100, duration: [2000, 3500] },
   ],
   curious: [
     { state: 'pocket_search', weight: 200, duration: [2000, 3500] },
@@ -113,6 +122,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'walk', weight: 100, duration: [2000, 3500] },
     { state: 'climb_wall', weight: 80, duration: [2000, 4000] },
     { state: 'gadget_pull', weight: 60, duration: [1000, 1500] },
+    { state: 'coding_thinking', weight: 60, duration: [3000, 5000] },
   ],
   playful: [
     { state: 'bounce', weight: 200, duration: [300, 500] },
@@ -123,11 +133,13 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'trip', weight: 50, duration: [800, 800] },
   ],
   determined: [
-    { state: 'run', weight: 200, duration: [1500, 3000] },
-    { state: 'climb_wall', weight: 180, duration: [2000, 4000] },
-    { state: 'dash', weight: 150, duration: [800, 1500] },
-    { state: 'work_walk', weight: 120, duration: [2000, 3500] },
-    { state: 'helping', weight: 80, duration: [2000, 3000] },
+    { state: 'run', weight: 150, duration: [1500, 3000] },
+    { state: 'climb_wall', weight: 120, duration: [2000, 4000] },
+    { state: 'dash', weight: 100, duration: [800, 1500] },
+    { state: 'work_walk', weight: 80, duration: [2000, 3500] },
+    { state: 'helping', weight: 60, duration: [2000, 3000] },
+    { state: 'coding_focused', weight: 150, duration: [4000, 7000] },
+    { state: 'coding_intense', weight: 100, duration: [3000, 5000] },
   ],
   relaxed: [
     { state: 'sit', weight: 200, duration: [3000, 6000] },
@@ -135,6 +147,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'sit_lookup', weight: 150, duration: [2000, 4000] },
     { state: 'stand', weight: 100, duration: [2000, 4000] },
     { state: 'walk', weight: 50, duration: [2000, 3500] },
+    { state: 'coding', weight: 60, duration: [4000, 6000] },
   ],
   anxious: [
     { state: 'sit_spin_head', weight: 200, duration: [1000, 2000] },
@@ -143,6 +156,7 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
     { state: 'stand', weight: 100, duration: [500, 1500] },
     { state: 'sit_lookup', weight: 80, duration: [1000, 2000] },
     { state: 'trip', weight: 30, duration: [800, 800] },
+    { state: 'coding_thinking', weight: 60, duration: [2000, 4000] },
   ],
 };
 
@@ -284,6 +298,7 @@ export class ShimejiEngine {
       'sprawl', 'sleep', 'wave', 'greet', 'cheer', 'celebrate', 'victory',
       'bounce', 'pocket_search', 'gadget_pull', 'pull_up', 'helping', 'success',
       'work_hold', 'work_throw', 'resist', 'grab_wall', 'grab_ceiling',
+      'coding', 'coding_intense', 'coding_focused', 'coding_typing', 'coding_thinking', 'coding_celebrate',
     ];
 
     if (stationaryStates.includes(this.state)) {
