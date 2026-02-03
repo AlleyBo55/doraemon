@@ -80,77 +80,266 @@ const LANGUAGE_MAP: Record<string, string> = {
   '.re': 'Regex',
 };
 
-const LANGUAGE_EMOTIONS: Record<string, { emotion: string; thoughts: string[] }> = {
+const LANGUAGE_EMOTIONS: Record<string, { emotion: string; animation: string; thoughts: string[] }> = {
   'TypeScript': { 
-    emotion: 'excited', 
-    thoughts: ['TypeScript! Type safety is the best~', 'Ooh, strong types! I love it!', 'TypeScript makes me happy~'] 
+    emotion: 'excited',
+    animation: 'coding_intense',
+    thoughts: [
+      'TypeScript! Type safety is the best~',
+      'Ooh, strong types! I love it!',
+      'TypeScript makes me happy~',
+      'Types are like a warm blanket~',
+      'No more undefined errors!',
+      'Interface or type? Hmm~',
+    ] 
   },
   'TypeScript React': { 
-    emotion: 'excited', 
-    thoughts: ['TSX! Components with types~', 'React + TypeScript = Perfect!', 'Building UI with safety~'] 
+    emotion: 'excited',
+    animation: 'coding_intense',
+    thoughts: [
+      'TSX! Components with types~',
+      'React + TypeScript = Perfect!',
+      'Building UI with safety~',
+      'Props are typed! Yay~',
+      'useState<T>() is so clean!',
+    ] 
   },
   'JavaScript': { 
-    emotion: 'happy', 
-    thoughts: ['JavaScript time!', 'Classic JS~', 'Dynamic and fun!'] 
+    emotion: 'happy',
+    animation: 'coding',
+    thoughts: [
+      'JavaScript time!',
+      'Classic JS~',
+      'Dynamic and fun!',
+      'console.log debugging? 😅',
+      'Async/await is nice~',
+    ] 
+  },
+  'JavaScript React': {
+    emotion: 'happy',
+    animation: 'coding',
+    thoughts: [
+      'React components!',
+      'JSX is so expressive~',
+      'Hooks are magical!',
+      'useEffect time~',
+    ]
   },
   'Python': { 
-    emotion: 'relaxed', 
-    thoughts: ['Python~ So readable!', 'Indentation matters here~', 'Pythonic code incoming!'] 
+    emotion: 'relaxed',
+    animation: 'coding_thinking',
+    thoughts: [
+      'Python~ So readable!',
+      'Indentation matters here~',
+      'Pythonic code incoming!',
+      'import this 🐍',
+      'List comprehension time!',
+    ] 
   },
   'Rust': { 
-    emotion: 'determined', 
-    thoughts: ['Rust! Memory safety!', 'Fighting the borrow checker~', 'Fearless concurrency!'] 
+    emotion: 'determined',
+    animation: 'coding_focused',
+    thoughts: [
+      'Rust! Memory safety!',
+      'Fighting the borrow checker~',
+      'Fearless concurrency!',
+      'No null pointers here!',
+      'Cargo is so nice~',
+    ] 
   },
   'Regex': { 
-    emotion: 'anxious', 
-    thoughts: ['R-regex?! Scary...', 'So many symbols...', 'I hope this works...', '.*? What does that mean?!'] 
+    emotion: 'anxious',
+    animation: 'coding_thinking',
+    thoughts: [
+      'R-regex?! Scary...',
+      'So many symbols...',
+      'I hope this works...',
+      '.*? What does that mean?!',
+      'Regex is like magic spells~',
+      'Testing on regex101...',
+    ] 
   },
   'Go': { 
-    emotion: 'determined', 
-    thoughts: ['Go go go!', 'Simple and fast~', 'Goroutines!'] 
+    emotion: 'determined',
+    animation: 'coding_focused',
+    thoughts: [
+      'Go go go!',
+      'Simple and fast~',
+      'Goroutines!',
+      'if err != nil { ... }',
+      'Gopher power!',
+    ] 
   },
   'CSS': { 
-    emotion: 'curious', 
-    thoughts: ['Making things pretty~', 'Flexbox or Grid?', 'Styling time!'] 
+    emotion: 'curious',
+    animation: 'coding',
+    thoughts: [
+      'Making things pretty~',
+      'Flexbox or Grid?',
+      'Styling time!',
+      'Why won\'t it center?! 😤',
+      'CSS is art~',
+    ] 
+  },
+  'SCSS': {
+    emotion: 'curious',
+    animation: 'coding',
+    thoughts: [
+      'SCSS! Variables and nesting~',
+      'Mixins are powerful!',
+      '@include magic~',
+    ]
   },
   'HTML': { 
-    emotion: 'relaxed', 
-    thoughts: ['HTML structure~', 'Building the skeleton!', 'Semantic tags!'] 
+    emotion: 'relaxed',
+    animation: 'coding',
+    thoughts: [
+      'HTML structure~',
+      'Building the skeleton!',
+      'Semantic tags!',
+      '<div> soup? No no~',
+      'Accessibility matters!',
+    ] 
   },
   'JSON': { 
-    emotion: 'neutral', 
-    thoughts: ['Config time~', 'Data data data...', 'Curly braces everywhere!'] 
+    emotion: 'neutral',
+    animation: 'coding_thinking',
+    thoughts: [
+      'Config time~',
+      'Data data data...',
+      'Curly braces everywhere!',
+      'Missing comma? 🤔',
+      'package.json again~',
+    ] 
   },
   'Markdown': { 
-    emotion: 'relaxed', 
-    thoughts: ['Documentation!', 'Writing docs~', 'README time!'] 
+    emotion: 'relaxed',
+    animation: 'coding',
+    thoughts: [
+      'Documentation!',
+      'Writing docs~',
+      'README time!',
+      '# Heading power!',
+      'Good docs = happy devs~',
+    ] 
+  },
+  'SQL': {
+    emotion: 'thinking',
+    animation: 'coding_thinking',
+    thoughts: [
+      'SELECT * FROM brain~',
+      'JOIN the tables!',
+      'Database queries~',
+      'WHERE is the data?',
+      'Indexing is important!',
+    ]
+  },
+  'Shell': {
+    emotion: 'determined',
+    animation: 'coding_focused',
+    thoughts: [
+      'Shell scripting!',
+      'chmod +x time~',
+      'Bash magic!',
+      'Piping data~',
+      '#!/bin/bash',
+    ]
+  },
+  'Vue': {
+    emotion: 'happy',
+    animation: 'coding',
+    thoughts: [
+      'Vue.js! So elegant~',
+      'Composition API!',
+      'Reactive refs~',
+      'v-if v-for v-bind~',
+    ]
+  },
+  'Svelte': {
+    emotion: 'excited',
+    animation: 'coding_intense',
+    thoughts: [
+      'Svelte! No virtual DOM~',
+      'Compile-time magic!',
+      '$: reactive statements~',
+      'So fast and clean!',
+    ]
   },
 };
 
-const FILE_TYPE_REACTIONS: Record<string, { emotion: string; thoughts: string[] }> = {
+const FILE_TYPE_REACTIONS: Record<string, { emotion: string; animation: string; thoughts: string[] }> = {
   test: { 
-    emotion: 'determined', 
-    thoughts: ['Testing time!', 'Let\'s make sure it works~', 'Tests are important!', 'Quality assurance!'] 
+    emotion: 'determined',
+    animation: 'coding_focused',
+    thoughts: [
+      'Testing time!',
+      'Let\'s make sure it works~',
+      'Tests are important!',
+      'Quality assurance!',
+      'expect().toBe() 🧪',
+      'Green tests = happy life~',
+      'TDD mode activated!',
+    ] 
   },
   config: { 
-    emotion: 'thinking', 
-    thoughts: ['Config files... boring but important~', 'Setting things up!', 'Configuration time~'] 
+    emotion: 'thinking',
+    animation: 'coding_thinking',
+    thoughts: [
+      'Config files... boring but important~',
+      'Setting things up!',
+      'Configuration time~',
+      'tsconfig.json again~',
+      'Environment variables!',
+      '.env secrets~',
+    ] 
   },
   component: { 
-    emotion: 'excited', 
-    thoughts: ['Building components!', 'UI time~', 'Making it look good!'] 
+    emotion: 'excited',
+    animation: 'coding_intense',
+    thoughts: [
+      'Building components!',
+      'UI time~',
+      'Making it look good!',
+      'Props and state~',
+      'Reusable code!',
+      'Component architecture~',
+    ] 
   },
   style: { 
-    emotion: 'playful', 
-    thoughts: ['Styling!', 'Making it pretty~', 'CSS magic!'] 
+    emotion: 'playful',
+    animation: 'coding',
+    thoughts: [
+      'Styling!',
+      'Making it pretty~',
+      'CSS magic!',
+      'Colors and spacing~',
+      'Responsive design!',
+      'Dark mode? 🌙',
+    ] 
   },
   docs: { 
-    emotion: 'proud', 
-    thoughts: ['Documentation! So responsible~', 'Helping future devs!', 'Good documentation!'] 
+    emotion: 'proud',
+    animation: 'coding',
+    thoughts: [
+      'Documentation! So responsible~',
+      'Helping future devs!',
+      'Good documentation!',
+      'README updates~',
+      'API docs time!',
+      'Comments are love~',
+    ] 
   },
   code: { 
-    emotion: 'working', 
-    thoughts: ['Coding coding~', 'Building features!', 'Let\'s go!'] 
+    emotion: 'working',
+    animation: 'coding',
+    thoughts: [
+      'Coding coding~',
+      'Building features!',
+      'Let\'s go!',
+      'Logic time!',
+      'Algorithm thinking~',
+      'Clean code!',
+    ] 
   },
 };
 
@@ -256,6 +445,30 @@ function watchVSCodeState() {
     if (watcher) {
       watchers.push(watcher);
       console.log(`[EditorWatcher] Watching state: ${statePath}`);
+    }
+  }
+
+  // Watch History folders for file edits (updates more frequently)
+  const historyPaths = [
+    join(home, 'Library/Application Support/Code/User/History'),
+    join(home, 'Library/Application Support/Kiro/User/History'),
+    join(home, '.config/Code/User/History'),
+    join(home, '.config/Kiro/User/History'),
+  ];
+
+  for (const historyPath of historyPaths) {
+    const watcher = safeWatch(historyPath, (event) => {
+      if (event === 'rename') {
+        const editor = historyPath.includes('Kiro') ? 'kiro' : 'vscode';
+        console.log(`[EditorWatcher] History change detected: ${editor}`);
+        const activity: EditorActivity = { editor, action: 'file_saved', timestamp: Date.now() };
+        updateCodingStats(activity);
+        callback?.(activity);
+      }
+    });
+    if (watcher) {
+      watchers.push(watcher);
+      console.log(`[EditorWatcher] Watching history: ${historyPath}`);
     }
   }
 }
@@ -394,36 +607,46 @@ export function setStatsCallback(cb: StatsCallback) { statsCallback = cb; }
 export function setBreakCallback(cb: BreakCallback) { breakCallback = cb; }
 export function getCodingStats(): CodingStats { return codingStats; }
 
-export function getEditorThought(activity: EditorActivity): { thought: string; emotion: string } {
+export function getEditorThought(activity: EditorActivity): { thought: string; emotion: string; animation: string } {
   const language = activity.language || 'Unknown';
   const fileType = activity.fileType || 'code';
   const langReaction = LANGUAGE_EMOTIONS[language];
   const fileReaction = FILE_TYPE_REACTIONS[fileType];
   
-  const actionThoughts: Record<EditorActivity['action'], { thoughts: string[]; emotion: string }> = {
+  const actionThoughts: Record<EditorActivity['action'], { thoughts: string[]; emotion: string; animation: string }> = {
     file_opened: {
       thoughts: [
         `Oh! Working on ${activity.file}~`,
         `${activity.file}? Let's see...`,
         `Opening ${activity.file}!`,
+        `New file! ${activity.file}~`,
+        `What's in ${activity.file}?`,
       ],
       emotion: langReaction?.emotion || 'curious',
+      animation: langReaction?.animation || 'coding',
     },
     file_saved: {
       thoughts: [
         `Good job saving ${activity.file}!`,
         `Progress! Keep going~`,
         `Saved! Nice work~`,
+        `Ctrl+S champion! 💾`,
+        `${activity.file} saved~`,
+        `Another save! You're careful~`,
       ],
       emotion: 'proud',
+      animation: 'coding_celebrate',
     },
     file_created: {
       thoughts: [
         `A new file! ${activity.file}~`,
         `Creating something new? Exciting!`,
         `Fresh start with ${activity.file}!`,
+        `New beginnings! ${activity.file}~`,
+        `Blank canvas time!`,
       ],
       emotion: 'excited',
+      animation: 'coding_intense',
     },
     typing: {
       thoughts: [
@@ -431,8 +654,13 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `Type type type...`,
         `You're on a roll!`,
         `Focus mode activated!`,
+        `Keyboard warrior! ⌨️`,
+        `Flow state~`,
+        `Code is flowing!`,
+        `Fingers dancing on keys~`,
       ],
       emotion: 'working',
+      animation: 'coding_typing',
     },
     idle: {
       thoughts: [
@@ -440,8 +668,12 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `Need any help?`,
         `*yawn* Getting sleepy...`,
         `Zzz... wake me when you're back~`,
+        `Coffee break? ☕`,
+        `Thinking time~`,
+        `Stretching is good!`,
       ],
       emotion: 'sleepy',
+      animation: 'sleepy',
     },
     git_commit: {
       thoughts: [
@@ -449,56 +681,77 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `Code saved to history!`,
         `Another commit! You're productive~`,
         `Git push time?`,
+        `Commit message: "fix stuff" 😅`,
+        `Version control hero!`,
+        `History recorded~`,
       ],
       emotion: 'celebrate',
+      animation: 'coding_celebrate',
     },
     git_conflict: {
       thoughts: [
         `Uh oh... merge conflict!`,
         `Conflict detected! Don't panic~`,
         `Time to resolve some conflicts...`,
+        `<<<<<<< HEAD 😱`,
+        `Git says there's a problem~`,
       ],
       emotion: 'anxious',
+      animation: 'anxious',
     },
     error_detected: {
       thoughts: [
         `Hmm, something's wrong...`,
         `Error detected! Let me help~`,
         `Oops, there's an issue here...`,
+        `Red squiggly lines! 🔴`,
+        `TypeScript is angry~`,
+        `Bug spotted!`,
       ],
       emotion: 'thinking',
+      animation: 'coding_thinking',
     },
   };
 
   let thoughts: string[] = [];
   let emotion = 'neutral';
+  let animation = 'coding';
 
   const actionData = actionThoughts[activity.action];
   if (actionData) {
     thoughts = [...actionData.thoughts];
     emotion = actionData.emotion;
+    animation = actionData.animation;
   }
 
   if (langReaction && activity.action === 'file_opened') {
     thoughts = [...thoughts, ...langReaction.thoughts];
     emotion = langReaction.emotion;
+    animation = langReaction.animation;
   }
 
   if (fileReaction && (activity.action === 'file_opened' || activity.action === 'file_created')) {
     thoughts = [...thoughts, ...fileReaction.thoughts];
-    if (fileType === 'test') emotion = fileReaction.emotion;
+    if (fileType === 'test') {
+      emotion = fileReaction.emotion;
+      animation = fileReaction.animation;
+    }
   }
 
   const streakMinutes = codingStats.currentStreak;
   if (streakMinutes >= 120) {
     thoughts.push(`Wow! ${Math.floor(streakMinutes / 60)} hours of coding! Take a break?`);
     emotion = 'proud';
+    animation = 'coding_celebrate';
   } else if (streakMinutes >= 60) {
     thoughts.push(`1 hour streak! You're doing great~`);
+    animation = 'coding_intense';
+  } else if (streakMinutes >= 30) {
+    thoughts.push(`30 min focus! Nice~`);
   }
 
   const thought = thoughts[Math.floor(Math.random() * thoughts.length)] || 'Working~';
-  return { thought, emotion };
+  return { thought, emotion, animation };
 }
 
 export function getStreakMessage(): string | null {

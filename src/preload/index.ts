@@ -32,8 +32,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => {
     ipcRenderer.on('notification', (_event: IpcRendererEvent, data: { app: string; title: string; message: string }) => callback(data));
   },
-  onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string }) => void) => {
-    ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string }) => callback(data));
+  onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => void) => {
+    ipcRenderer.on('editor-activity', (_event: IpcRendererEvent, data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => callback(data));
   },
   // Break reminders
   onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => {

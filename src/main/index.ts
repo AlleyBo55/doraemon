@@ -159,11 +159,12 @@ function createMainWindow() {
   });
 
   startEditorWatcher(mainWindow, (activity) => {
-    const { thought, emotion } = getEditorThought(activity);
+    const { thought, emotion, animation } = getEditorThought(activity);
     mainWindow?.webContents.send('editor-activity', {
       ...activity,
       thought,
       emotion,
+      animation,
     });
   });
 
