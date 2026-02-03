@@ -17,7 +17,11 @@ declare global {
       setMouseEvents: (enabled: boolean) => void;
       focusWindow: () => void;
       onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
-      onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; thought: string }) => void) => void;
+      onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string }) => void) => void;
+      onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => void;
+      onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => void;
+      getCodingStats: () => Promise<{ sessionStart: number; totalCodingTime: number; filesEdited: number; languagesUsed: string[]; commitCount: number; currentStreak: number; longestStreak: number }>;
+      getDailySummary: () => Promise<string>;
       onToggleChat: (callback: () => void) => void;
       onClearHistory: (callback: () => void) => void;
       onTriggerEmotion: (callback: (emotion: string) => void) => void;
@@ -141,6 +145,25 @@ const App = () => {
       console.log('[App] Editor activity received:', data);
       if (data.thought) {
         showExternalThought(data.thought, 4000);
+      }
+      if (data.emotion) {
+        triggerEmotion(data.emotion as any);
+      }
+    });
+
+    // Listen for break reminders
+    window.electronAPI?.onBreakReminder?.((data) => {
+      console.log('[App] Break reminder:', data);
+      showExternalThought(data.message, 10000);
+      triggerEmotion('thinking');
+    });
+
+    // Listen for coding streak notifications
+    window.electronAPI?.onCodingStreak?.((data) => {
+      console.log('[App] Coding streak:', data);
+      if (data.minutes >= 60) {
+        showExternalThought(data.message, 5000);
+        triggerEmotion('proud');
       }
     });
 
