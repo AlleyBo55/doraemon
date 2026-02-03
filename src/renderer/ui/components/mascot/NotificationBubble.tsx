@@ -1,6 +1,6 @@
 import type { FunctionalComponent } from 'preact';
 
-type NotificationSource = 'twitter' | 'whatsapp' | 'outlook' | 'teams' | 'github' | 'slack' | 'discord' | 'messages' | 'mail' | 'telegram' | 'chrome' | 'safari' | 'unknown';
+type NotificationSource = 'twitter' | 'whatsapp' | 'outlook' | 'teams' | 'github' | 'slack' | 'discord' | 'messages' | 'mail' | 'telegram' | 'chrome' | 'safari' | 'kiro' | 'vscode' | 'cursor' | 'unknown';
 
 type NotificationBubbleProps = {
   source: NotificationSource;
@@ -61,6 +61,18 @@ const APP_ICONS: Record<NotificationSource, AppIconConfig> = {
     icon: `<svg viewBox="0 0 24 24" fill="white"><path d="M12 24C5.373 24 0 18.627 0 12S5.373 0 12 0s12 5.373 12 12-5.373 12-12 12zm0-2c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zm-1.276-4.553l1.844-5.625 5.625-1.844-1.844 5.625-5.625 1.844zM12 13a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>`,
     gradient: 'linear-gradient(135deg, #006CFF 0%, #00D4FF 100%)', glow: 'rgba(0,108,255,0.4)' 
   },
+  kiro: { 
+    icon: `<svg viewBox="0 0 24 24" fill="white"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
+    gradient: 'linear-gradient(135deg, #FF6B35 0%, #F7931E 100%)', glow: 'rgba(255,107,53,0.4)' 
+  },
+  vscode: { 
+    icon: `<svg viewBox="0 0 24 24" fill="white"><path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/></svg>`,
+    gradient: 'linear-gradient(135deg, #007ACC 0%, #0065A9 100%)', glow: 'rgba(0,122,204,0.4)' 
+  },
+  cursor: { 
+    icon: `<svg viewBox="0 0 24 24" fill="white"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.86a.5.5 0 0 0-.85.35z"/></svg>`,
+    gradient: 'linear-gradient(135deg, #000 0%, #333 100%)', glow: 'rgba(0,0,0,0.3)' 
+  },
   unknown: { 
     icon: `<svg viewBox="0 0 24 24" fill="white"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>`,
     gradient: 'linear-gradient(135deg, #8E8E93 0%, #636366 100%)', glow: 'rgba(142,142,147,0.4)' 
@@ -81,6 +93,9 @@ const getSourceFromTitle = (title: string): NotificationSource => {
   if (lower.includes('telegram')) return 'telegram';
   if (lower.includes('chrome')) return 'chrome';
   if (lower.includes('safari')) return 'safari';
+  if (lower.includes('kiro')) return 'kiro';
+  if (lower.includes('vscode') || lower.includes('visual studio code')) return 'vscode';
+  if (lower.includes('cursor')) return 'cursor';
   return 'unknown';
 };
 
