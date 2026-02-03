@@ -420,32 +420,32 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   // CODING ANIMATIONS (coding, coding2-8) - Special IDE integration
   // ═══════════════════════════════════════════════════════════════
   coding: {
-    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png'],
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
     frameDelay: 200,
     loop: true,
   },
   coding_intense: {
-    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png'],
-    frameDelay: 150,
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frameDelay: 120,
     loop: true,
   },
   coding_focused: {
-    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png', 'coding.png', 'coding2.png', 'coding3.png', 'coding4.png'],
     frameDelay: 180,
     loop: true,
   },
   coding_typing: {
-    frames: ['coding.png', 'coding2.png', 'coding.png', 'coding3.png', 'coding.png', 'coding4.png'],
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
     frameDelay: 100,
     loop: true,
   },
   coding_thinking: {
-    frames: ['coding5.png', 'coding6.png', 'coding5.png', 'coding7.png', 'coding8.png', 'coding7.png'],
-    frameDelay: 250,
+    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frameDelay: 300,
     loop: true,
   },
   coding_celebrate: {
-    frames: ['coding.png', 'coding8.png', 'shime50.png', 'shime49.png', 'coding8.png', 'coding.png'],
+    frames: ['coding.png', 'coding8.png', 'shime50.png', 'shime49.png', 'coding8.png', 'coding.png', 'coding5.png', 'coding6.png'],
     frameDelay: 120,
     loop: true,
   },

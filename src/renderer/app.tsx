@@ -400,7 +400,11 @@ const App = () => {
             src={`${SPRITE_BASE}/${currentFrame}`}
             alt="Doraemon"
             class="pointer-events-none"
-            style={{ transform: actualFlip ? 'scaleX(-1)' : 'none', width: '128px', height: '128px' }}
+            style={{ 
+              transform: actualFlip ? 'scaleX(-1)' : 'none',
+              width: currentFrame.startsWith('coding') ? '168px' : '128px',
+              height: currentFrame.startsWith('coding') ? '168px' : '128px',
+            }}
             draggable={false}
           />
           <EmotionIndicator emotion={emotion} className="absolute bottom-1 right-1" />
