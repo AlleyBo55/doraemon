@@ -528,6 +528,9 @@ function watchGitDirectories() {
     join(home, 'Code'),
     join(home, 'repos'),
     join(home, 'workspace'),
+    join(home, 'ngoding'),  // Common dev folder
+    join(home, 'dev'),
+    join(home, 'src'),
   ];
 
   for (const basePath of commonPaths) {
@@ -535,28 +538,43 @@ function watchGitDirectories() {
     
     try {
       const dirs = readdirSync(basePath, { withFileTypes: true });
-      for (const dir of dirs.slice(0, 10)) {
+      for (const dir of dirs.slice(0, 15)) {
         if (!dir.isDirectory()) continue;
         const gitPath = join(basePath, dir.name, '.git');
         if (!existsSync(gitPath)) continue;
         
-        const headPath = join(gitPath, 'HEAD');
-        const watcher = safeWatch(headPath, () => {
-          const activity: EditorActivity = {
-            editor: 'unknown',
-            action: 'git_commit',
-            timestamp: Date.now(),
-          };
-          updateCodingStats(activity);
-          callback?.(activity);
-        });
-        if (watcher) {
-          watchers.push(watcher);
-          console.log(`[EditorWatcher] Watching git: ${gitPath}`);
+        // Watch .git/logs/HEAD - this updates on EVERY commit
+        const logsHeadPath = join(gitPath, 'logs', 'HEAD');
+        if (existsSync(logsHeadPath)) {
+          const watcher = safeWatch(logsHeadPath, () => {
+            console.log(`[EditorWatcher] Git commit detected in ${dir.name}`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+          });
+          if (watcher) {
+            watchers.push(watcher);
+            console.log(`[EditorWatcher] Watching git logs: ${logsHeadPath}`);
+          }
+        }
+        
+        // Also watch .git/index - updates on staging
+        const indexPath = join(gitPath, 'index');
+        if (existsSync(indexPath)) {
+          const indexWatcher = safeWatch(indexPath, () => {
+            // Don't trigger for every staging, just log
+            console.log(`[EditorWatcher] Git staging activity in ${dir.name}`);
+          });
+          if (indexWatcher) watchers.push(indexWatcher);
         }
 
         const mergePath = join(gitPath, 'MERGE_HEAD');
         const mergeWatcher = safeWatch(mergePath, () => {
+          console.log(`[EditorWatcher] Git merge conflict in ${dir.name}`);
           const activity: EditorActivity = {
             editor: 'unknown',
             action: 'git_conflict',
@@ -762,7 +780,63 @@ async function pollTerminalHistory() {
       if (mtime > lastMtime) {
         lastModTimes.set(historyFile, mtime);
         
-        console.log(`[EditorWatcher] Terminal activity detected`);
+        // Try to read the last command from history
+        try {
+          const content = await readFile(historyFile, 'utf-8');
+          const lines = content.trim().split('\n');
+          const lastLine = lines[lines.length - 1] || '';
+          
+          // zsh_history format: : timestamp:0;command
+          // bash_history format: just the command
+          let command = lastLine;
+          if (lastLine.includes(';')) {
+            command = lastLine.split(';').slice(1).join(';');
+          }
+          command = command.toLowerCase().trim();
+          
+          console.log(`[EditorWatcher] Terminal command: ${command.substring(0, 50)}`);
+          
+          // Detect build/deploy commands - trigger celebration!
+          if (command.includes('npm run build') || 
+              command.includes('yarn build') || 
+              command.includes('pnpm build') ||
+              command.includes('npm run deploy') ||
+              command.includes('vercel') ||
+              command.includes('npm publish')) {
+            console.log(`[EditorWatcher] 🎉 Build/deploy command detected!`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit', // Reuse git_commit for celebration
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+          
+          // Detect git commit from terminal
+          if (command.includes('git commit') || command.includes('git push')) {
+            console.log(`[EditorWatcher] 🎉 Git command detected!`);
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: Date.now(),
+            };
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+          
+          // Detect test commands
+          if (command.includes('npm test') || 
+              command.includes('npm run test') || 
+              command.includes('vitest') ||
+              command.includes('jest') ||
+              command.includes('pytest')) {
+            console.log(`[EditorWatcher] 🧪 Test command detected!`);
+            // Just regular terminal activity for tests
+          }
+        } catch { /* ignore read errors */ }
         
         const activity: EditorActivity = {
           editor: 'unknown',
@@ -926,6 +1000,63 @@ async function pollRecentlyOpened() {
   }
 }
 
+async function pollGitActivity() {
+  const home = homedir();
+  const commonPaths = [
+    join(home, 'Developer'),
+    join(home, 'Projects'),
+    join(home, 'Code'),
+    join(home, 'repos'),
+    join(home, 'workspace'),
+    join(home, 'ngoding'),
+    join(home, 'dev'),
+    join(home, 'src'),
+  ];
+
+  for (const basePath of commonPaths) {
+    if (!existsSync(basePath)) continue;
+
+    try {
+      const dirs = readdirSync(basePath, { withFileTypes: true });
+      for (const dir of dirs.slice(0, 15)) {
+        if (!dir.isDirectory()) continue;
+        
+        const gitLogsPath = join(basePath, dir.name, '.git', 'logs', 'HEAD');
+        if (!existsSync(gitLogsPath)) continue;
+
+        try {
+          const stats = await stat(gitLogsPath);
+          const mtime = stats.mtimeMs;
+          const key = `git-logs:${gitLogsPath}`;
+          const lastMtime = lastModTimes.get(key);
+
+          if (lastMtime === undefined) {
+            lastModTimes.set(key, mtime);
+            continue;
+          }
+
+          if (mtime > lastMtime) {
+            lastModTimes.set(key, mtime);
+            
+            console.log(`[EditorWatcher] 🎉 Git commit detected in ${dir.name}!`);
+            
+            const activity: EditorActivity = {
+              editor: 'unknown',
+              action: 'git_commit',
+              timestamp: Date.now(),
+            };
+            
+            lastActivity = activity;
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
 export function startEditorWatcher(
   _mainWindow: BrowserWindow,
   onActivity: EditorCallback,
@@ -946,6 +1077,7 @@ export function startEditorWatcher(
     await pollTerminalHistory();
     await pollAIChatActivity();
     await pollRecentlyOpened();
+    await pollGitActivity();
   }, 2000);
   
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);

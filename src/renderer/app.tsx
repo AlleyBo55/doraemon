@@ -364,9 +364,9 @@ const App = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
-  // externalThought (notifications) takes priority over currentThought when not actively thinking
+  // externalThought (coding/notifications) takes HIGHEST priority
   // During coding mode, suppress random thoughts - only show coding-specific thoughts
-  const displayMessage = externalThought || currentThought || (isCodingMode ? null : randomThought) || null;
+  const displayMessage = externalThought || (isCodingMode ? null : currentThought) || (isCodingMode ? null : randomThought) || null;
   
   // Debug log to see what's happening
   useEffect(() => {
