@@ -32,6 +32,7 @@ import {
   stopWebNotificationServer,
   type WebNotification,
 } from './watchers/web-notification-server.js';
+import { ExperienceSystem, experienceBridge } from './experience-system/index.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,6 +43,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isOfflineMode = false;
 let currentModelMode: 'haiku35' | 'haiku45' | 'multi' = 'haiku35';
+let experienceSystem: ExperienceSystem | null = null;
 
 /**
  * Get combined bounds that cover all displays
@@ -205,6 +207,16 @@ function createMainWindow() {
       body: notification.body,
       url: notification.url,
     });
+  });
+
+  // Initialize experience system and connect bridge to main window
+  experienceBridge.setMainWindow(mainWindow);
+  experienceSystem = new ExperienceSystem({
+    enabled: process.env['EXPERIENCE_SYSTEM_ENABLED'] === '1',
+    heartbeatIntervalMinutes: 50,
+  });
+  experienceSystem.start().catch(err => {
+    console.error('[Main] Experience system failed to start:', err);
   });
 }
 
