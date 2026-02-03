@@ -1,15 +1,25 @@
 const DORAEMON_WS_URL = 'ws://localhost:18790';
+const HEARTBEAT_INTERVAL = 20000; // 20 seconds
+const MONITORED_PATTERNS = [
+  { pattern: /twitter\.com|x\.com/i, name: 'twitter' },
+  { pattern: /outlook\.(office|live)\.com/i, name: 'outlook' },
+  { pattern: /teams\.microsoft\.com/i, name: 'teams' },
+  { pattern: /github\.com/i, name: 'github' },
+  { pattern: /web\.whatsapp\.com/i, name: 'whatsapp' },
+  { pattern: /slack\.com/i, name: 'slack' },
+  { pattern: /discord\.com/i, name: 'discord' },
+];
+
 let ws = null;
 let reconnectTimer = null;
 let isConnected = false;
-let keepAliveInterval = null;
+let heartbeatInterval = null;
 
 function detectSource(url) {
   if (!url) return 'unknown';
-  if (url.includes('twitter.com') || url.includes('x.com')) return 'twitter';
-  if (url.includes('outlook.office.com') || url.includes('outlook.live.com')) return 'outlook';
-  if (url.includes('teams.microsoft.com')) return 'teams';
-  if (url.includes('github.com')) return 'github';
+  for (const { pattern, name } of MONITORED_PATTERNS) {
+    if (pattern.test(url)) return name;
+  }
   return 'unknown';
 }
 
@@ -33,15 +43,14 @@ function connect() {
           clearInterval(reconnectTimer);
           reconnectTimer = null;
         }
-        // Start keep-alive to prevent service worker from sleeping
-        startKeepAlive();
+        startHeartbeat();
         resolve(true);
       };
       
       ws.onclose = () => {
         console.log('[Doraemon Extension] Disconnected from Doraemon');
         isConnected = false;
-        stopKeepAlive();
+        stopHeartbeat();
         scheduleReconnect();
       };
       
@@ -58,23 +67,51 @@ function connect() {
   });
 }
 
-function startKeepAlive() {
-  stopKeepAlive();
-  // Send a ping every 20 seconds to keep service worker alive
-  keepAliveInterval = setInterval(() => {
+function startHeartbeat() {
+  stopHeartbeat();
+  
+  heartbeatInterval = setInterval(async () => {
+    // Keep WebSocket alive
     if (ws && ws.readyState === WebSocket.OPEN) {
-      // Just check connection is still alive
-      console.log('[Doraemon Extension] Keep-alive ping');
+      console.log('[Doraemon Extension] Heartbeat ping');
     } else {
-      connect();
+      await connect();
     }
-  }, 20000);
+    
+    // Proactively poll all monitored tabs
+    pollMonitoredTabs();
+  }, HEARTBEAT_INTERVAL);
+  
+  // Initial poll
+  pollMonitoredTabs();
 }
 
-function stopKeepAlive() {
-  if (keepAliveInterval) {
-    clearInterval(keepAliveInterval);
-    keepAliveInterval = null;
+function stopHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+}
+
+async function pollMonitoredTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    
+    for (const tab of tabs) {
+      if (!tab.url) continue;
+      
+      const source = detectSource(tab.url);
+      if (source === 'unknown') continue;
+      
+      // Send a ping to the content script to check for notifications
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: 'HEARTBEAT_CHECK' });
+      } catch {
+        // Content script not loaded or tab not ready - ignore
+      }
+    }
+  } catch (err) {
+    console.log('[Doraemon Extension] Poll error:', err.message);
   }
 }
 

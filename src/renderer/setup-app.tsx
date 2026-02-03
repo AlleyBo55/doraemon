@@ -17,6 +17,7 @@ const INITIAL_STEPS: Step[] = [
   { id: 'openclaw', label: 'OpenClaw CLI', status: 'pending' },
   { id: 'port', label: 'Network Port', status: 'pending' },
   { id: 'daemon', label: 'Background Service', status: 'pending' },
+  { id: 'fulldisk', label: 'Native Notifications', status: 'pending' },
 ];
 
 const CheckIcon = () => (
@@ -176,9 +177,37 @@ const SetupApp = () => {
     }
     updateStep('daemon', { status: 'success', detail: 'Running' });
 
+    // Full Disk Access check (required for native notifications)
+    updateStep('fulldisk', { status: 'running' });
+    const hasFullDisk = await api.checkFullDiskAccess();
+    if (!hasFullDisk) {
+      const step: Step = {
+        id: 'fulldisk',
+        label: 'Native Notifications',
+        status: 'error',
+        detail: 'Permission needed',
+        help: {
+          title: 'Grant Full Disk Access',
+          description: 'Doraemon needs Full Disk Access to read notifications from apps like WhatsApp, Slack, and Discord. Click "Open Settings" below, click the + button, add Doraemon to the list, then click "Try Again".',
+        },
+      };
+      updateStep('fulldisk', step);
+      setFailedStep(step);
+      setPhase('failed');
+      return;
+    }
+    updateStep('fulldisk', { status: 'success', detail: 'Enabled' });
+
     setPhase('complete');
     setTimeout(() => api.setupComplete(), 600);
   }, [updateStep]);
+
+  const handleOpenFullDiskSettings = async () => {
+    const api = (window as any).setupAPI;
+    if (api?.requestFullDiskAccess) {
+      await api.requestFullDiskAccess();
+    }
+  };
 
   useEffect(() => { runSetup(); }, [runSetup]);
 
@@ -243,6 +272,15 @@ const SetupApp = () => {
             )}
             
             <p class="text-[11px] text-[#86868B] leading-relaxed">{failedStep.help.description}</p>
+            
+            {failedStep.id === 'fulldisk' && (
+              <button
+                onClick={handleOpenFullDiskSettings}
+                class="mt-2 text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors"
+              >
+                Open Settings →
+              </button>
+            )}
           </div>
         )}
 

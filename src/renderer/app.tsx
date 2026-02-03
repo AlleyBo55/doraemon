@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
-import { ChatBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
+import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
 import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts } from './hooks';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
@@ -26,6 +26,12 @@ declare global {
   }
 }
 
+type NotificationData = {
+  source: string;
+  title: string;
+  body?: string;
+} | null;
+
 const App = () => {
   const [position, setPosition] = useState<Position>({ x: window.innerWidth / 2 - 64, y: window.innerHeight - 200 });
   const [currentFrame, setCurrentFrame] = useState('shime1.png');
@@ -34,6 +40,7 @@ const App = () => {
   const [showChat, setShowChat] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [externalThought, setExternalThought] = useState<string | null>(null);
+  const [notificationData, setNotificationData] = useState<NotificationData>(null);
   
   const { current: emotion } = useEmotion();
   const {
@@ -46,7 +53,7 @@ const App = () => {
   } = useOpenClaw();
 
   // Pass externalThought to pause random thoughts when showing notifications
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null);
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -55,6 +62,7 @@ const App = () => {
   const frameTimerRef = useRef<number>(0);
   const currentAnimRef = useRef<string>('idle');
   const externalThoughtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerEmotionRef = useRef(triggerEmotion);
   
   // Keep refs updated
@@ -74,25 +82,59 @@ const App = () => {
     console.log('[App] Registering web notification listener');
     window.electronAPI?.onWebNotification?.((data) => {
       console.log('[App] Web notification received:', data);
-      const thought = data.body && data.body.trim() 
-        ? `${data.title}\n${data.body}` 
-        : data.title;
-      console.log('[App] Setting external thought:', thought);
+      
+      // Clear any existing timers
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
-      setExternalThought(thought);
-      externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), 8000);
-      // Don't call triggerEmotion here - it would overwrite currentThought with "Interesting..."
-      // Just set the emotion directly without the thought
-      // The emotion indicator will show curious, but the bubble shows the notification
+      
+      // Set notification data for the fancy bubble
+      setNotificationData({
+        source: data.source,
+        title: data.title,
+        body: data.body,
+      });
+      setExternalThought(null); // Clear any text-based external thought
+      
+      // Auto-dismiss after 15 seconds
+      notificationTimerRef.current = setTimeout(() => {
+        setNotificationData(null);
+      }, 15000);
     });
+    
+    return () => {
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+    };
   }, []);
 
   // Listen for other notifications and editor activity
   useEffect(() => {
     window.electronAPI?.onNotification?.((data) => {
-      const thought = `📱 ${data.app}: "${data.title}"${data.message ? ` - ${data.message.slice(0, 50)}...` : ''}`;
-      showExternalThought(thought, 6000);
-      triggerEmotion('curious');
+      // Native macOS notifications - use the fancy bubble
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+      if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+      
+      // Detect source from app name
+      const appLower = data.app.toLowerCase();
+      let source = 'unknown';
+      if (appLower.includes('whatsapp')) source = 'whatsapp';
+      else if (appLower.includes('messages')) source = 'messages';
+      else if (appLower.includes('mail')) source = 'mail';
+      else if (appLower.includes('teams')) source = 'teams';
+      else if (appLower.includes('outlook')) source = 'outlook';
+      else if (appLower.includes('slack')) source = 'slack';
+      else if (appLower.includes('discord')) source = 'discord';
+      else if (appLower.includes('telegram')) source = 'telegram';
+      
+      setNotificationData({
+        source,
+        title: data.app,
+        body: data.message || data.title,
+      });
+      setExternalThought(null);
+      
+      notificationTimerRef.current = setTimeout(() => {
+        setNotificationData(null);
+      }, 15000);
     });
 
     window.electronAPI?.onEditorActivity?.((data) => {
@@ -117,6 +159,7 @@ const App = () => {
 
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
     };
   }, [triggerEmotion, clearHistory, showExternalThought]);
 
@@ -257,10 +300,12 @@ const App = () => {
   
   // Debug log to see what's happening
   useEffect(() => {
-    console.log('[App] Display state:', { currentThought, externalThought, randomThought, displayMessage });
-  }, [currentThought, externalThought, randomThought, displayMessage]);
+    console.log('[App] Display state:', { currentThought, externalThought, randomThought, notificationData, displayMessage });
+  }, [currentThought, externalThought, randomThought, notificationData, displayMessage]);
   
-  const showThinkingBubble = isThinking || displayMessage;
+  // Show notification bubble if we have notification data, otherwise show chat bubble
+  const showNotificationBubble = notificationData !== null;
+  const showThinkingBubble = !showNotificationBubble && (isThinking || displayMessage);
   const isShowingReasoning = isThinking && currentThought && !currentThought.includes('My AI backend');
 
   return (
@@ -274,6 +319,13 @@ const App = () => {
         onDblClick={handleDoubleClick}
       >
         <div class="relative">
+          {showNotificationBubble && notificationData && (
+            <NotificationBubble
+              source={notificationData.source as any}
+              title={notificationData.title}
+              body={notificationData.body}
+            />
+          )}
           {showThinkingBubble && (
             <ChatBubble 
               message={displayMessage || ''} 

@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld('setupAPI', {
   checkOpenClaw: () => ipcRenderer.invoke('setup:check-openclaw'),
   checkPort: () => ipcRenderer.invoke('setup:check-port', 18789),
   
+  // Permissions
+  checkFullDiskAccess: () => ipcRenderer.invoke('check-full-disk-access'),
+  requestFullDiskAccess: () => ipcRenderer.invoke('request-full-disk-access'),
+  
   // Actions
   killPort: () => ipcRenderer.invoke('setup:kill-port'),
   installOpenClaw: () => ipcRenderer.invoke('setup:install-openclaw'),
