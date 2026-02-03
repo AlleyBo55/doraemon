@@ -22,35 +22,47 @@ macOS stores notifications in a protected SQLite database. To read notifications
 
 ## Setup Instructions
 
-### For Development (`npm run dev`)
+### For Development (`npm run dev`) — Recommended
 
-When running in development mode, you need to grant Full Disk Access to **Electron**:
+When running in development mode, grant Full Disk Access to your **Terminal or IDE** instead of Electron. The child process (Electron) will inherit the permission from its parent.
 
-1. Open **System Preferences** → **Privacy & Security** → **Full Disk Access**
-2. Click the **🔒 lock icon** at bottom left and enter your password
+**Option A: Grant to Terminal (recommended)**
+
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click the **🔒 lock icon** and enter your password
 3. Click the **+** button
-4. Press **Cmd+Shift+G** to open "Go to folder"
-5. Paste this path:
-   ```
-   ~/ngoding/clawdochan/doraemon/node_modules/electron/dist/
-   ```
-   *(Adjust the path if your project is in a different location)*
-6. Press **Enter**
-7. Select **Electron.app** and click **Open**
-8. Make sure the checkbox is **enabled** ✅
-9. Restart the app (`npm run dev`)
+4. Navigate to **Applications** → **Utilities**
+5. Select **Terminal.app** (or **iTerm.app** if you use iTerm)
+6. Make sure the checkbox is **enabled** ✅
+7. Restart Terminal and run `npm run dev`
+
+**Option B: Grant to IDE**
+
+If you run `npm run dev` from your IDE's integrated terminal:
+
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
+2. Click **+** and add your IDE:
+   - **VS Code**: `/Applications/Visual Studio Code.app`
+   - **Cursor**: `/Applications/Cursor.app`
+   - **Kiro**: `/Applications/Kiro.app`
+3. Make sure the checkbox is **enabled** ✅
+4. Restart the IDE and run `npm run dev`
+
+> 💡 **Why this works**: macOS Full Disk Access is inherited by child processes. When Terminal/IDE has the permission, any app launched from it (including Electron) gets the same access.
 
 ### For Production (Built App)
 
-When running the built app, grant Full Disk Access to **Doraemon.app**:
+When running the built/packaged app, grant Full Disk Access directly to **Doraemon.app**:
 
-1. Open **System Preferences** → **Privacy & Security** → **Full Disk Access**
+1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
 2. Click the **🔒 lock icon** and enter your password
 3. Click the **+** button
-4. Navigate to **Applications** folder
+4. Navigate to **Applications** folder (or wherever you installed Doraemon)
 5. Select **Doraemon.app** and click **Open**
 6. Make sure the checkbox is **enabled** ✅
 7. Restart Doraemon
+
+> ⚠️ **Note**: If you rebuild the app, you may need to remove and re-add it to Full Disk Access since the binary signature changes.
 
 ---
 
