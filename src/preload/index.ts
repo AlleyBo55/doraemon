@@ -80,6 +80,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
       callback(data);
     });
   },
+  
+  // Experience System events (consciousness/emotion bridge)
+  onExperienceEmotion: (callback: (data: { emotion: string; intensity: number; valence: number; arousal: number; trigger: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { emotion: string; intensity: number; valence: number; arousal: number; trigger: string }) => callback(data);
+    ipcRenderer.on('experience-emotion', handler);
+    return () => ipcRenderer.removeListener('experience-emotion', handler);
+  },
+  onExperienceThought: (callback: (data: { thought: string; duration: number; priority: boolean; source: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { thought: string; duration: number; priority: boolean; source: string }) => callback(data);
+    ipcRenderer.on('experience-thought', handler);
+    return () => ipcRenderer.removeListener('experience-thought', handler);
+  },
+  onConsciousnessUpdate: (callback: (data: { selfState: string; goals: string[]; recentEvents: string[]; timeAwareness: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { selfState: string; goals: string[]; recentEvents: string[]; timeAwareness: string }) => callback(data);
+    ipcRenderer.on('consciousness-update', handler);
+    return () => ipcRenderer.removeListener('consciousness-update', handler);
+  },
+  onLivingPostGenerated: (callback: (data: { id: string; content: string; emotion: string; category: string; timestamp: string }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { id: string; content: string; emotion: string; category: string; timestamp: string }) => callback(data);
+    ipcRenderer.on('living-post-generated', handler);
+    return () => ipcRenderer.removeListener('living-post-generated', handler);
+  },
+  onExperienceHeartbeat: (callback: (data: { isRunning: boolean; postsGenerated: number; lastPostTime: string | null }) => void) => {
+    const handler = (_event: IpcRendererEvent, data: { isRunning: boolean; postsGenerated: number; lastPostTime: string | null }) => callback(data);
+    ipcRenderer.on('experience-heartbeat', handler);
+    return () => ipcRenderer.removeListener('experience-heartbeat', handler);
+  },
 });
 
 // Setup API (for setup window)
