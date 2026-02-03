@@ -386,9 +386,32 @@ const App = () => {
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
-  // externalThought (coding/notifications) takes HIGHEST priority
-  // During coding mode, randomThought contains coding-specific thoughts from the hook
-  const displayMessage = externalThought || currentThought || randomThought || null;
+  // Priority during coding mode:
+  // 1. externalThought (editor activity notifications)
+  // 2. randomThought (coding-specific thoughts from the hook)
+  // 3. currentThought (OpenClaw - but suppress generic "Interesting..." during coding)
+  // Priority during normal mode:
+  // 1. externalThought
+  // 2. currentThought (OpenClaw)
+  // 3. randomThought
+  
+  const getDisplayMessage = () => {
+    // External thought always takes highest priority
+    if (externalThought) return externalThought;
+    
+    if (isCodingMode) {
+      // During coding mode, prefer coding thoughts over generic OpenClaw responses
+      if (randomThought) return randomThought;
+      // Only show currentThought if it's not a generic response
+      if (currentThought && !currentThought.includes('Interesting')) return currentThought;
+      return null;
+    }
+    
+    // Normal mode - OpenClaw takes priority
+    return currentThought || randomThought || null;
+  };
+  
+  const displayMessage = getDisplayMessage();
   
   // Debug log to see what's happening
   useEffect(() => {
