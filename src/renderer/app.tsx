@@ -81,6 +81,8 @@ const App = () => {
   const triggerCodingAnimation = useCallback((animation: string, duration = 8000) => {
     if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
     
+    console.log('[App] Triggering coding animation:', animation, 'for', duration, 'ms');
+    
     // Lock the animation by setting it directly and preventing engine override
     currentAnimRef.current = animation;
     frameIndexRef.current = 0;
@@ -92,6 +94,7 @@ const App = () => {
     }
     
     codingAnimTimerRef.current = setTimeout(() => {
+      console.log('[App] Coding animation ended, unlocking');
       // Unlock and return to normal behavior
       if (engineRef.current) {
         (engineRef.current as any)._codingLock = false;
@@ -235,6 +238,9 @@ const App = () => {
       (pos) => setPosition(pos),
       (state, _frame, shouldFlip) => {
         setFlip(shouldFlip);
+        // Don't override animation if coding lock is active
+        if ((engine as any)._codingLock) return;
+        
         const animName = getAnimationForState(state);
         if (animName !== currentAnimRef.current) {
           currentAnimRef.current = animName;

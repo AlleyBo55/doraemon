@@ -578,7 +578,10 @@ async function pollHistoryFolders() {
   ];
 
   for (const { path: historyPath, editor } of historyPaths) {
-    if (!existsSync(historyPath)) continue;
+    if (!existsSync(historyPath)) {
+      console.log(`[EditorWatcher] History path not found: ${historyPath}`);
+      continue;
+    }
 
     try {
       const entries = await readdir(historyPath, { withFileTypes: true });
@@ -622,6 +625,8 @@ async function pollHistoryFolders() {
             const entriesContent = await readFile(dir.path, 'utf-8');
             const entriesData = JSON.parse(entriesContent);
             
+            console.log(`[EditorWatcher] Parsing entries.json:`, JSON.stringify(entriesData).substring(0, 200));
+            
             // The resource field contains the actual file path
             if (!entriesData.resource || typeof entriesData.resource !== 'string') {
               console.log(`[EditorWatcher] No resource field in ${dir.path}`);
@@ -629,6 +634,7 @@ async function pollHistoryFolders() {
             }
             
             let resourcePath = entriesData.resource;
+            console.log(`[EditorWatcher] Raw resource: ${resourcePath}`);
             
             // Remove file:// or file:/// prefix
             if (resourcePath.startsWith('file:///')) {
@@ -646,17 +652,18 @@ async function pollHistoryFolders() {
             }
             
             const fileName = basename(resourcePath);
+            console.log(`[EditorWatcher] Extracted filename: ${fileName} from ${resourcePath}`);
             
             // Skip if we got an invalid filename
             if (!fileName || fileName === 'entries.json' || fileName === 'file') {
-              console.log(`[EditorWatcher] Invalid filename from resource: ${entriesData.resource}`);
+              console.log(`[EditorWatcher] Invalid filename, skipping`);
               continue;
             }
             
             const language = getLanguage(fileName);
             const fileType = getFileType(fileName);
             
-            console.log(`[EditorWatcher] File activity: ${fileName} from ${resourcePath} (${editor}, ${language})`);
+            console.log(`[EditorWatcher] ✓ File activity: ${fileName} (${editor}, ${language}, ${fileType})`);
             
             const activity: EditorActivity = {
               editor,
@@ -1094,7 +1101,7 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
         `Two AIs are better than one!`,
       ],
       emotion: 'curious',
-      animation: 'coding_thinking',
+      animation: 'coding_thinking', // Will be randomized below
     },
   };
 
@@ -1107,6 +1114,12 @@ export function getEditorThought(activity: EditorActivity): { thought: string; e
     thoughts = [...actionData.thoughts];
     emotion = actionData.emotion;
     animation = actionData.animation;
+  }
+
+  // Randomize AI chat animation
+  if (activity.action === 'ai_chat') {
+    const aiAnimations = ['coding_thinking', 'coding_intense', 'coding_typing'];
+    animation = aiAnimations[Math.floor(Math.random() * aiAnimations.length)];
   }
 
   if (langReaction && activity.action === 'file_opened') {
