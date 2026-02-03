@@ -583,16 +583,21 @@ async function pollHistoryFolders() {
     try {
       const entries = await readdir(historyPath, { withFileTypes: true });
       
-      for (const entry of entries.slice(-20)) {
-        if (!entry.isDirectory()) continue;
-        
+      // Sort by name to get most recent (they're sorted by modification)
+      const sortedEntries = entries
+        .filter(e => e.isDirectory())
+        .slice(-30);
+      
+      for (const entry of sortedEntries) {
         const subDir = join(historyPath, entry.name);
         const entriesJsonPath = join(subDir, 'entries.json');
         
+        if (!existsSync(entriesJsonPath)) continue;
+        
         try {
-          const subDirStats = await stat(subDir);
-          const mtime = subDirStats.mtimeMs;
-          const key = `history:${subDir}`;
+          const jsonStats = await stat(entriesJsonPath);
+          const mtime = jsonStats.mtimeMs;
+          const key = `history-json:${entriesJsonPath}`;
           const lastMtime = lastModTimes.get(key);
           
           if (lastMtime === undefined) {
@@ -607,20 +612,32 @@ async function pollHistoryFolders() {
             let language = 'Unknown';
             let fileType: EditorActivity['fileType'] = 'code';
             
-            if (existsSync(entriesJsonPath)) {
-              try {
-                const entriesContent = await readFile(entriesJsonPath, 'utf-8');
-                const entriesData = JSON.parse(entriesContent);
-                if (entriesData.resource) {
-                  const resourcePath = entriesData.resource;
-                  fileName = basename(resourcePath);
-                  language = getLanguage(fileName);
-                  fileType = getFileType(fileName);
+            try {
+              const entriesContent = await readFile(entriesJsonPath, 'utf-8');
+              const entriesData = JSON.parse(entriesContent);
+              if (entriesData.resource && typeof entriesData.resource === 'string') {
+                let resourcePath = entriesData.resource;
+                // Remove file:// prefix and decode URI
+                if (resourcePath.startsWith('file://')) {
+                  resourcePath = resourcePath.substring(7); // Remove 'file://'
                 }
-              } catch { /* ignore parse errors */ }
+                resourcePath = decodeURIComponent(resourcePath);
+                fileName = basename(resourcePath);
+                language = getLanguage(fileName);
+                fileType = getFileType(fileName);
+                
+                console.log(`[EditorWatcher] Parsed resource: ${resourcePath} -> ${fileName}`);
+              }
+            } catch (e) {
+              console.error(`[EditorWatcher] Error parsing entries.json:`, e);
             }
             
-            console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor})`);
+            // Skip if we couldn't get a proper filename
+            if (fileName === 'file' || fileName === 'entries.json') {
+              continue;
+            }
+            
+            console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor}, ${language})`);
             
             const activity: EditorActivity = {
               editor,
@@ -737,10 +754,15 @@ async function pollAIChatActivity() {
   const home = homedir();
   
   const aiPaths = [
-    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiro'), editor: 'kiro' as const },
+    // Kiro AI agent data - updates when chatting with AI
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data/devdata.sqlite'), editor: 'kiro' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/globalStorage/kiro.kiroagent/dev_data/tokens_generated.jsonl'), editor: 'kiro' as const },
+    // VS Code Copilot
     { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot'), editor: 'vscode' as const },
     { path: join(home, 'Library/Application Support/Code/User/globalStorage/github.copilot-chat'), editor: 'vscode' as const },
+    // Continue extension
     { path: join(home, '.continue'), editor: 'vscode' as const },
+    // Cursor
     { path: join(home, '.cursor'), editor: 'unknown' as const },
   ];
 
@@ -758,10 +780,10 @@ async function pollAIChatActivity() {
         continue;
       }
 
-      if (mtime > lastMtime + 2000) {
+      if (mtime > lastMtime + 1000) {
         lastModTimes.set(key, mtime);
         
-        console.log(`[EditorWatcher] AI chat activity detected: ${editor}`);
+        console.log(`[EditorWatcher] AI chat activity detected: ${editor} (${basename(aiPath)})`);
         
         const activity: EditorActivity = {
           editor,
@@ -769,39 +791,10 @@ async function pollAIChatActivity() {
           timestamp: Date.now(),
         };
         
+        lastActivity = activity;
         updateCodingStats(activity);
         callback?.(activity);
         return;
-      }
-    } catch { /* ignore */ }
-  }
-
-  const kiroLogsPath = join(home, 'Library/Application Support/Kiro/logs');
-  if (existsSync(kiroLogsPath)) {
-    try {
-      const files = await readdir(kiroLogsPath);
-      const mainLog = files.find(f => f.includes('main'));
-      if (mainLog) {
-        const logPath = join(kiroLogsPath, mainLog);
-        const stats = await stat(logPath);
-        const mtime = stats.mtimeMs;
-        const key = `kiro-log:${logPath}`;
-        const lastMtime = lastModTimes.get(key);
-
-        if (lastMtime === undefined) {
-          lastModTimes.set(key, mtime);
-        } else if (mtime > lastMtime + 3000) {
-          lastModTimes.set(key, mtime);
-          
-          const activity: EditorActivity = {
-            editor: 'kiro',
-            action: 'ai_chat',
-            timestamp: Date.now(),
-          };
-          
-          updateCodingStats(activity);
-          callback?.(activity);
-        }
       }
     } catch { /* ignore */ }
   }

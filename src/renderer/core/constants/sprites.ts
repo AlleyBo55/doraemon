@@ -420,32 +420,32 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   // CODING ANIMATIONS (coding, coding2-8) - Special IDE integration
   // ═══════════════════════════════════════════════════════════════
   coding: {
-    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png','coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png','coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png','coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png','coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png','coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png'],
     frameDelay: 200,
     loop: true,
   },
   coding_intense: {
-    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png','codingintense1.png','codingintense3.png','codingintense2.png','codingintense1.png','codingintense3.png','codingintense4.png','coding.png', 'coding2.png', 'coding3.png', 'coding4.png','codingintense1.png','codingintense3.png','codingintense2.png','codingintense1.png','codingintense3.png','codingintense4.png','coding.png', 'coding2.png', 'coding3.png', 'coding4.png','codingintense1.png','codingintense3.png','codingintense2.png','codingintense1.png','codingintense3.png','codingintense4.png'],
     frameDelay: 120,
     loop: true,
   },
   coding_focused: {
-    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png', 'coding.png', 'coding2.png', 'coding3.png', 'coding4.png'],
+    frames: ['coding10.png', 'coding9.png', 'coding11.png', 'coding4.png', 'coding.png', 'coding2.png', 'coding3.png', 'coding9.png','coding11.png','coding10.png', 'coding9.png', 'coding11.png', 'coding4.png', 'coding.png', 'coding2.png', 'coding3.png', 'coding9.png','coding11.png'],
     frameDelay: 180,
     loop: true,
   },
   coding_typing: {
-    frames: ['coding.png', 'coding2.png', 'coding3.png', 'coding4.png', 'coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frames: ['coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png','coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png','coding.png', 'coding3.png', 'coding4.png','coding9.png','coding3.png','coding10,png','coding1.png','coding11.png','coding.png','coding3.png','coding4.png','coding9.png','coding10.png','coding11.png'],
     frameDelay: 100,
     loop: true,
   },
   coding_thinking: {
-    frames: ['coding5.png', 'coding6.png', 'coding7.png', 'coding8.png'],
+    frames: ['coding.png','coding3.png','coding4.png','codingthinking1.png','codingthinking2.png','codingthinking3.png','codingthinking4.png','codingthinking5.png','codingthinking3.png','codingthinking2.png','codingthinking4.png','coding.png','coding3.png','coding4.png','codingthinking1.png','codingthinking2.png','codingthinking3.png','codingthinking4.png','codingthinking5.png','codingthinking3.png','codingthinking2.png','codingthinking4.png'],
     frameDelay: 300,
     loop: true,
   },
   coding_celebrate: {
-    frames: ['coding.png', 'coding8.png', 'shime50.png', 'shime49.png', 'coding8.png', 'coding.png', 'coding5.png', 'coding6.png'],
+    frames: ['codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png','codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png'],
     frameDelay: 120,
     loop: true,
   },
