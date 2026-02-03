@@ -1,5 +1,5 @@
 import { watch, FSWatcher, existsSync, statSync, readdirSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { readFile, readdir, stat } from 'fs/promises';
 import { join, basename, extname } from 'path';
 import { homedir } from 'os';
 import { BrowserWindow } from 'electron';
@@ -38,6 +38,10 @@ let lastActivity: EditorActivity | null = null;
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 let breakCheckInterval: ReturnType<typeof setInterval> | null = null;
 let idleCheckInterval: ReturnType<typeof setInterval> | null = null;
+let historyPollInterval: ReturnType<typeof setInterval> | null = null;
+
+// Track last known modification times for polling
+const lastModTimes: Map<string, number> = new Map();
 
 const codingStats: CodingStats = {
   sessionStart: Date.now(),
@@ -573,6 +577,120 @@ function watchGitDirectories() {
   }
 }
 
+async function pollHistoryFolders() {
+  const home = homedir();
+  const historyPaths = [
+    { path: join(home, 'Library/Application Support/Code/User/History'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/History'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: historyPath, editor } of historyPaths) {
+    if (!existsSync(historyPath)) continue;
+
+    try {
+      const entries = await readdir(historyPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        
+        const subDir = join(historyPath, entry.name);
+        try {
+          const files = await readdir(subDir);
+          
+          for (const file of files) {
+            const filePath = join(subDir, file);
+            try {
+              const stats = await stat(filePath);
+              const mtime = stats.mtimeMs;
+              const lastMtime = lastModTimes.get(filePath);
+              
+              if (lastMtime === undefined) {
+                lastModTimes.set(filePath, mtime);
+                continue;
+              }
+              
+              if (mtime > lastMtime) {
+                lastModTimes.set(filePath, mtime);
+                
+                const fileName = basename(file);
+                const language = getLanguage(fileName);
+                const fileType = getFileType(fileName);
+                
+                console.log(`[EditorWatcher] File activity detected: ${fileName} (${editor})`);
+                
+                const activity: EditorActivity = {
+                  editor,
+                  action: 'file_saved',
+                  file: fileName,
+                  language,
+                  fileType,
+                  timestamp: Date.now(),
+                };
+                
+                updateCodingStats(activity);
+                callback?.(activity);
+                return;
+              }
+            } catch { /* ignore individual file errors */ }
+          }
+        } catch { /* ignore subdirectory errors */ }
+      }
+    } catch (e) {
+      console.error(`[EditorWatcher] Error polling history: ${e}`);
+    }
+  }
+}
+
+async function pollWorkspaceStorage() {
+  const home = homedir();
+  const storagePaths = [
+    { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: storagePath, editor } of storagePaths) {
+    if (!existsSync(storagePath)) continue;
+
+    try {
+      const workspaces = await readdir(storagePath, { withFileTypes: true });
+      
+      for (const ws of workspaces.slice(0, 5)) {
+        if (!ws.isDirectory()) continue;
+        
+        const stateFile = join(storagePath, ws.name, 'state.vscdb');
+        if (!existsSync(stateFile)) continue;
+        
+        try {
+          const stats = await stat(stateFile);
+          const mtime = stats.mtimeMs;
+          const lastMtime = lastModTimes.get(stateFile);
+          
+          if (lastMtime === undefined) {
+            lastModTimes.set(stateFile, mtime);
+            continue;
+          }
+          
+          if (mtime > lastMtime + 1000) {
+            lastModTimes.set(stateFile, mtime);
+            
+            console.log(`[EditorWatcher] Workspace activity detected: ${editor}`);
+            
+            const activity: EditorActivity = {
+              editor,
+              action: 'typing',
+              timestamp: Date.now(),
+            };
+            
+            updateCodingStats(activity);
+            callback?.(activity);
+            return;
+          }
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+}
+
 export function startEditorWatcher(
   _mainWindow: BrowserWindow,
   onActivity: EditorCallback,
@@ -586,18 +704,26 @@ export function startEditorWatcher(
   watchRecentFiles();
   watchGitDirectories();
   
+  // Start polling for History folder changes (more reliable than fs.watch on macOS)
+  historyPollInterval = setInterval(async () => {
+    await pollHistoryFolders();
+    await pollWorkspaceStorage();
+  }, 2000);
+  
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);
   idleCheckInterval = setInterval(checkIdleState, 30 * 1000);
   
-  console.log(`[EditorWatcher] Started with ${watchers.length} active watchers`);
+  console.log(`[EditorWatcher] Started with ${watchers.length} active watchers + polling`);
 }
 
 export function stopEditorWatcher() {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   if (breakCheckInterval) { clearInterval(breakCheckInterval); breakCheckInterval = null; }
   if (idleCheckInterval) { clearInterval(idleCheckInterval); idleCheckInterval = null; }
+  if (historyPollInterval) { clearInterval(historyPollInterval); historyPollInterval = null; }
   for (const watcher of watchers) watcher.close();
   watchers.length = 0;
+  lastModTimes.clear();
   callback = null;
   statsCallback = null;
   breakCallback = null;
