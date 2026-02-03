@@ -129,14 +129,13 @@ function createSetupWindow() {
  * Create the main mascot window
  */
 function createMainWindow() {
-  const allDisplays = screen.getAllDisplays();
-  const combinedBounds = getCombinedDisplayBounds(allDisplays);
+  const primaryBounds = getPrimaryDisplayBounds();
 
   mainWindow = new BrowserWindow({
-    width: combinedBounds.width,
-    height: combinedBounds.height,
-    x: combinedBounds.x,
-    y: combinedBounds.y,
+    width: primaryBounds.width,
+    height: primaryBounds.height,
+    x: primaryBounds.x,
+    y: primaryBounds.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -607,26 +606,20 @@ app.whenReady().then(() => {
   }
 
   screen.on('display-metrics-changed', () => {
-    const allDisplays = screen.getAllDisplays();
-    const combinedBounds = getCombinedDisplayBounds(allDisplays);
-    mainWindow?.setBounds(combinedBounds);
     const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.setBounds(primaryBounds);
     mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 
   screen.on('display-added', () => {
-    const allDisplays = screen.getAllDisplays();
-    const combinedBounds = getCombinedDisplayBounds(allDisplays);
-    mainWindow?.setBounds(combinedBounds);
     const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.setBounds(primaryBounds);
     mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 
   screen.on('display-removed', () => {
-    const allDisplays = screen.getAllDisplays();
-    const combinedBounds = getCombinedDisplayBounds(allDisplays);
-    mainWindow?.setBounds(combinedBounds);
     const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.setBounds(primaryBounds);
     mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 });
