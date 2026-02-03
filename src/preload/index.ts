@@ -43,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => {
     ipcRenderer.on('coding-streak', (_event: IpcRendererEvent, data: { minutes: number; message: string }) => callback(data));
   },
+  // Daily summary heartbeat (every 3 hours)
+  onDailySummary: (callback: (data: { message: string; duration: number; priority: boolean }) => void) => {
+    ipcRenderer.on('daily-summary', (_event: IpcRendererEvent, data: { message: string; duration: number; priority: boolean }) => callback(data));
+  },
   // Get coding stats
   getCodingStats: () => ipcRenderer.invoke('get-coding-stats'),
   // Get daily summary

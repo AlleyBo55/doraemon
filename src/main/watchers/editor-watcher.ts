@@ -1,6 +1,6 @@
 import { watch, FSWatcher, existsSync, statSync, readdirSync } from 'fs';
 import { readFile, readdir, stat } from 'fs/promises';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, resolve } from 'path';
 import { homedir } from 'os';
 import { BrowserWindow } from 'electron';
 
@@ -710,6 +710,7 @@ async function pollHistoryFolders() {
 // Poll for git operations in active workspaces (detected from IDE workspace storage)
 async function pollActiveWorkspaceGit() {
   const home = homedir();
+  
   const storagePaths = [
     { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
     { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
@@ -778,14 +779,16 @@ async function pollActiveWorkspaceGit() {
                 const wsContent = await readFile(workspaceFilePath, 'utf-8');
                 const wsData = JSON.parse(wsContent);
                 if (wsData.folders && Array.isArray(wsData.folders)) {
+                  // Get the directory containing the .code-workspace file
+                  const wsDir = workspaceFilePath.substring(0, workspaceFilePath.lastIndexOf('/'));
+                  
                   for (const folder of wsData.folders) {
                     if (folder.path) {
                       // Paths in .code-workspace can be relative or absolute
                       let fPath = folder.path;
                       if (!fPath.startsWith('/')) {
-                        // Relative path - resolve from workspace file location
-                        const wsDir = workspaceFilePath.substring(0, workspaceFilePath.lastIndexOf('/'));
-                        fPath = join(wsDir, fPath);
+                        // Relative path - use resolve() for proper path resolution
+                        fPath = resolve(wsDir, fPath);
                       }
                       folderPaths.push(`file://${fPath}`);
                     }
@@ -796,6 +799,18 @@ async function pollActiveWorkspaceGit() {
           }
           
           if (folderPaths.length === 0) continue;
+          
+          // Debug: log the resolved folder paths (only once per workspace)
+          const wsKey = `debug-ws:${ws.path}`;
+          if (!lastModTimes.has(wsKey)) {
+            lastModTimes.set(wsKey, 1);
+            console.log(`[EditorWatcher] Monitoring workspace folders:`, folderPaths.map(p => {
+              let fp = p;
+              if (fp.startsWith('file:///')) fp = fp.substring(8);
+              else if (fp.startsWith('file://')) fp = fp.substring(7);
+              return decodeURIComponent(fp);
+            }));
+          }
           
           for (let folderPath of folderPaths) {
             // Remove file:// prefix
@@ -865,6 +880,68 @@ async function pollActiveWorkspaceGit() {
                     timestamp: Date.now(),
                   };
                   
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check .git/COMMIT_EDITMSG - created/updated during git commit
+            const commitMsgPath = join(gitPath, 'COMMIT_EDITMSG');
+            if (existsSync(commitMsgPath)) {
+              try {
+                const stats = await stat(commitMsgPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-commitmsg:${commitMsgPath}`;
+                const lastMtime = lastModTimes.get(key);
+                const timeSinceModified = Date.now() - mtime;
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime && timeSinceModified < 10000) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 🎉 Git commit message detected in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'git_commit',
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
+                  updateCodingStats(activity);
+                  callback?.(activity);
+                  return;
+                }
+              } catch { /* ignore */ }
+            }
+            
+            // Check .git/ORIG_HEAD - updated after git commit, merge, reset
+            const origHeadPath = join(gitPath, 'ORIG_HEAD');
+            if (existsSync(origHeadPath)) {
+              try {
+                const stats = await stat(origHeadPath);
+                const mtime = stats.mtimeMs;
+                const key = `active-git-orighead:${origHeadPath}`;
+                const lastMtime = lastModTimes.get(key);
+                const timeSinceModified = Date.now() - mtime;
+
+                if (lastMtime === undefined) {
+                  lastModTimes.set(key, mtime);
+                } else if (mtime > lastMtime && timeSinceModified < 10000) {
+                  lastModTimes.set(key, mtime);
+                  
+                  console.log(`[EditorWatcher] 🎉 Git operation detected in active workspace: ${basename(folderPath)}`);
+                  
+                  const activity: EditorActivity = {
+                    editor,
+                    action: 'git_commit',
+                    timestamp: Date.now(),
+                  };
+                  
+                  lastActivity = activity;
                   updateCodingStats(activity);
                   callback?.(activity);
                   return;
@@ -1719,6 +1796,11 @@ export function startEditorWatcher(
     await pollGitFileChanges();
     await pollBuildActivity();
   }, 2000);
+  
+  // Fast poll for git operations (1 second) - catches quick git commit/push
+  pollInterval = setInterval(async () => {
+    await pollActiveWorkspaceGit();
+  }, 1000);
   
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);
   idleCheckInterval = setInterval(checkIdleState, 30 * 1000);

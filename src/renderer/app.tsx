@@ -20,6 +20,7 @@ declare global {
       onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => void) => void;
       onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => void;
       onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => void;
+      onDailySummary: (callback: (data: { message: string; duration: number; priority: boolean }) => void) => void;
       getCodingStats: () => Promise<{ sessionStart: number; totalCodingTime: number; filesEdited: number; languagesUsed: string[]; commitCount: number; currentStreak: number; longestStreak: number }>;
       getDailySummary: () => Promise<string>;
       onToggleChat: (callback: () => void) => void;
@@ -47,6 +48,7 @@ const App = () => {
   const [externalThought, setExternalThought] = useState<string | null>(null);
   const [notificationData, setNotificationData] = useState<NotificationData>(null);
   const [isCodingMode, setIsCodingMode] = useState(false);
+  const [priorityMessage, setPriorityMessage] = useState<string | null>(null);
   
   const { current: emotion } = useEmotion();
   const {
@@ -72,6 +74,7 @@ const App = () => {
   const triggerEmotionRef = useRef(triggerEmotion);
   const codingAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codingModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const priorityMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Keep refs updated
   useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
@@ -89,9 +92,10 @@ const App = () => {
     frameIndexRef.current = 0;
     frameTimerRef.current = 0;
     
-    // Tell the engine to pause behavior changes during coding
+    // Tell the engine to pause behavior changes AND force stationary state
     if (engineRef.current) {
       (engineRef.current as any)._codingLock = true;
+      (engineRef.current as any)._forcedCodingState = animation;
     }
     
     codingAnimTimerRef.current = setTimeout(() => {
@@ -99,6 +103,7 @@ const App = () => {
       // Unlock and return to normal behavior
       if (engineRef.current) {
         (engineRef.current as any)._codingLock = false;
+        (engineRef.current as any)._forcedCodingState = null;
       }
       currentAnimRef.current = 'idle';
       frameIndexRef.current = 0;
@@ -183,7 +188,8 @@ const App = () => {
       }, 15000);
       
       if (data.thought) {
-        showExternalThought(data.thought, 6000);
+        // Show thought for same duration as animation (8s) to keep them synced
+        showExternalThought(data.thought, 8000);
       }
       if (data.emotion) {
         triggerEmotion(data.emotion as any);
@@ -207,6 +213,17 @@ const App = () => {
         showExternalThought(data.message, 5000);
         triggerEmotion('proud');
       }
+    });
+
+    // Listen for daily summary heartbeat (every 3 hours, cannot be overridden)
+    window.electronAPI?.onDailySummary?.((data) => {
+      console.log('[App] Daily summary heartbeat:', data);
+      if (priorityMessageTimerRef.current) clearTimeout(priorityMessageTimerRef.current);
+      setPriorityMessage(data.message);
+      triggerEmotion('proud');
+      priorityMessageTimerRef.current = setTimeout(() => {
+        setPriorityMessage(null);
+      }, data.duration);
     });
 
     // Listen for tray menu actions
@@ -248,6 +265,7 @@ const App = () => {
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
       if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
       if (codingModeTimerRef.current) clearTimeout(codingModeTimerRef.current);
+      if (priorityMessageTimerRef.current) clearTimeout(priorityMessageTimerRef.current);
     };
   }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
 
@@ -398,16 +416,14 @@ const App = () => {
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
   // Priority during coding mode:
-  // 1. externalThought (editor activity notifications)
-  // 2. randomThought (coding-specific thoughts from the hook)
-  // 3. currentThought (OpenClaw - but suppress generic "Interesting..." during coding)
-  // Priority during normal mode:
-  // 1. externalThought
-  // 2. currentThought (OpenClaw) - but suppress stale generic responses
-  // 3. randomThought
+  // Priority: priorityMessage (daily summary) > externalThought > coding thoughts > OpenClaw
+  // Priority message cannot be overridden for its duration
   
   const getDisplayMessage = () => {
-    // External thought always takes highest priority
+    // Priority message (daily summary) takes absolute highest priority - cannot be overridden
+    if (priorityMessage) return priorityMessage;
+    
+    // External thought takes next priority
     if (externalThought) return externalThought;
     
     // Check if currentThought is a stale generic response (older than 10 seconds)
@@ -432,11 +448,11 @@ const App = () => {
   
   // Debug log to see what's happening
   useEffect(() => {
-    console.log('[App] Display state:', { currentThought, externalThought, randomThought, notificationData, displayMessage });
-  }, [currentThought, externalThought, randomThought, notificationData, displayMessage]);
+    console.log('[App] Display state:', { currentThought, externalThought, randomThought, priorityMessage, notificationData, displayMessage });
+  }, [currentThought, externalThought, randomThought, priorityMessage, notificationData, displayMessage]);
   
   // Show notification bubble if we have notification data, otherwise show chat bubble
-  const showNotificationBubble = notificationData !== null;
+  const showNotificationBubble = notificationData !== null && !priorityMessage;
   const showThinkingBubble = !showNotificationBubble && (isThinking || displayMessage);
   const isShowingReasoning = isThinking && currentThought && !currentThought.includes('My AI backend');
 

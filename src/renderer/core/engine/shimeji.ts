@@ -193,6 +193,7 @@ export class ShimejiEngine {
   private onPositionChange: ((pos: Position) => void) | null = null;
   private onStateChange: ((state: ShimejiState, frame: number, flip: boolean) => void) | null = null;
   public _codingLock = false;
+  public _forcedCodingState: ShimejiState | null = null;
 
   constructor(screenWidth: number, screenHeight: number) {
     this.screenWidth = screenWidth;
@@ -274,6 +275,19 @@ export class ShimejiEngine {
       if (Date.now() - this.dragStartTime > 3000) {
         this.state = 'resist';
       }
+      return;
+    }
+
+    // When coding lock is active, force stationary state and stop all movement
+    if (this._codingLock && this._forcedCodingState) {
+      this.state = this._forcedCodingState;
+      this.velocity.vx = 0;
+      this.velocity.vy = 0;
+      this.behaviorTimer = 0;
+      
+      const flip = this.facingRight;
+      this.onPositionChange?.(this.position);
+      this.onStateChange?.(this.state, 0, flip);
       return;
     }
 

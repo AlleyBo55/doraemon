@@ -185,6 +185,17 @@ function createMainWindow() {
     }
   });
 
+  // Daily summary heartbeat - every 3 hours, show for 20 seconds (cannot be overridden)
+  setInterval(() => {
+    const summary = getDailySummary();
+    console.log('[Main] Daily summary heartbeat:', summary);
+    mainWindow?.webContents.send('daily-summary', { 
+      message: summary, 
+      duration: 20000,
+      priority: true // Cannot be overridden
+    });
+  }, 3 * 60 * 60 * 1000); // 3 hours
+
   // Start web notification server for browser extension
   startWebNotificationServer(mainWindow, (notification: WebNotification) => {
     console.log('[Main] Forwarding web notification to renderer:', notification);
