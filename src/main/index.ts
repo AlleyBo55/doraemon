@@ -35,7 +35,30 @@ let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isOfflineMode = false;
-let currentModelMode: 'single' | 'multi' = 'single';
+let currentModelMode: 'haiku35' | 'haiku45' | 'multi' = 'haiku35';
+
+/**
+ * Get combined bounds that cover all displays
+ */
+function getCombinedDisplayBounds(displays: Electron.Display[]) {
+  let minX = Infinity, minY = Infinity;
+  let maxX = -Infinity, maxY = -Infinity;
+
+  for (const display of displays) {
+    const { x, y, width, height } = display.bounds;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
 
 /**
  * Create the setup window for pre-flight checks
@@ -85,14 +108,14 @@ function createSetupWindow() {
  * Create the main mascot window
  */
 function createMainWindow() {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  const allDisplays = screen.getAllDisplays();
+  const combinedBounds = getCombinedDisplayBounds(allDisplays);
 
   mainWindow = new BrowserWindow({
-    width: screenWidth,
-    height: screenHeight,
-    x: 0,
-    y: 0,
+    width: combinedBounds.width,
+    height: combinedBounds.height,
+    x: combinedBounds.x,
+    y: combinedBounds.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -111,11 +134,6 @@ function createMainWindow() {
 
   // Make window click-through except for the mascot
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
-  
-  // Ensure window stays fullscreen on display changes
-  mainWindow.on('moved', () => {
-    mainWindow?.setBounds({ x: 0, y: 0, width: screenWidth, height: screenHeight });
-  });
 
   // Load the renderer
   if (process.env['NODE_ENV'] === 'development') {
@@ -232,12 +250,22 @@ function updateTrayMenu() {
       label: 'Model Mode',
       submenu: [
         {
-          label: 'Single Model (Haiku 4.5)',
+          label: 'Haiku 3.5 (Default)',
           type: 'radio',
-          checked: currentModelMode === 'single',
+          checked: currentModelMode === 'haiku35',
           click: () => {
-            currentModelMode = 'single';
-            mainWindow?.webContents.send('model-mode-changed', 'single');
+            currentModelMode = 'haiku35';
+            mainWindow?.webContents.send('model-mode-changed', 'haiku35');
+            updateTrayMenu();
+          }
+        },
+        {
+          label: 'Haiku 4.5',
+          type: 'radio',
+          checked: currentModelMode === 'haiku45',
+          click: () => {
+            currentModelMode = 'haiku45';
+            mainWindow?.webContents.send('model-mode-changed', 'haiku45');
             updateTrayMenu();
           }
         },
@@ -268,8 +296,13 @@ function updateTrayMenu() {
     { 
       label: 'Reset Position', 
       click: () => {
-        const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-        mainWindow?.webContents.send('reset-position', { x: width / 2 - 64, y: height / 2 - 64 });
+        const primaryDisplay = screen.getPrimaryDisplay();
+        const { width, height } = primaryDisplay.workAreaSize;
+        const { x: displayX, y: displayY } = primaryDisplay.bounds;
+        mainWindow?.webContents.send('reset-position', { 
+          x: displayX + width / 2 - 64, 
+          y: displayY + height / 2 - 64 
+        });
       }
     },
     { type: 'separator' },
@@ -408,8 +441,14 @@ ipcMain.handle('get-config', () => {
 });
 
 ipcMain.handle('get-screen-size', () => {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  return { width, height };
+  const allDisplays = screen.getAllDisplays();
+  const combinedBounds = getCombinedDisplayBounds(allDisplays);
+  return { 
+    width: combinedBounds.width, 
+    height: combinedBounds.height,
+    x: combinedBounds.x,
+    y: combinedBounds.y,
+  };
 });
 
 ipcMain.on('set-position', (_event: IpcMainEvent, { x, y }: { x: number; y: number }) => {
@@ -480,8 +519,24 @@ app.whenReady().then(() => {
   }
 
   screen.on('display-metrics-changed', () => {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    mainWindow?.webContents.send('screen-change', { width, height });
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('screen-change', combinedBounds);
+  });
+
+  screen.on('display-added', () => {
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('screen-change', combinedBounds);
+  });
+
+  screen.on('display-removed', () => {
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('screen-change', combinedBounds);
   });
 });
 

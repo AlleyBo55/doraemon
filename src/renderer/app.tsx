@@ -95,10 +95,10 @@ const App = () => {
       });
       setExternalThought(null); // Clear any text-based external thought
       
-      // Auto-dismiss after 8 seconds
+      // Auto-dismiss after 15 seconds
       notificationTimerRef.current = setTimeout(() => {
         setNotificationData(null);
-      }, 8000);
+      }, 15000);
     });
     
     return () => {
@@ -134,7 +134,7 @@ const App = () => {
       
       notificationTimerRef.current = setTimeout(() => {
         setNotificationData(null);
-      }, 6000);
+      }, 15000);
     });
 
     window.electronAPI?.onEditorActivity?.((data) => {

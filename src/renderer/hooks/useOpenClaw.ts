@@ -3,7 +3,7 @@ import { emotionStore, configState } from '../stores';
 import { detectEmotion, extractThought } from '../services/openclaw';
 import type { EmotionType } from '../core/types/emotion';
 import { GATEWAY } from '../core/constants/gateway';
-import { DORAEMON_SOUL, DORAEMON_SYSTEM_PROMPT, getRandomCatchphrase } from '../core/constants/soul';
+import { DORAEMON_SOUL, getRandomCatchphrase } from '../core/constants/soul';
 
 type Message = {
   role: 'user' | 'assistant';
@@ -248,11 +248,13 @@ export const useOpenClaw = () => {
         'Waiting for response...',
         'Hmm, taking a bit longer...',
         'One more moment~',
+        'Still working on it~',
+        'Almost done~',
       ];
       
       const eventPromise = new Promise<string>((resolve) => {
         let checkCount = 0;
-        const maxChecks = 12; // Extended to 12 seconds
+        const maxChecks = 30; // Extended to 30 seconds for slower responses
         
         const checkInterval = setInterval(() => {
           checkCount++;
@@ -265,8 +267,8 @@ export const useOpenClaw = () => {
             }));
           }
           
-          // Check if we got a response in the buffer
-          if (responseBufferRef.current && responseBufferRef.current.length > 20) {
+          // Check if we got a response in the buffer (at least some content)
+          if (responseBufferRef.current && responseBufferRef.current.length > 10) {
             clearInterval(checkInterval);
             gotResponse = true;
             resolve(responseBufferRef.current);
@@ -325,6 +327,23 @@ export const useOpenClaw = () => {
       }
 
       // No response from OpenClaw events - show friendly message
+      // But only if we really got nothing (check buffer one more time)
+      if (responseBufferRef.current && responseBufferRef.current.length > 10) {
+        const content = responseBufferRef.current;
+        const assistantMessage: Message = { role: 'assistant', content, timestamp: Date.now() };
+        messagesRef.current = [...messagesRef.current, assistantMessage];
+        setState(prev => ({
+          ...prev,
+          messages: messagesRef.current,
+          isThinking: false,
+          currentThought: extractThought(content),
+          error: null,
+        }));
+        emotionStore.actions.setEmotion(detectEmotion(content), 'ai');
+        setBubbleTimeout(50000);
+        return content;
+      }
+
       console.log('No chat events received from OpenClaw');
       const fallbackMsg = "I'm connected but my AI brain isn't responding yet~ Check OpenClaw's AI backend config!";
       
