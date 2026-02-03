@@ -178,6 +178,8 @@ export class ShimejiEngine {
   private velocity: Velocity = { vx: 0, vy: 0 };
   private screenWidth: number;
   private screenHeight: number;
+  private screenOffsetX: number;
+  private screenOffsetY: number;
   private spriteSize = { width: 128, height: 128 };
   private behaviorTimer = 0;
   private behaviorDuration = 0;
@@ -195,12 +197,14 @@ export class ShimejiEngine {
   public _codingLock = false;
   public _forcedCodingState: ShimejiState | null = null;
 
-  constructor(screenWidth: number, screenHeight: number) {
+  constructor(screenWidth: number, screenHeight: number, offsetX = 0, offsetY = 0) {
     this.screenWidth = screenWidth;
     this.screenHeight = screenHeight;
+    this.screenOffsetX = offsetX;
+    this.screenOffsetY = offsetY;
     this.position = {
-      x: Math.random() * (screenWidth - this.spriteSize.width),
-      y: screenHeight - this.spriteSize.height - GROUND_MARGIN,
+      x: offsetX + Math.random() * (screenWidth - this.spriteSize.width),
+      y: offsetY + screenHeight - this.spriteSize.height - GROUND_MARGIN,
     };
   }
 
@@ -212,9 +216,11 @@ export class ShimejiEngine {
     this.onStateChange = onStateChange;
   }
 
-  updateScreenSize(width: number, height: number) {
+  updateScreenSize(width: number, height: number, offsetX = 0, offsetY = 0) {
     this.screenWidth = width;
     this.screenHeight = height;
+    this.screenOffsetX = offsetX;
+    this.screenOffsetY = offsetY;
   }
 
   setEmotion(emotion: EmotionType) {
@@ -388,7 +394,10 @@ export class ShimejiEngine {
   }
 
   private checkBoundaries() {
-    const groundY = this.screenHeight - this.spriteSize.height - GROUND_MARGIN;
+    const minX = this.screenOffsetX;
+    const maxX = this.screenOffsetX + this.screenWidth - this.spriteSize.width;
+    const minY = this.screenOffsetY;
+    const groundY = this.screenOffsetY + this.screenHeight - this.spriteSize.height - GROUND_MARGIN;
 
     if (this.position.y >= groundY) {
       this.position.y = groundY;
@@ -404,8 +413,8 @@ export class ShimejiEngine {
       this.isOnGround = false;
     }
 
-    if (this.position.x <= 0) {
-      this.position.x = 0;
+    if (this.position.x <= minX) {
+      this.position.x = minX;
       this.isOnWall = 'left';
       this.facingRight = true;
       if (['walk', 'run', 'dash', 'work_walk', 'carry'].includes(this.state)) {
@@ -415,8 +424,8 @@ export class ShimejiEngine {
           this.behaviorTimer = 0;
         }
       }
-    } else if (this.position.x >= this.screenWidth - this.spriteSize.width) {
-      this.position.x = this.screenWidth - this.spriteSize.width;
+    } else if (this.position.x >= maxX) {
+      this.position.x = maxX;
       this.isOnWall = 'right';
       this.facingRight = false;
       if (['walk', 'run', 'dash', 'work_walk', 'carry'].includes(this.state)) {
@@ -430,8 +439,8 @@ export class ShimejiEngine {
       this.isOnWall = null;
     }
 
-    if (this.position.y <= 0) {
-      this.position.y = 0;
+    if (this.position.y <= minY) {
+      this.position.y = minY;
       this.isOnCeiling = true;
       if (this.state === 'climb_wall') {
         this.state = 'grab_ceiling';
@@ -443,7 +452,7 @@ export class ShimejiEngine {
         this.behaviorDuration = 500 + Math.random() * 1000;
         this.behaviorTimer = 0;
       }
-    } else if (this.position.y > 0) {
+    } else if (this.position.y > minY) {
       this.isOnCeiling = false;
     }
 

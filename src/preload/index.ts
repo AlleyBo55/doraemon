@@ -13,8 +13,8 @@ contextBridge.exposeInMainWorld('doraemon', {
   onOpenSettings: (callback: () => void) => {
     ipcRenderer.on('open-settings', callback);
   },
-  onScreenChange: (callback: (size: { width: number; height: number }) => void) => {
-    ipcRenderer.on('screen-change', (_event: IpcRendererEvent, size: { width: number; height: number }) => callback(size));
+  onScreenChange: (callback: (size: { width: number; height: number; x: number; y: number }) => void) => {
+    ipcRenderer.on('screen-change', (_event: IpcRendererEvent, size: { width: number; height: number; x: number; y: number }) => callback(size));
   },
 });
 

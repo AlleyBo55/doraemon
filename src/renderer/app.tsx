@@ -10,6 +10,8 @@ import './styles/globals.css';
 
 const SPRITE_BASE = '/dora-sprites';
 
+type ScreenBounds = { width: number; height: number; x: number; y: number };
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -28,6 +30,10 @@ declare global {
       onTriggerEmotion: (callback: (emotion: string) => void) => void;
       onStopCodingMode: (callback: () => void) => void;
       onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
+    };
+    doraemon?: {
+      getScreenSize: () => Promise<ScreenBounds>;
+      onScreenChange: (callback: (bounds: ScreenBounds) => void) => void;
     };
   }
 }
@@ -270,37 +276,50 @@ const App = () => {
   }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
 
   useEffect(() => {
-    const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
-    engineRef.current = engine;
-    engine.setPosition(position.x, position.y);
+    const initEngine = async () => {
+      const bounds = await window.doraemon?.getScreenSize() ?? { 
+        width: window.innerWidth, 
+        height: window.innerHeight, 
+        x: 0, 
+        y: 0 
+      };
+      
+      const engine = new ShimejiEngine(bounds.width, bounds.height, bounds.x, bounds.y);
+      engineRef.current = engine;
+      
+      const startX = bounds.x + bounds.width / 2 - 64;
+      const startY = bounds.y + bounds.height - 200;
+      engine.setPosition(startX, startY);
+      setPosition({ x: startX, y: startY });
 
-    engine.setCallbacks(
-      (pos) => setPosition(pos),
-      (state, _frame, shouldFlip) => {
-        setFlip(shouldFlip);
-        // Don't override animation if coding lock is active
-        if ((engine as any)._codingLock) return;
-        
-        const animName = getAnimationForState(state);
-        if (animName !== currentAnimRef.current) {
-          currentAnimRef.current = animName;
-          frameIndexRef.current = 0;
-          frameTimerRef.current = 0;
+      engine.setCallbacks(
+        (pos) => setPosition(pos),
+        (state, _frame, shouldFlip) => {
+          setFlip(shouldFlip);
+          if ((engine as any)._codingLock) return;
+          
+          const animName = getAnimationForState(state);
+          if (animName !== currentAnimRef.current) {
+            currentAnimRef.current = animName;
+            frameIndexRef.current = 0;
+            frameTimerRef.current = 0;
+          }
         }
-      }
-    );
+      );
 
-    const handleResize = () => engine.updateScreenSize(window.innerWidth, window.innerHeight);
-    window.addEventListener('resize', handleResize);
+      window.doraemon?.onScreenChange?.((newBounds) => {
+        engine.updateScreenSize(newBounds.width, newBounds.height, newBounds.x, newBounds.y);
+      });
 
-    // Listen for reset position from tray menu
-    window.electronAPI?.onResetPosition?.((pos) => {
-      engine.setPosition(pos.x, pos.y);
-      setPosition(pos);
-    });
+      window.electronAPI?.onResetPosition?.((pos) => {
+        engine.setPosition(pos.x, pos.y);
+        setPosition(pos);
+      });
+    };
+
+    initEngine();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);

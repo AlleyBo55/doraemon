@@ -69,6 +69,19 @@ function getCombinedDisplayBounds(displays: Electron.Display[]) {
 }
 
 /**
+ * Get primary display bounds for mascot movement
+ */
+function getPrimaryDisplayBounds() {
+  const primary = screen.getPrimaryDisplay();
+  return {
+    x: primary.bounds.x,
+    y: primary.bounds.y,
+    width: primary.bounds.width,
+    height: primary.bounds.height,
+  };
+}
+
+/**
  * Create the setup window for pre-flight checks
  */
 function getPreloadPath(): string {
@@ -497,13 +510,12 @@ ipcMain.handle('get-config', () => {
 });
 
 ipcMain.handle('get-screen-size', () => {
-  const allDisplays = screen.getAllDisplays();
-  const combinedBounds = getCombinedDisplayBounds(allDisplays);
+  const bounds = getPrimaryDisplayBounds();
   return { 
-    width: combinedBounds.width, 
-    height: combinedBounds.height,
-    x: combinedBounds.x,
-    y: combinedBounds.y,
+    width: bounds.width, 
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
   };
 });
 
@@ -598,21 +610,24 @@ app.whenReady().then(() => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
+    const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 
   screen.on('display-added', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
+    const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 
   screen.on('display-removed', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
+    const primaryBounds = getPrimaryDisplayBounds();
+    mainWindow?.webContents.send('screen-change', primaryBounds);
   });
 });
 
