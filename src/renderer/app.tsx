@@ -385,6 +385,17 @@ const App = () => {
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // Track when currentThought was last set to detect stale "Interesting..."
+  const currentThoughtTimeRef = useRef<number>(0);
+  const lastCurrentThoughtRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    if (currentThought !== lastCurrentThoughtRef.current) {
+      lastCurrentThoughtRef.current = currentThought;
+      currentThoughtTimeRef.current = Date.now();
+    }
+  }, [currentThought]);
+
   // Show bubble when: thinking, has thought, has external thought, or has random thought
   // Priority during coding mode:
   // 1. externalThought (editor activity notifications)
@@ -392,12 +403,17 @@ const App = () => {
   // 3. currentThought (OpenClaw - but suppress generic "Interesting..." during coding)
   // Priority during normal mode:
   // 1. externalThought
-  // 2. currentThought (OpenClaw)
+  // 2. currentThought (OpenClaw) - but suppress stale generic responses
   // 3. randomThought
   
   const getDisplayMessage = () => {
     // External thought always takes highest priority
     if (externalThought) return externalThought;
+    
+    // Check if currentThought is a stale generic response (older than 10 seconds)
+    const isStaleGenericThought = currentThought && 
+      currentThought.includes('Interesting') && 
+      (Date.now() - currentThoughtTimeRef.current > 10000);
     
     if (isCodingMode) {
       // During coding mode, prefer coding thoughts over generic OpenClaw responses
@@ -407,8 +423,9 @@ const App = () => {
       return null;
     }
     
-    // Normal mode - OpenClaw takes priority
-    return currentThought || randomThought || null;
+    // Normal mode - OpenClaw takes priority, but suppress stale generic thoughts
+    if (currentThought && !isStaleGenericThought) return currentThought;
+    return randomThought || null;
   };
   
   const displayMessage = getDisplayMessage();
