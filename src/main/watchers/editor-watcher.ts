@@ -760,7 +760,99 @@ async function pollWorkspaceStorage() {
 async function pollTerminalHistory() {
   const home = homedir();
   
-  // Method 1: Check zsh/bash history (may not update immediately)
+  // Method 1: Check VS Code/Kiro terminal state (more reliable than shell history)
+  const terminalStatePaths = [
+    { path: join(home, 'Library/Application Support/Code/User/workspaceStorage'), editor: 'vscode' as const },
+    { path: join(home, 'Library/Application Support/Kiro/User/workspaceStorage'), editor: 'kiro' as const },
+  ];
+
+  for (const { path: storagePath, editor } of terminalStatePaths) {
+    if (!existsSync(storagePath)) continue;
+
+    try {
+      const workspaces = await readdir(storagePath, { withFileTypes: true });
+      
+      for (const ws of workspaces.slice(0, 10)) {
+        if (!ws.isDirectory()) continue;
+        
+        // Check terminal history file
+        const terminalHistoryPath = join(storagePath, ws.name, 'terminalHistory');
+        if (existsSync(terminalHistoryPath)) {
+          try {
+            const stats = await stat(terminalHistoryPath);
+            const mtime = stats.mtimeMs;
+            const key = `terminal-state:${terminalHistoryPath}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            if (mtime > lastMtime) {
+              lastModTimes.set(key, mtime);
+              
+              // Read terminal history to check for build/commit commands
+              try {
+                const content = await readFile(terminalHistoryPath, 'utf-8');
+                const lines = content.trim().split('\n');
+                const recentLines = lines.slice(-5); // Check last 5 commands
+                
+                for (const line of recentLines) {
+                  const command = line.toLowerCase();
+                  
+                  // Detect build/deploy commands
+                  if (command.includes('npm run build') || 
+                      command.includes('yarn build') || 
+                      command.includes('pnpm build') ||
+                      command.includes('npm run deploy') ||
+                      command.includes('vercel') ||
+                      command.includes('npm publish') ||
+                      command.includes('npx tsc') ||
+                      command.includes('electron-vite build')) {
+                    console.log(`[EditorWatcher] 🎉 Build command detected in ${editor} terminal!`);
+                    const activity: EditorActivity = {
+                      editor,
+                      action: 'git_commit',
+                      timestamp: Date.now(),
+                    };
+                    updateCodingStats(activity);
+                    callback?.(activity);
+                    return;
+                  }
+                  
+                  // Detect git commands
+                  if (command.includes('git commit') || command.includes('git push')) {
+                    console.log(`[EditorWatcher] 🎉 Git command detected in ${editor} terminal!`);
+                    const activity: EditorActivity = {
+                      editor,
+                      action: 'git_commit',
+                      timestamp: Date.now(),
+                    };
+                    updateCodingStats(activity);
+                    callback?.(activity);
+                    return;
+                  }
+                }
+              } catch { /* ignore read errors */ }
+              
+              // General terminal activity
+              const activity: EditorActivity = {
+                editor,
+                action: 'terminal_active',
+                timestamp: Date.now(),
+              };
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  
+  // Method 2: Check zsh/bash history (fallback, may not update immediately)
   const historyFiles = [
     join(home, '.zsh_history'),
     join(home, '.bash_history'),
@@ -869,14 +961,14 @@ async function pollBuildActivity() {
         
         // Check for build output directories that indicate a build just completed
         const buildIndicators = [
-          join(projectPath, 'dist'),
-          join(projectPath, 'build'),
-          join(projectPath, 'out'),
-          join(projectPath, '.next'),
-          join(projectPath, 'node_modules', '.vite'),
+          { path: join(projectPath, 'dist'), name: 'dist' },
+          { path: join(projectPath, 'build'), name: 'build' },
+          { path: join(projectPath, 'out'), name: 'out' },
+          { path: join(projectPath, '.next'), name: '.next' },
+          { path: join(projectPath, 'node_modules', '.vite'), name: '.vite' },
         ];
         
-        for (const buildPath of buildIndicators) {
+        for (const { path: buildPath, name: buildName } of buildIndicators) {
           if (!existsSync(buildPath)) continue;
           
           try {
@@ -890,12 +982,12 @@ async function pollBuildActivity() {
               continue;
             }
             
-            // Build directory was modified in the last 5 seconds
+            // Build directory was modified recently (within 10 seconds)
             const timeSinceModified = Date.now() - mtime;
-            if (mtime > lastMtime && timeSinceModified < 5000) {
+            if (mtime > lastMtime && timeSinceModified < 10000) {
               lastModTimes.set(key, mtime);
               
-              console.log(`[EditorWatcher] 🎉 Build completed in ${dir.name}!`);
+              console.log(`[EditorWatcher] 🎉 Build completed in ${dir.name}/${buildName}!`);
               
               const activity: EditorActivity = {
                 editor: 'unknown',
@@ -907,6 +999,41 @@ async function pollBuildActivity() {
               updateCodingStats(activity);
               callback?.(activity);
               return;
+            }
+            
+            lastModTimes.set(key, mtime);
+          } catch { /* ignore */ }
+        }
+        
+        // Also check for package-lock.json changes (npm install completed)
+        const lockFiles = [
+          join(projectPath, 'package-lock.json'),
+          join(projectPath, 'yarn.lock'),
+          join(projectPath, 'pnpm-lock.yaml'),
+        ];
+        
+        for (const lockFile of lockFiles) {
+          if (!existsSync(lockFile)) continue;
+          
+          try {
+            const stats = await stat(lockFile);
+            const mtime = stats.mtimeMs;
+            const key = `lock:${lockFile}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            // Lock file was modified recently
+            const timeSinceModified = Date.now() - mtime;
+            if (mtime > lastMtime && timeSinceModified < 5000) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 📦 Package install completed in ${dir.name}!`);
+              
+              // Don't trigger celebration for npm install, just log
             }
             
             lastModTimes.set(key, mtime);
