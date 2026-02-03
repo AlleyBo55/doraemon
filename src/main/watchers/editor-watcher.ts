@@ -759,6 +759,8 @@ async function pollWorkspaceStorage() {
 
 async function pollTerminalHistory() {
   const home = homedir();
+  
+  // Method 1: Check zsh/bash history (may not update immediately)
   const historyFiles = [
     join(home, '.zsh_history'),
     join(home, '.bash_history'),
@@ -786,7 +788,7 @@ async function pollTerminalHistory() {
           const lines = content.trim().split('\n');
           const lastLine = lines[lines.length - 1] || '';
           
-          // zsh_history format: : timestamp:0;command
+          // zsh_history format: : timestamp:0;command OR just command
           // bash_history format: just the command
           let command = lastLine;
           if (lastLine.includes(';')) {
@@ -826,16 +828,6 @@ async function pollTerminalHistory() {
             callback?.(activity);
             return;
           }
-          
-          // Detect test commands
-          if (command.includes('npm test') || 
-              command.includes('npm run test') || 
-              command.includes('vitest') ||
-              command.includes('jest') ||
-              command.includes('pytest')) {
-            console.log(`[EditorWatcher] 🧪 Test command detected!`);
-            // Just regular terminal activity for tests
-          }
         } catch { /* ignore read errors */ }
         
         const activity: EditorActivity = {
@@ -847,6 +839,79 @@ async function pollTerminalHistory() {
         updateCodingStats(activity);
         callback?.(activity);
         return;
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+// Separate function to detect build completion via lock files and output directories
+async function pollBuildActivity() {
+  const home = homedir();
+  const commonPaths = [
+    join(home, 'Developer'),
+    join(home, 'Projects'),
+    join(home, 'Code'),
+    join(home, 'repos'),
+    join(home, 'workspace'),
+    join(home, 'ngoding'),
+    join(home, 'dev'),
+    join(home, 'src'),
+  ];
+
+  for (const basePath of commonPaths) {
+    if (!existsSync(basePath)) continue;
+
+    try {
+      const dirs = readdirSync(basePath, { withFileTypes: true });
+      for (const dir of dirs.slice(0, 15)) {
+        if (!dir.isDirectory()) continue;
+        const projectPath = join(basePath, dir.name);
+        
+        // Check for build output directories that indicate a build just completed
+        const buildIndicators = [
+          join(projectPath, 'dist'),
+          join(projectPath, 'build'),
+          join(projectPath, 'out'),
+          join(projectPath, '.next'),
+          join(projectPath, 'node_modules', '.vite'),
+        ];
+        
+        for (const buildPath of buildIndicators) {
+          if (!existsSync(buildPath)) continue;
+          
+          try {
+            const stats = await stat(buildPath);
+            const mtime = stats.mtimeMs;
+            const key = `build:${buildPath}`;
+            const lastMtime = lastModTimes.get(key);
+            
+            if (lastMtime === undefined) {
+              lastModTimes.set(key, mtime);
+              continue;
+            }
+            
+            // Build directory was modified in the last 5 seconds
+            const timeSinceModified = Date.now() - mtime;
+            if (mtime > lastMtime && timeSinceModified < 5000) {
+              lastModTimes.set(key, mtime);
+              
+              console.log(`[EditorWatcher] 🎉 Build completed in ${dir.name}!`);
+              
+              const activity: EditorActivity = {
+                editor: 'unknown',
+                action: 'git_commit', // Reuse for celebration
+                timestamp: Date.now(),
+              };
+              
+              lastActivity = activity;
+              updateCodingStats(activity);
+              callback?.(activity);
+              return;
+            }
+            
+            lastModTimes.set(key, mtime);
+          } catch { /* ignore */ }
+        }
       }
     } catch { /* ignore */ }
   }
@@ -1078,6 +1143,7 @@ export function startEditorWatcher(
     await pollAIChatActivity();
     await pollRecentlyOpened();
     await pollGitActivity();
+    await pollBuildActivity();
   }, 2000);
   
   breakCheckInterval = setInterval(checkBreakReminder, 60 * 1000);

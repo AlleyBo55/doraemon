@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTriggerEmotion: (callback: (emotion: string) => void) => {
     ipcRenderer.on('trigger-emotion', (_event: IpcRendererEvent, emotion: string) => callback(emotion));
   },
+  onStopCodingMode: (callback: () => void) => {
+    ipcRenderer.on('stop-coding-mode', () => callback());
+  },
   // Web notifications from browser extension
   onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => {
     console.log('[Preload] Registering web-notification listener');

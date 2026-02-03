@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import thoughts from '../core/constants/thoughts.json';
+import codingThoughts from '../core/constants/coding-thoughts.json';
 import { DORAEMON_SOUL, getRandomGadget } from '../core/constants/soul';
 import type { EmotionType } from '../core/types/emotion';
 
 type ThoughtCategory = keyof typeof thoughts;
+type CodingThoughtCategory = keyof typeof codingThoughts;
 
 const THOUGHT_INTERVAL = 10000;
 const THOUGHT_DISPLAY_DURATION = 6500;
 const THOUGHTS_PER_CYCLE = 10;
 const COOLDOWN_CYCLES = 3;
+const CODING_MODE_COOLDOWN = 10000; // 10s delay after coding ends before random thoughts resume
 
 const emotionToCategory: Partial<Record<EmotionType, ThoughtCategory>> = {
   happy: 'happy',
@@ -34,7 +37,7 @@ interface ThoughtHistory {
   cycleUsed: number;
 }
 
-export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: boolean, isPaused = false) => {
+export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: boolean, isPaused = false, isCodingMode = false) => {
   const [thought, setThought] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const displayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -42,15 +45,29 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
   const currentCycleRef = useRef<number>(0);
   const thoughtsInCycleRef = useRef<number>(0);
   const historyRef = useRef<ThoughtHistory[]>([]);
+  const codingHistoryRef = useRef<ThoughtHistory[]>([]);
+  const codingEndedAtRef = useRef<number | null>(null);
   
   // Use refs to avoid stale closures in setTimeout
   const isPausedRef = useRef(isPaused);
   const isConnectedRef = useRef(isConnected);
   const emotionRef = useRef(currentEmotion);
+  const isCodingModeRef = useRef(isCodingMode);
   
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { isConnectedRef.current = isConnected; }, [isConnected]);
   useEffect(() => { emotionRef.current = currentEmotion; }, [currentEmotion]);
+  useEffect(() => { 
+    const wasCoding = isCodingModeRef.current;
+    isCodingModeRef.current = isCodingMode;
+    
+    // Track when coding mode ends for cooldown
+    if (wasCoding && !isCodingMode) {
+      codingEndedAtRef.current = Date.now();
+    } else if (isCodingMode) {
+      codingEndedAtRef.current = null;
+    }
+  }, [isCodingMode]);
 
   const isThoughtAvailable = useCallback((text: string): boolean => {
     const currentCycle = currentCycleRef.current;
@@ -75,6 +92,41 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
       historyRef.current = historyRef.current.slice(-150);
     }
   }, []);
+
+  const isCodingThoughtAvailable = useCallback((text: string): boolean => {
+    const currentCycle = currentCycleRef.current;
+    const entry = codingHistoryRef.current.find(h => h.thought === text);
+    if (!entry) return true;
+    return (currentCycle - entry.cycleUsed) >= COOLDOWN_CYCLES;
+  }, []);
+
+  const recordCodingThought = useCallback((text: string) => {
+    const currentCycle = currentCycleRef.current;
+    const existingIdx = codingHistoryRef.current.findIndex(h => h.thought === text);
+    
+    if (existingIdx >= 0) {
+      codingHistoryRef.current[existingIdx].cycleUsed = currentCycle;
+    } else {
+      codingHistoryRef.current.push({ thought: text, cycleUsed: currentCycle });
+    }
+
+    if (codingHistoryRef.current.length > 200) {
+      codingHistoryRef.current = codingHistoryRef.current.slice(-150);
+    }
+  }, []);
+
+  const getRandomCodingThought = useCallback((): string => {
+    const categories: CodingThoughtCategory[] = ['general', 'debugging', 'thinking', 'progress', 'motivation', 'humor', 'languages', 'tools'];
+    const category = categories[Math.floor(Math.random() * categories.length)];
+    const categoryThoughts = codingThoughts[category] || codingThoughts.general;
+    
+    const availableThoughts = categoryThoughts.filter(t => isCodingThoughtAvailable(t));
+    
+    if (availableThoughts.length > 0) {
+      return availableThoughts[Math.floor(Math.random() * availableThoughts.length)];
+    }
+    return categoryThoughts[Math.floor(Math.random() * categoryThoughts.length)];
+  }, [isCodingThoughtAvailable]);
 
   const getSoulEnhancedThought = useCallback((baseThought: string): string => {
     if (Math.random() < 0.1) {
@@ -125,32 +177,47 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     return getSoulEnhancedThought(selectedThought);
   }, [isThoughtAvailable, getSoulEnhancedThought]);
 
-  const showThought = useCallback((text: string, duration = THOUGHT_DISPLAY_DURATION) => {
+  const showThought = useCallback((text: string, duration = THOUGHT_DISPLAY_DURATION, isCoding = false) => {
     setThought(text);
-    recordThought(text);
+    if (isCoding) {
+      recordCodingThought(text);
+    } else {
+      recordThought(text);
+    }
     
     if (displayTimeoutRef.current) clearTimeout(displayTimeoutRef.current);
     displayTimeoutRef.current = setTimeout(() => {
       setThought(null);
     }, duration);
-  }, [recordThought]);
+  }, [recordThought, recordCodingThought]);
 
   const triggerRandomThought = useCallback(() => {
-    // Show random thoughts when not paused (regardless of connection status)
-    // The display priority in app.tsx handles which message to show
+    // Check if we're in coding mode cooldown (10s after coding ends)
+    const inCodingCooldown = codingEndedAtRef.current !== null && 
+      (Date.now() - codingEndedAtRef.current) < CODING_MODE_COOLDOWN;
+    
+    // Show thoughts when not paused
     if (!isPausedRef.current) {
-      const randomThought = getRandomThought(emotionRef.current);
-      showThought(randomThought);
-      
-      thoughtsInCycleRef.current++;
-      if (thoughtsInCycleRef.current >= THOUGHTS_PER_CYCLE) {
-        thoughtsInCycleRef.current = 0;
-        currentCycleRef.current++;
+      if (isCodingModeRef.current) {
+        // In coding mode - use coding thoughts
+        const codingThought = getRandomCodingThought();
+        showThought(codingThought, THOUGHT_DISPLAY_DURATION, true);
+      } else if (!inCodingCooldown) {
+        // Not in coding mode and cooldown passed - use regular thoughts
+        const randomThought = getRandomThought(emotionRef.current);
+        showThought(randomThought);
+        
+        thoughtsInCycleRef.current++;
+        if (thoughtsInCycleRef.current >= THOUGHTS_PER_CYCLE) {
+          thoughtsInCycleRef.current = 0;
+          currentCycleRef.current++;
+        }
       }
+      // If in cooldown, skip this cycle (no thought shown)
     }
     
     timeoutRef.current = setTimeout(triggerRandomThought, THOUGHT_INTERVAL);
-  }, [getRandomThought, showThought]);
+  }, [getRandomThought, getRandomCodingThought, showThought]);
 
   useEffect(() => {
     const initialDelay = 1000 + Math.random() * 2000;

@@ -25,6 +25,7 @@ declare global {
       onToggleChat: (callback: () => void) => void;
       onClearHistory: (callback: () => void) => void;
       onTriggerEmotion: (callback: (emotion: string) => void) => void;
+      onStopCodingMode: (callback: () => void) => void;
       onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
     };
   }
@@ -57,8 +58,8 @@ const App = () => {
     clearHistory,
   } = useOpenClaw();
 
-  // Pass externalThought and isCodingMode to pause random thoughts
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null || isCodingMode);
+  // Pass externalThought to pause random thoughts, but let coding mode handle its own thoughts
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null, isCodingMode);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -218,7 +219,28 @@ const App = () => {
     });
 
     window.electronAPI?.onTriggerEmotion?.((emotion) => {
-      triggerEmotion(emotion as any);
+      // Check if this is a coding animation (not a regular emotion)
+      const codingAnimations = ['coding', 'coding_allday', 'coding_intense', 'coding_thinking', 'coding_celebrate', 'coding_focused', 'coding_typing'];
+      if (codingAnimations.includes(emotion)) {
+        // Trigger as a long-running coding animation (until manually changed)
+        console.log('[App] Triggering coding animation from tray:', emotion);
+        triggerCodingAnimation(emotion, 60 * 60 * 1000); // 1 hour - effectively permanent until changed
+        showExternalThought(`Coding mode: ${emotion.replace('coding_', '').replace('coding', 'active')}~`, 3000);
+      } else {
+        triggerEmotion(emotion as any);
+      }
+    });
+
+    window.electronAPI?.onStopCodingMode?.(() => {
+      console.log('[App] Stopping coding mode');
+      if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
+      if (engineRef.current) {
+        (engineRef.current as any)._codingLock = false;
+      }
+      currentAnimRef.current = 'idle';
+      frameIndexRef.current = 0;
+      setIsCodingMode(false);
+      showExternalThought('Back to normal~', 2000);
     });
 
     return () => {
@@ -365,8 +387,8 @@ const App = () => {
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
   // externalThought (coding/notifications) takes HIGHEST priority
-  // During coding mode, suppress random thoughts - only show coding-specific thoughts
-  const displayMessage = externalThought || (isCodingMode ? null : currentThought) || (isCodingMode ? null : randomThought) || null;
+  // During coding mode, randomThought contains coding-specific thoughts from the hook
+  const displayMessage = externalThought || currentThought || randomThought || null;
   
   // Debug log to see what's happening
   useEffect(() => {

@@ -257,7 +257,7 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
     loop: true,
   },
   success: {
-    frames: ['shime41l.png', 'shime41m.png', 'shime41n.png'],
+    frames: ['codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png','codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png'],
     frameDelay: 150,
     loop: true,
   },
@@ -447,6 +447,37 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   coding_celebrate: {
     frames: ['codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png','codingcelebrate1.png','codingcelebrate2.png','codingcelebrate3.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png'],
     frameDelay: 120,
+    loop: true,
+  },
+  
+  // Coding All Day - comprehensive coding animation with all coding sprites
+  coding_allday: {
+    frames: [
+      // Regular coding
+      'coding.png', 'coding2.png', 'coding3.png', 'coding4.png',
+      'coding9.png', 'coding10.png', 'coding11.png',
+      // Intense coding
+      'codingintense.png', 'codingintense1.png', 'codingintense2.png', 
+      'codingintense3.png', 'codingintense4.png',
+      // Thinking
+      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
+      'codingthinking4.png', 'codingthinking5.png',
+      // Back to regular
+      'coding.png', 'coding3.png', 'coding4.png', 'coding9.png',
+      // More intense
+      'codingintense1.png', 'codingintense3.png', 'codingintense2.png',
+      // More thinking
+      'codingthinking3.png', 'codingthinking1.png', 'codingthinking4.png',
+      // Regular again
+      'coding2.png', 'coding10.png', 'coding11.png', 'coding4.png',
+      // Intense burst
+      'codingintense4.png', 'codingintense.png', 'codingintense2.png',
+      // Deep thinking
+      'codingthinking5.png', 'codingthinking2.png', 'codingthinking4.png',
+      // Final regular
+      'coding.png', 'coding9.png', 'coding3.png', 'coding11.png',
+    ],
+    frameDelay: 250,
     loop: true,
   },
 };
