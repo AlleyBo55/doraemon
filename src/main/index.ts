@@ -82,6 +82,19 @@ function getPrimaryDisplayBounds() {
 }
 
 /**
+ * Get display bounds for a given point (mascot position)
+ */
+function getDisplayBoundsAtPoint(x: number, y: number) {
+  const display = screen.getDisplayNearestPoint({ x, y });
+  return {
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
+  };
+}
+
+/**
  * Create the setup window for pre-flight checks
  */
 function getPreloadPath(): string {
@@ -129,13 +142,14 @@ function createSetupWindow() {
  * Create the main mascot window
  */
 function createMainWindow() {
-  const primaryBounds = getPrimaryDisplayBounds();
+  const allDisplays = screen.getAllDisplays();
+  const combinedBounds = getCombinedDisplayBounds(allDisplays);
 
   mainWindow = new BrowserWindow({
-    width: primaryBounds.width,
-    height: primaryBounds.height,
-    x: primaryBounds.x,
-    y: primaryBounds.y,
+    width: combinedBounds.width,
+    height: combinedBounds.height,
+    x: combinedBounds.x,
+    y: combinedBounds.y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -518,6 +532,16 @@ ipcMain.handle('get-screen-size', () => {
   };
 });
 
+ipcMain.handle('get-display-at-point', (_event, { x, y }: { x: number; y: number }) => {
+  const bounds = getDisplayBoundsAtPoint(x, y);
+  return {
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+  };
+});
+
 ipcMain.on('set-position', (_event: IpcMainEvent, { x, y }: { x: number; y: number }) => {
   if (mainWindow) {
     mainWindow.setPosition(Math.round(x), Math.round(y), false);
@@ -606,21 +630,21 @@ app.whenReady().then(() => {
   }
 
   screen.on('display-metrics-changed', () => {
-    const primaryBounds = getPrimaryDisplayBounds();
-    mainWindow?.setBounds(primaryBounds);
-    mainWindow?.webContents.send('screen-change', primaryBounds);
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
   });
 
   screen.on('display-added', () => {
-    const primaryBounds = getPrimaryDisplayBounds();
-    mainWindow?.setBounds(primaryBounds);
-    mainWindow?.webContents.send('screen-change', primaryBounds);
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
   });
 
   screen.on('display-removed', () => {
-    const primaryBounds = getPrimaryDisplayBounds();
-    mainWindow?.setBounds(primaryBounds);
-    mainWindow?.webContents.send('screen-change', primaryBounds);
+    const allDisplays = screen.getAllDisplays();
+    const combinedBounds = getCombinedDisplayBounds(allDisplays);
+    mainWindow?.setBounds(combinedBounds);
   });
 });
 

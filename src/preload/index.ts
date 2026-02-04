@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 contextBridge.exposeInMainWorld('doraemon', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   getScreenSize: () => ipcRenderer.invoke('get-screen-size'),
+  getDisplayAtPoint: (x: number, y: number) => ipcRenderer.invoke('get-display-at-point', { x, y }),
   setPosition: (x: number, y: number) => {
     ipcRenderer.send('set-position', { x, y });
   },

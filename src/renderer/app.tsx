@@ -2,7 +2,8 @@ import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
 import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
-import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts } from './hooks';
+import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts, useExperienceSystem } from './hooks';
+import { emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
 import { getAnimation } from './core/constants/sprites';
@@ -33,6 +34,7 @@ declare global {
     };
     doraemon?: {
       getScreenSize: () => Promise<ScreenBounds>;
+      getDisplayAtPoint: (x: number, y: number) => Promise<ScreenBounds>;
       onScreenChange: (callback: (bounds: ScreenBounds) => void) => void;
     };
   }
@@ -123,6 +125,9 @@ const App = () => {
     externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
   }, []);
 
+  // Connect experience system - emotions update the store directly, thoughts via callback
+  useExperienceSystem(showExternalThought);
+
   // Listen for web notifications from browser extension - separate effect, runs once
   useEffect(() => {
     console.log('[App] Registering web notification listener');
@@ -198,7 +203,9 @@ const App = () => {
         showExternalThought(data.thought, 8000);
       }
       if (data.emotion) {
-        triggerEmotion(data.emotion as any);
+        // Set emotion directly without triggering OpenClaw's thought system
+        // Editor activity has its own thoughts via data.thought
+        emotionStore.actions.setEmotion(data.emotion as any, 'interaction');
       }
       if (data.animation) {
         triggerCodingAnimation(data.animation, 8000);
@@ -275,6 +282,8 @@ const App = () => {
     };
   }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
 
+  const currentDisplayRef = useRef<string>('');
+
   useEffect(() => {
     const initEngine = async () => {
       const bounds = await window.doraemon?.getScreenSize() ?? { 
@@ -283,6 +292,8 @@ const App = () => {
         x: 0, 
         y: 0 
       };
+      
+      currentDisplayRef.current = `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`;
       
       const engine = new ShimejiEngine(bounds.width, bounds.height, bounds.x, bounds.y);
       engineRef.current = engine;
@@ -293,7 +304,19 @@ const App = () => {
       setPosition({ x: startX, y: startY });
 
       engine.setCallbacks(
-        (pos) => setPosition(pos),
+        async (pos) => {
+          setPosition(pos);
+          
+          // Check if mascot moved to a different display
+          const newBounds = await window.doraemon?.getDisplayAtPoint(pos.x + 64, pos.y + 64);
+          if (newBounds) {
+            const newDisplayKey = `${newBounds.x},${newBounds.y},${newBounds.width},${newBounds.height}`;
+            if (newDisplayKey !== currentDisplayRef.current) {
+              currentDisplayRef.current = newDisplayKey;
+              engine.updateScreenSize(newBounds.width, newBounds.height, newBounds.x, newBounds.y);
+            }
+          }
+        },
         (state, _frame, shouldFlip) => {
           setFlip(shouldFlip);
           if ((engine as any)._codingLock) return;
@@ -306,10 +329,6 @@ const App = () => {
           }
         }
       );
-
-      window.doraemon?.onScreenChange?.((newBounds) => {
-        engine.updateScreenSize(newBounds.width, newBounds.height, newBounds.x, newBounds.y);
-      });
 
       window.electronAPI?.onResetPosition?.((pos) => {
         engine.setPosition(pos.x, pos.y);

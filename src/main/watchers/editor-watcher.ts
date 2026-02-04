@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from 'fs/promises';
 import { join, basename, extname, resolve } from 'path';
 import { homedir } from 'os';
 import { BrowserWindow } from 'electron';
+import { codingActivityBuffer } from '../experience-system/coding-activity-buffer.js';
 
 export type EditorActivity = {
   editor: 'vscode' | 'kiro' | 'antigravity' | 'unknown';
@@ -380,6 +381,16 @@ function safeWatch(filePath: string, onEvent: (event: string) => void): FSWatche
 function updateCodingStats(activity: EditorActivity) {
   const now = Date.now();
   const timeSinceLastActivity = now - codingStats.lastActivityTime;
+  
+  // Feed activity to experience system buffer
+  codingActivityBuffer.add({
+    editor: activity.editor,
+    action: activity.action,
+    file: activity.file,
+    language: activity.language,
+    fileType: activity.fileType,
+    timestamp: activity.timestamp,
+  });
   
   if (timeSinceLastActivity < 5 * 60 * 1000) {
     codingStats.totalCodingTime += timeSinceLastActivity;

@@ -13,15 +13,46 @@ import { PostGenerator } from './post-generator.js';
 import { PostQueue } from './post-queue.js';
 import { ExperienceSystemConfig, DEFAULT_CONFIG, LivingPost } from './types.js';
 import { experienceBridge } from './bridge.js';
+import { codingActivityBuffer } from './coding-activity-buffer.js';
+
+const CODING_THOUGHTS_BY_LANGUAGE: Record<string, string[]> = {
+  TypeScript: [
+    'TypeScript session going strong~ Types are love 💙',
+    'Loving these type definitions~',
+    'Type safety feels so good!',
+  ],
+  Python: [
+    'Python vibes~ So readable!',
+    'Pythonic code flowing nicely~',
+    'import this 🐍',
+  ],
+  Rust: [
+    'Rust session! Memory safety ftw~',
+    'Fighting the borrow checker... and winning!',
+    'Fearless concurrency mode~',
+  ],
+  JavaScript: [
+    'JavaScript time! Classic~',
+    'JS flowing nicely~',
+    'Dynamic and fun!',
+  ],
+  default: [
+    'Coding session going well~',
+    'In the zone! 💻',
+    'Building something cool~',
+  ],
+};
 
 export class ExperienceSystem {
   private config: ExperienceSystemConfig;
   private postGenerator: PostGenerator;
   private postQueue: PostQueue;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private codingThoughtInterval: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
   private postsGenerated = 0;
   private lastPostTime: Date | null = null;
+  private lastCodingThoughtTime = 0;
 
   constructor(config: Partial<ExperienceSystemConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -49,12 +80,39 @@ export class ExperienceSystem {
     // Schedule regular heartbeats
     const intervalMs = this.config.heartbeatIntervalMinutes * 60 * 1000;
     this.heartbeatInterval = setInterval(() => this.heartbeat(), intervalMs);
+
+    // Check for coding activity every 5 minutes and send thoughts
+    this.codingThoughtInterval = setInterval(() => this.maybeSendCodingThought(), 5 * 60 * 1000);
+  }
+
+  private maybeSendCodingThought(): void {
+    const stats = codingActivityBuffer.getSessionStats(10); // Last 10 minutes
+    
+    // Only send if there's been recent coding activity
+    if (stats.totalActivities < 3) return;
+    
+    // Don't spam - at least 10 minutes between thoughts
+    const now = Date.now();
+    if (now - this.lastCodingThoughtTime < 10 * 60 * 1000) return;
+    
+    const lang = stats.dominantLanguage || 'default';
+    const thoughts = CODING_THOUGHTS_BY_LANGUAGE[lang] || CODING_THOUGHTS_BY_LANGUAGE.default;
+    const thought = thoughts[Math.floor(Math.random() * thoughts.length)];
+    
+    experienceBridge.sendCodingThought(thought, stats.dominantLanguage || undefined);
+    this.lastCodingThoughtTime = now;
+    
+    console.log('[ExperienceSystem] Sent coding thought:', thought);
   }
 
   stop(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+    if (this.codingThoughtInterval) {
+      clearInterval(this.codingThoughtInterval);
+      this.codingThoughtInterval = null;
     }
     this.isRunning = false;
     console.log('[ExperienceSystem] Stopped');
@@ -73,6 +131,22 @@ export class ExperienceSystem {
       const post = await this.postGenerator.generatePost();
 
       if (post) {
+        // Send emotional state to renderer for animation sync
+        if (post.internalState) {
+          experienceBridge.sendEmotionalState({
+            primary: post.emotion as any,
+            intensity: 0.7,
+            valence: 0.5,
+            arousal: 0.5,
+            internalState: post.internalState,
+          });
+        }
+
+        // Send existential thought to renderer
+        if (post.category === 'existential' || post.category === 'reflection') {
+          experienceBridge.sendExistentialThought(post.content);
+        }
+
         const queued = await this.postQueue.enqueue(post);
         if (queued) {
           console.log('[ExperienceSystem] Post queued:', post.id, '-', post.content.substring(0, 50));
@@ -128,3 +202,4 @@ export { EmotionalMapper } from './emotional-mapper.js';
 export { ExistentialLayer } from './existential-layer.js';
 export { sanitizeContent, sanitizeFilename, sanitizeLogEntry } from './sanitizer.js';
 export { experienceBridge, ExperienceBridge } from './bridge.js';
+export { codingActivityBuffer, type CodingSessionStats, type BufferedActivity } from './coding-activity-buffer.js';

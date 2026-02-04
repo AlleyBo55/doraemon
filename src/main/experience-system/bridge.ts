@@ -75,6 +75,20 @@ export class ExperienceBridge {
     this.lastThoughtSent = reflection;
   }
 
+  sendCodingThought(thought: string, language?: string): void {
+    if (!this.mainWindow) return;
+    if (thought === this.lastThoughtSent) return;
+
+    this.mainWindow.webContents.send('experience-thought', {
+      thought,
+      duration: 6000,
+      priority: false,
+      source: 'coding',
+      language,
+    });
+    this.lastThoughtSent = thought;
+  }
+
   sendConsciousnessUpdate(proxy: ConsciousnessProxy): void {
     if (!this.mainWindow) return;
 

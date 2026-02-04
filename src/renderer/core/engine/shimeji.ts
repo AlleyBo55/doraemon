@@ -181,6 +181,7 @@ export class ShimejiEngine {
   private screenOffsetX: number;
   private screenOffsetY: number;
   private spriteSize = { width: 128, height: 128 };
+  private codingSpriteSize = { width: 168, height: 168 };
   private behaviorTimer = 0;
   private behaviorDuration = 0;
   private isDragging = false;
@@ -221,6 +222,11 @@ export class ShimejiEngine {
     this.screenHeight = height;
     this.screenOffsetX = offsetX;
     this.screenOffsetY = offsetY;
+  }
+
+  private getCurrentSpriteSize() {
+    const isCodingState = this.state.startsWith('coding') || this._forcedCodingState?.startsWith('coding');
+    return isCodingState ? this.codingSpriteSize : this.spriteSize;
   }
 
   setEmotion(emotion: EmotionType) {
@@ -394,10 +400,11 @@ export class ShimejiEngine {
   }
 
   private checkBoundaries() {
+    const currentSize = this.getCurrentSpriteSize();
     const minX = this.screenOffsetX;
-    const maxX = this.screenOffsetX + this.screenWidth - this.spriteSize.width;
+    const maxX = this.screenOffsetX + this.screenWidth - currentSize.width;
     const minY = this.screenOffsetY;
-    const groundY = this.screenOffsetY + this.screenHeight - this.spriteSize.height - GROUND_MARGIN;
+    const groundY = this.screenOffsetY + this.screenHeight - currentSize.height - GROUND_MARGIN;
 
     if (this.position.y >= groundY) {
       this.position.y = groundY;
@@ -523,7 +530,8 @@ export class ShimejiEngine {
   drag(x: number, y: number) {
     if (!this.isDragging) return;
 
-    const centerX = this.position.x + this.spriteSize.width / 2;
+    const currentSize = this.getCurrentSpriteSize();
+    const centerX = this.position.x + currentSize.width / 2;
     const diff = x - centerX;
 
     if (diff < -50) this.state = 'drag_left_far';
@@ -535,8 +543,8 @@ export class ShimejiEngine {
 
     if (Date.now() - this.dragStartTime > 3000) this.state = 'resist';
 
-    this.position.x = x - this.spriteSize.width / 2;
-    this.position.y = y - this.spriteSize.height / 2;
+    this.position.x = x - currentSize.width / 2;
+    this.position.y = y - currentSize.height / 2;
     this.onPositionChange?.(this.position);
   }
 

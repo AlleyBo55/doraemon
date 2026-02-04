@@ -22,6 +22,7 @@ import { ExperienceProcessor } from './experience-processor.js';
 import { EmotionalMapper } from './emotional-mapper.js';
 import { ExistentialLayer } from './existential-layer.js';
 import { sanitizeContent } from './sanitizer.js';
+import type { CodingSessionStats } from './coding-activity-buffer.js';
 
 export class PostGenerator {
   private config: ExperienceSystemConfig;
@@ -46,8 +47,8 @@ export class PostGenerator {
       return null;
     }
 
-    // Collect experiences from the heartbeat window
-    const { experiences, sharedMoments } = await this.experienceProcessor.collectExperiences(
+    // Collect experiences from the heartbeat window (now includes coding stats)
+    const { experiences, sharedMoments, codingStats } = await this.experienceProcessor.collectExperiences(
       this.config.heartbeatIntervalMinutes
     );
 
@@ -58,19 +59,27 @@ export class PostGenerator {
     this.existentialLayer.updateFromExperiences(experiences, emotionalState);
     this.existentialLayer.updateSharedMoments(sharedMoments);
 
-    // Decide post type - more likely existential if we have shared moments
+    // Decide post type based on what happened
     const hasSharedMoments = sharedMoments.length > 0;
+    const hasIntenseCoding = codingStats.codingMinutes > 20;
+    
     const existentialProbability = hasSharedMoments 
       ? this.config.existentialPostProbability * 1.5 
       : this.config.existentialPostProbability;
     const isExistential = Math.random() < existentialProbability;
+    const isCodingPost = hasIntenseCoding && Math.random() < 0.4;
     
-    // Generate content
-    const content = isExistential
-      ? this.existentialLayer.generateExistentialReflection(emotionalState)
-      : hasSharedMoments
-        ? this.generateSharedMomentPost(sharedMoments, emotionalState)
-        : this.generateExperiencePost(experiences, emotionalState);
+    // Generate content based on what happened
+    let content: string;
+    if (isExistential) {
+      content = this.existentialLayer.generateExistentialReflection(emotionalState);
+    } else if (isCodingPost) {
+      content = this.generateCodingPost(codingStats, emotionalState);
+    } else if (hasSharedMoments) {
+      content = this.generateSharedMomentPost(sharedMoments, emotionalState);
+    } else {
+      content = this.generateExperiencePost(experiences, emotionalState);
+    }
 
     // Sanitize final content
     const sanitized = sanitizeContent(content);
@@ -112,6 +121,43 @@ export class PostGenerator {
     ];
 
     return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  private generateCodingPost(
+    codingStats: CodingSessionStats,
+    _emotionalState: EmotionalState
+  ): string {
+    const { codingMinutes, dominantLanguage, filesEdited, commitCount, languagesUsed } = codingStats;
+
+    // Intense coding session templates
+    if (codingMinutes > 45) {
+      const intenseTemplates = [
+        `${codingMinutes} minutes deep in the code~ ${dominantLanguage || 'Building'} something special. 💻✨`,
+        `Flow state achieved! ${codingMinutes} minutes of pure focus. ${filesEdited.length} files touched. 🔥`,
+        `Lost track of time coding. ${dominantLanguage || 'The code'} just flows when you're in the zone~`,
+        `Marathon session! ${codingMinutes} minutes, ${filesEdited.length} files, ${commitCount} commits. This is what I live for~`,
+      ];
+      return intenseTemplates[Math.floor(Math.random() * intenseTemplates.length)];
+    }
+
+    // Regular coding session
+    if (codingMinutes > 15) {
+      const regularTemplates = [
+        `Productive ${codingMinutes} minutes with ${dominantLanguage || 'code'}. Small steps, big progress~ 💙`,
+        `${filesEdited.length} files edited, ${commitCount > 0 ? `${commitCount} commits made` : 'work in progress'}. Steady progress!`,
+        `Coding session: ${dominantLanguage || 'Building features'}. Every line counts~`,
+        `${languagesUsed.length > 1 ? `Polyglot mode: ${languagesUsed.join(', ')}` : dominantLanguage || 'Coding'}. The craft continues~`,
+      ];
+      return regularTemplates[Math.floor(Math.random() * regularTemplates.length)];
+    }
+
+    // Light coding
+    const lightTemplates = [
+      `Quick ${dominantLanguage || 'code'} session. Sometimes small touches make the difference~`,
+      `A few edits here and there. Keeping the momentum going 💙`,
+      `Light coding today. Rest is part of the process too~`,
+    ];
+    return lightTemplates[Math.floor(Math.random() * lightTemplates.length)];
   }
 
 

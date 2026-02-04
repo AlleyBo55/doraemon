@@ -26,6 +26,7 @@ import {
 } from './types.js';
 import { sanitizeLogEntry, sanitizeFilename } from './sanitizer.js';
 import { ConversationProcessor } from './conversation-processor.js';
+import { codingActivityBuffer, type CodingSessionStats } from './coding-activity-buffer.js';
 
 function expandPath(p: string): string {
   return p.replace(/^~/, homedir());
@@ -51,10 +52,16 @@ export class ExperienceProcessor {
   async collectExperiences(windowMinutes: number = 50): Promise<{
     experiences: SanitizedExperience[];
     sharedMoments: SharedMoment[];
+    codingStats: CodingSessionStats;
   }> {
     const experiences: SanitizedExperience[] = [];
     const sharedMoments: SharedMoment[] = [];
     const cutoffTime = Date.now() - (windowMinutes * 60 * 1000);
+
+    // Get real-time coding activity from buffer (most accurate source)
+    const codingStats = codingActivityBuffer.getSessionStats(windowMinutes);
+    const codingExperiences = this.processCodingBuffer(codingStats);
+    experiences.push(...codingExperiences);
 
     if (this.config.logSources.includes('kiro')) {
       const kiroExp = await this.processKiroLogs(cutoffTime);
@@ -82,7 +89,58 @@ export class ExperienceProcessor {
         experiences.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
       ),
       sharedMoments,
+      codingStats,
     };
+  }
+
+  private processCodingBuffer(stats: CodingSessionStats): SanitizedExperience[] {
+    const experiences: SanitizedExperience[] = [];
+    
+    if (stats.totalActivities === 0) return experiences;
+
+    // Create experience from coding session
+    const effort: EffortLevel = stats.codingMinutes > 30 ? 'intense' 
+      : stats.codingMinutes > 15 ? 'high' 
+      : stats.codingMinutes > 5 ? 'medium' : 'low';
+
+    const learnings: string[] = [];
+    if (stats.dominantLanguage) learnings.push(`Working with ${stats.dominantLanguage}`);
+    if (stats.commitCount > 0) learnings.push(`Made ${stats.commitCount} commit(s)`);
+    if (stats.filesEdited.length > 3) learnings.push('Multi-file editing session');
+
+    experiences.push({
+      id: `coding-session-${Date.now()}`,
+      timestamp: new Date(stats.lastActivityTime || Date.now()),
+      category: 'coding',
+      activity: this.describeCodingSession(stats),
+      effort,
+      outcome: stats.commitCount > 0 ? 'success' : 'ongoing',
+      learnings,
+      duration_minutes: stats.codingMinutes,
+      sanitized: true,
+    });
+
+    return experiences;
+  }
+
+  private describeCodingSession(stats: CodingSessionStats): string {
+    const parts: string[] = [];
+    
+    if (stats.dominantLanguage) {
+      parts.push(`${stats.dominantLanguage} coding`);
+    } else {
+      parts.push('Coding session');
+    }
+
+    if (stats.filesEdited.length > 0) {
+      parts.push(`(${stats.filesEdited.length} files)`);
+    }
+
+    if (stats.codingMinutes > 0) {
+      parts.push(`for ${stats.codingMinutes} minutes`);
+    }
+
+    return parts.join(' ');
   }
 
 
