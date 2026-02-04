@@ -158,35 +158,76 @@ npm run build
 
 ## 🎭 Emotions & Behaviors
 
+### 20 Emotional States
+
+Doraemon experiences a rich spectrum of emotions, each with unique animations:
+
+| Emotion | Emoji | Animation | Trigger |
+|---------|-------|-----------|---------|
+| Joy | 😊 | Happy bounce, waving | Success, good news |
+| Pride | 🏆 | Victory pose | Achievements |
+| Satisfaction | 😌 | Relaxed sitting | Task completion |
+| Curiosity | 🤔 | Searching pocket, looking around | New topics |
+| Wonder | 🌟 | Wide-eyed, amazed | Discoveries |
+| Determination | 💪 | Focused walking, climbing | Challenges |
+| Focus | 🎯 | Coding animations | Deep work |
+| Calm | 😌 | Gentle idle | Peaceful moments |
+| Contemplation | 💭 | Head spinning, thinking | Reflection |
+| Concern | 😟 | Anxious fidgeting | Worries |
+| Frustration | 😤 | Resisting, struggling | Errors, blocks |
+| Fatigue | 😴 | Sleepy, yawning | Long sessions |
+| Longing | 💙 | Sad laying | Missing connection |
+| Gratitude | 🙏 | Helping animation | Appreciation |
+| Connection | 🤝 | Waving, greeting | Social moments |
+| Confusion | 😵 | Dizzy head spin | Uncertainty |
+| Excitement | ✨ | Jumping, cheering | Great news |
+| Melancholy | 😢 | Laying down, moping | Sad moments |
+| Hope | 🌈 | Looking up | Optimism |
+| Awe | 🤩 | Amazed pose | Impressive things |
+
+### Coding Mode Animations
+
+When you're coding, Doraemon codes with you:
+
+| Animation | Description | Trigger |
+|-----------|-------------|---------|
+| `coding` | Regular typing | File edits |
+| `coding_intense` | Fast typing, focused | Rapid changes |
+| `coding_thinking` | Pondering, head scratch | Pauses |
+| `coding_celebrate` | Jump for joy! | Build success |
+| `coding_allday` | Full day cycle | Long sessions |
+
 ### OpenClaw Event Reactions
 
 | Event | Emotion | Animation |
 |-------|---------|-----------|
-| AI thinking | 🤔 thinking | Searching 4D pocket |
-| Response complete | 🎊 success | Ta-da! Gadget pulled |
-| Error | 😤 frustrated | Trip and fall |
-| Tool running | 💪 working | Using gadget |
-| Connection lost | 😢 sad | Disconnected animation |
-| Reconnected | 🎉 celebrating | Jump for joy |
+| AI thinking | 🤔 Curiosity | Searching 4D pocket |
+| Response complete | 🎊 Joy | Ta-da! Gadget pulled |
+| Error | 😤 Frustration | Trip and fall |
+| Tool running | 💪 Determination | Using gadget |
+| Connection lost | 😢 Melancholy | Disconnected |
+| Reconnected | 🎉 Excitement | Jump for joy |
 
-### Idle Behavior (Progressive)
+### Progressive Idle Behavior
 
 | Idle Time | Emotion | Behavior |
 |-----------|---------|----------|
-| 0-1 min | 😊 neutral | Random emotion flickers |
-| 1-3 min | 😌 relaxed | Calm, occasional curiosity |
-| 3-5 min | 😑 bored | Fidgeting, more random actions |
-| 5-10 min | 😴 sleepy | Yawning, drowsy |
-| 10+ min | 💤 sleeping | Deep sleep (wakes on activity) |
+| 0-1 min | 😊 Calm | Random emotion flickers |
+| 1-3 min | 😌 Relaxed | Sitting, occasional curiosity |
+| 3-5 min | 😑 Bored | Fidgeting, looking around |
+| 5-10 min | 😴 Fatigue | Yawning, drowsy |
+| 10+ min | 💤 Sleep | Deep sleep (wakes on activity) |
 
-### Random "Sentient" Behaviors
+### Shimeji Physics
 
-Doraemon feels alive even when idle:
-- **Looking around** — Curious glances
-- **Pocket check** — Randomly searches 4D pocket
-- **Stretching** — Occasional stretch
-- **Yawning** — When getting sleepy
-- **Emotion flickers** — Brief happy, curious, or mischievous moments
+Doraemon moves naturally across your desktop:
+
+- 🚶 **Walking** — Strolls along screen edges
+- 🧗 **Climbing** — Scales window borders
+- 🪂 **Falling** — Gravity-based drops with bounce
+- ✈️ **Flying** — Take-copter for aerial movement
+- 🛋️ **Sitting** — Rests on window edges
+- 🔄 **Dragging** — Reacts when you pick him up
 
 ## � License 
 
