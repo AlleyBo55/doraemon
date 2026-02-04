@@ -1,297 +1,309 @@
 /**
  * Browser Activity Watcher
  * 
- * Learns from browsing behavior with STRICT safety constraints.
- * Doraemon is a good guy - he observes to help, never to harm.
+ * STRICT DOMAIN WHITELIST - Only learns from explicitly allowed domains.
+ * Two-layer filtering: Domain check → Content sanitization → Memory
  * 
- * CORE PRINCIPLES:
- * 1. READ-ONLY: Never execute code, install anything, or take actions
- * 2. STRIP SENSITIVE: Passwords, tokens, PII are NEVER stored
- * 3. NO CRIMINAL: Never learn from or assist with illegal content
- * 4. HELPFUL ONLY: Learn patterns to assist, not to exploit
+ * Doraemon is a good guy - he only watches what you explicitly allow.
  */
 
 import { BrowserWindow } from 'electron';
-import { aggressiveLearn } from './connector.js';
 import { logAuditEvent } from './audit.js';
 
-interface BrowsingEvent {
-  type: 'page_visit' | 'search' | 'tab_switch' | 'bookmark' | 'download';
+export interface BrowsingEvent {
+  type: 'page_visit' | 'search' | 'tab_switch' | 'bookmark' | 'video_watch' | 'post_view';
   url?: string;
+  domain?: string;
   title?: string;
   query?: string;
   timestamp: Date;
+  extensionId?: string;
 }
 
-const SENSITIVE_URL_PATTERNS = [
-  /password/i,
-  /login/i,
-  /signin/i,
-  /auth/i,
-  /oauth/i,
-  /token/i,
-  /api[_-]?key/i,
-  /secret/i,
-  /credential/i,
-  /bank/i,
-  /payment/i,
-  /checkout/i,
-  /billing/i,
-  /stripe\.com/i,
-  /paypal\.com/i,
-  /venmo\.com/i,
-  /account.*settings/i,
-  /security.*settings/i,
-  /2fa/i,
-  /mfa/i,
-  /recovery/i,
-];
+export interface FilteredContent {
+  safe: boolean;
+  content?: string;
+  domain?: string;
+  category?: 'social' | 'entertainment' | 'dev' | 'news' | 'learning' | 'personal';
+  reason?: string;
+}
 
-const SENSITIVE_DOMAINS = new Set([
-  'accounts.google.com',
-  'login.microsoftonline.com',
-  'auth0.com',
-  'okta.com',
-  'stripe.com',
-  'paypal.com',
-  'venmo.com',
-  'chase.com',
-  'bankofamerica.com',
-  'wellsfargo.com',
-  'capitalone.com',
-  'mint.com',
-  'robinhood.com',
-  'coinbase.com',
-  'binance.com',
-  'kraken.com',
-  'lastpass.com',
-  '1password.com',
-  'bitwarden.com',
-  'dashlane.com',
+// ============================================
+// LAYER 1: STRICT DOMAIN WHITELIST
+// Only these domains are allowed - everything else is rejected
+// ============================================
+
+const ALLOWED_DOMAINS: Map<string, { category: string; description: string }> = new Map([
+  // Social Media
+  ['twitter.com', { category: 'social', description: 'Twitter/X' }],
+  ['x.com', { category: 'social', description: 'Twitter/X' }],
+  ['reddit.com', { category: 'social', description: 'Reddit' }],
+  ['instagram.com', { category: 'social', description: 'Instagram' }],
+  ['tiktok.com', { category: 'social', description: 'TikTok' }],
+  
+  // Entertainment / Manga
+  ['manhwaz.com', { category: 'entertainment', description: 'Manhwa reading' }],
+  ['shinigami09.com', { category: 'entertainment', description: 'Manga/Anime' }],
+  ['youtube.com', { category: 'entertainment', description: 'YouTube' }],
+  ['youtu.be', { category: 'entertainment', description: 'YouTube short links' }],
+  
+  // Dev / Tech
+  ['github.com', { category: 'dev', description: 'GitHub' }],
+  ['stackoverflow.com', { category: 'dev', description: 'Stack Overflow' }],
+  ['dev.to', { category: 'dev', description: 'Dev.to' }],
+  ['hashnode.dev', { category: 'dev', description: 'Hashnode' }],
+  ['medium.com', { category: 'dev', description: 'Medium' }],
+  ['hackernews.com', { category: 'dev', description: 'Hacker News' }],
+  ['news.ycombinator.com', { category: 'dev', description: 'Hacker News' }],
+  ['developer.mozilla.org', { category: 'dev', description: 'MDN Docs' }],
+  
+  // News
+  ['techcrunch.com', { category: 'news', description: 'TechCrunch' }],
+  ['theverge.com', { category: 'news', description: 'The Verge' }],
+  ['arstechnica.com', { category: 'news', description: 'Ars Technica' }],
+  ['wired.com', { category: 'news', description: 'Wired' }],
+  
+  // Personal / Your Sites
+  ['moltbook.com', { category: 'personal', description: 'Moltbook' }],
+  ['www.moltbook.com', { category: 'personal', description: 'Moltbook' }],
 ]);
 
-const CRIMINAL_PATTERNS = [
-  /hack/i,
-  /crack/i,
-  /exploit/i,
-  /malware/i,
-  /ransomware/i,
-  /phishing/i,
-  /carding/i,
-  /fraud/i,
-  /illegal/i,
-  /darknet/i,
-  /dark\s*web/i,
-  /tor\s*market/i,
-  /drug\s*market/i,
-  /weapon/i,
-  /counterfeit/i,
-  /stolen\s*data/i,
-  /ddos/i,
-  /botnet/i,
+// Extensions that are allowed to send data
+const ALLOWED_EXTENSIONS: Set<string> = new Set([
+  'doraemon-browser-companion',
+  'doraemon-watcher',
+]);
+
+// ============================================
+// LAYER 2: CONTENT SANITIZATION
+// Even from allowed domains, strip sensitive data
+// ============================================
+
+const SENSITIVE_PATTERNS = [
+  /password/i,
+  /api[_-]?key/i,
+  /secret/i,
+  /token/i,
+  /bearer/i,
+  /authorization/i,
+  /credit\s*card/i,
+  /ssn/i,
+  /social\s*security/i,
 ];
 
 const PII_PATTERNS = [
   /\b\d{3}[-.]?\d{2}[-.]?\d{4}\b/, // SSN
   /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/, // Credit card
-  /\b[A-Z]{2}\d{6,8}\b/i, // Passport
-  /\b\d{9}\b/, // 9-digit numbers (various IDs)
-  /password\s*[:=]\s*\S+/i,
-  /api[_-]?key\s*[:=]\s*\S+/i,
-  /secret\s*[:=]\s*\S+/i,
-  /token\s*[:=]\s*\S+/i,
-  /bearer\s+\S+/i,
-  /authorization\s*[:=]\s*\S+/i,
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, // Email
+  /(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, // Phone
+  /password\s*[:=]\s*\S+/gi,
+  /api[_-]?key\s*[:=]\s*\S+/gi,
 ];
 
-const ALLOWED_LEARNING_DOMAINS = [
-  /github\.com/,
-  /stackoverflow\.com/,
-  /developer\.mozilla\.org/,
-  /docs\./,
-  /documentation\./,
-  /learn\./,
-  /tutorial/,
-  /medium\.com/,
-  /dev\.to/,
-  /hashnode\./,
-  /freecodecamp/,
-  /w3schools/,
-  /geeksforgeeks/,
-  /leetcode/,
-  /hackerrank/,
-  /codepen/,
-  /jsfiddle/,
-  /replit/,
-  /youtube\.com.*watch/, // Video learning
-  /coursera/,
-  /udemy/,
-  /pluralsight/,
-  /egghead/,
-  /frontendmasters/,
-  /wikipedia\.org/,
-  /arxiv\.org/,
-  /news\.ycombinator/,
-  /reddit\.com\/r\/(programming|webdev|javascript|typescript|react|node)/,
-];
-
-function isSensitiveUrl(url: string): boolean {
-  for (const pattern of SENSITIVE_URL_PATTERNS) {
-    if (pattern.test(url)) return true;
-  }
-  
+function extractDomain(url: string): string | null {
   try {
     const parsed = new URL(url);
-    if (SENSITIVE_DOMAINS.has(parsed.hostname)) return true;
-    if (SENSITIVE_DOMAINS.has(parsed.hostname.replace('www.', ''))) return true;
-  } catch {}
-  
-  return false;
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
 }
 
-function isCriminalContent(text: string): boolean {
-  for (const pattern of CRIMINAL_PATTERNS) {
+function isDomainAllowed(url: string): { allowed: boolean; domain?: string; info?: { category: string; description: string } } {
+  const domain = extractDomain(url);
+  if (!domain) return { allowed: false };
+  
+  // Check exact match
+  if (ALLOWED_DOMAINS.has(domain)) {
+    return { allowed: true, domain, info: ALLOWED_DOMAINS.get(domain) };
+  }
+  
+  // Check with www prefix
+  const withWww = `www.${domain}`;
+  if (ALLOWED_DOMAINS.has(withWww)) {
+    return { allowed: true, domain, info: ALLOWED_DOMAINS.get(withWww) };
+  }
+  
+  // Check subdomain (e.g., old.reddit.com → reddit.com)
+  const parts = domain.split('.');
+  if (parts.length > 2) {
+    const baseDomain = parts.slice(-2).join('.');
+    if (ALLOWED_DOMAINS.has(baseDomain)) {
+      return { allowed: true, domain: baseDomain, info: ALLOWED_DOMAINS.get(baseDomain) };
+    }
+  }
+  
+  return { allowed: false, domain };
+}
+
+function isExtensionAllowed(extensionId?: string): boolean {
+  if (!extensionId) return true; // No extension = direct browser event
+  return ALLOWED_EXTENSIONS.has(extensionId);
+}
+
+function sanitizeContent(text: string): string {
+  let cleaned = text;
+  
+  // Remove PII
+  for (const pattern of PII_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '[REDACTED]');
+  }
+  
+  // Check for sensitive keywords and redact surrounding context
+  for (const pattern of SENSITIVE_PATTERNS) {
+    if (pattern.test(cleaned)) {
+      cleaned = cleaned.replace(pattern, '[SENSITIVE]');
+    }
+  }
+  
+  return cleaned.trim();
+}
+
+function hasSensitiveContent(text: string): boolean {
+  for (const pattern of SENSITIVE_PATTERNS) {
     if (pattern.test(text)) return true;
   }
   return false;
 }
 
-function stripPII(text: string): string {
-  let cleaned = text;
-  for (const pattern of PII_PATTERNS) {
-    cleaned = cleaned.replace(pattern, '[REDACTED]');
+// ============================================
+// MAIN FILTER FUNCTION - TWO LAYERS
+// ============================================
+
+export function filterBrowsingEvent(event: BrowsingEvent): FilteredContent {
+  // LAYER 1: Extension check
+  if (!isExtensionAllowed(event.extensionId)) {
+    logAuditEvent('access_denied', `Blocked unknown extension: ${event.extensionId}`, undefined, 'browser_watcher');
+    return { safe: false, reason: `Extension not in whitelist: ${event.extensionId}` };
   }
   
-  cleaned = cleaned.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL]');
-  cleaned = cleaned.replace(/(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE]');
+  // LAYER 1: Domain check
+  if (event.url) {
+    const domainCheck = isDomainAllowed(event.url);
+    if (!domainCheck.allowed) {
+      logAuditEvent('access_denied', `Blocked domain: ${domainCheck.domain}`, undefined, 'browser_watcher');
+      return { safe: false, reason: `Domain not in whitelist: ${domainCheck.domain}` };
+    }
+    
+    // LAYER 2: Content sanitization
+    const rawContent = [event.title, event.query].filter(Boolean).join(' - ');
+    
+    if (!rawContent || rawContent.length < 5) {
+      return { safe: false, reason: 'Content too short' };
+    }
+    
+    // Check for sensitive content before sanitization
+    if (hasSensitiveContent(rawContent)) {
+      logAuditEvent('access_denied', `Blocked sensitive content from ${domainCheck.domain}`, undefined, 'browser_watcher');
+      return { safe: false, reason: 'Contains sensitive data' };
+    }
+    
+    const sanitized = sanitizeContent(rawContent);
+    
+    // Build final content
+    let content = '';
+    const category = domainCheck.info?.category as FilteredContent['category'];
+    
+    switch (event.type) {
+      case 'page_visit':
+        content = `Browsed ${domainCheck.info?.description || domainCheck.domain}: "${sanitized}"`;
+        break;
+      case 'search':
+        content = `Searched on ${domainCheck.domain}: "${sanitized}"`;
+        break;
+      case 'video_watch':
+        content = `Watched on ${domainCheck.domain}: "${sanitized}"`;
+        break;
+      case 'post_view':
+        content = `Read on ${domainCheck.domain}: "${sanitized}"`;
+        break;
+      default:
+        content = `Activity on ${domainCheck.domain}: "${sanitized}"`;
+    }
+    
+    return {
+      safe: true,
+      content,
+      domain: domainCheck.domain,
+      category,
+    };
+  }
   
-  return cleaned;
+  return { safe: false, reason: 'No URL provided' };
 }
 
-function isAllowedForLearning(url: string): boolean {
-  for (const pattern of ALLOWED_LEARNING_DOMAINS) {
-    if (pattern.test(url)) return true;
-  }
-  return false;
+// ============================================
+// DOMAIN MANAGEMENT
+// ============================================
+
+export function addAllowedDomain(domain: string, category: string, description: string): void {
+  const cleanDomain = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+  ALLOWED_DOMAINS.set(cleanDomain, { category, description });
+  console.log(`[BrowserWatcher] Added domain: ${cleanDomain} (${category})`);
 }
 
-function sanitizeForLearning(event: BrowsingEvent): { safe: boolean; content?: string; reason?: string } {
-  if (!event.url && !event.title && !event.query) {
-    return { safe: false, reason: 'Empty event' };
+export function removeAllowedDomain(domain: string): boolean {
+  const cleanDomain = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+  const removed = ALLOWED_DOMAINS.delete(cleanDomain);
+  if (removed) {
+    console.log(`[BrowserWatcher] Removed domain: ${cleanDomain}`);
   }
-  
-  const fullText = [event.url, event.title, event.query].filter(Boolean).join(' ');
-  
-  if (event.url && isSensitiveUrl(event.url)) {
-    logAuditEvent('access_denied', `Blocked sensitive URL: ${event.url.substring(0, 50)}...`, undefined, 'browser_watcher');
-    return { safe: false, reason: 'Sensitive URL detected' };
-  }
-  
-  if (isCriminalContent(fullText)) {
-    logAuditEvent('access_denied', `Blocked criminal content pattern`, undefined, 'browser_watcher');
-    return { safe: false, reason: 'Criminal content pattern detected' };
-  }
-  
-  if (event.url && !isAllowedForLearning(event.url)) {
-    return { safe: false, reason: 'URL not in allowed learning domains' };
-  }
-  
-  const cleanTitle = event.title ? stripPII(event.title) : '';
-  const cleanQuery = event.query ? stripPII(event.query) : '';
-  
-  let content = '';
-  
-  switch (event.type) {
-    case 'page_visit':
-      if (cleanTitle) {
-        content = `Browsed: "${cleanTitle}"`;
-      }
-      break;
-    case 'search':
-      if (cleanQuery) {
-        content = `Searched for: "${cleanQuery}"`;
-      }
-      break;
-    case 'bookmark':
-      if (cleanTitle) {
-        content = `Bookmarked: "${cleanTitle}"`;
-      }
-      break;
-    default:
-      return { safe: false, reason: 'Unsupported event type' };
-  }
-  
-  if (!content || content.length < 10) {
-    return { safe: false, reason: 'Content too short' };
-  }
-  
-  return { safe: true, content };
+  return removed;
 }
 
-export async function learnFromBrowsing(event: BrowsingEvent): Promise<boolean> {
-  const sanitized = sanitizeForLearning(event);
-  
-  if (!sanitized.safe || !sanitized.content) {
-    return false;
-  }
-  
-  const result = await aggressiveLearn({
-    content: sanitized.content,
-    category: 'context',
-    source: 'browser_watcher',
-    metadata: {
-      eventType: event.type,
-      timestamp: event.timestamp.toISOString(),
-    },
-  });
-  
-  return result.success;
+export function getAllowedDomains(): Array<{ domain: string; category: string; description: string }> {
+  return Array.from(ALLOWED_DOMAINS.entries()).map(([domain, info]) => ({
+    domain,
+    ...info,
+  }));
 }
+
+export function addAllowedExtension(extensionId: string): void {
+  ALLOWED_EXTENSIONS.add(extensionId);
+  console.log(`[BrowserWatcher] Added extension: ${extensionId}`);
+}
+
+// ============================================
+// WATCHER STATE
+// ============================================
 
 let isWatching = false;
-let chromeHistoryPath: string | null = null;
-let lastCheckedTime = Date.now();
+let mainWindowRef: BrowserWindow | null = null;
 
-export function setBrowserProfile(profilePath: string): void {
-  chromeHistoryPath = profilePath;
-  console.log(`[BrowserWatcher] Profile set to: ${profilePath}`);
-}
-
-export function startBrowserWatcher(_mainWindow: BrowserWindow): void {
+export function startBrowserWatcher(mainWindow: BrowserWindow): void {
   if (isWatching) return;
   isWatching = true;
+  mainWindowRef = mainWindow;
   
-  console.log('[BrowserWatcher] Started (read-only mode)');
-  console.log('[BrowserWatcher] Safety constraints active:');
-  console.log('  - Sensitive URLs blocked');
-  console.log('  - Criminal content blocked');
-  console.log('  - PII automatically stripped');
-  console.log('  - Only allowed learning domains');
-  console.log('  - READ-ONLY: No code execution, no installs');
-  
-  lastCheckedTime = Date.now();
+  console.log('[BrowserWatcher] Started with STRICT domain whitelist');
+  console.log('[BrowserWatcher] Allowed domains:', getAllowedDomains().length);
+  console.log('[BrowserWatcher] Two-layer filtering active:');
+  console.log('  Layer 1: Domain/Extension whitelist');
+  console.log('  Layer 2: Content sanitization');
 }
 
 export function stopBrowserWatcher(): void {
   isWatching = false;
+  mainWindowRef = null;
   console.log('[BrowserWatcher] Stopped');
 }
 
 export function getWatcherStatus(): {
   isWatching: boolean;
-  profilePath: string | null;
-  constraints: string[];
+  allowedDomains: number;
+  allowedExtensions: number;
+  layers: string[];
 } {
   return {
     isWatching,
-    profilePath: chromeHistoryPath,
-    constraints: [
-      'READ-ONLY: Never executes code or installs anything',
-      'SENSITIVE_BLOCKED: Banking, auth, payment URLs ignored',
-      'CRIMINAL_BLOCKED: Illegal content patterns rejected',
-      'PII_STRIPPED: Personal data automatically redacted',
-      'ALLOWED_DOMAINS: Only learns from educational/dev sites',
-      'DORAEMON_SOUL: Helpful only, never harmful',
+    allowedDomains: ALLOWED_DOMAINS.size,
+    allowedExtensions: ALLOWED_EXTENSIONS.size,
+    layers: [
+      'Layer 1: STRICT domain whitelist (only explicitly allowed domains)',
+      'Layer 1: Extension whitelist (only trusted extensions)',
+      'Layer 2: PII stripping (emails, phones, SSN, credit cards)',
+      'Layer 2: Sensitive keyword blocking (passwords, tokens, keys)',
+      'Layer 2: Content sanitization before storage',
     ],
   };
 }

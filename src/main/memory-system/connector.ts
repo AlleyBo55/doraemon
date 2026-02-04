@@ -24,6 +24,8 @@ import { initializeDecay, applyDecay, getDecayStats, pruneWeakMemories } from '.
 import { getEmbedding, findSimilar } from './embeddings.js';
 import { runDailyReflection, getSelfModel, predictUserNeeds, getEmergentGoals } from './reflection.js';
 import { logAuditEvent } from './audit.js';
+import { filterForMemory, filterForExperience, recordFilterResult, getFilterStats } from './content-filter.js';
+import { filterBrowsingEvent, type BrowsingEvent } from './browser-watcher.js';
 
 let mainWindow: BrowserWindow | null = null;
 let reflectionTimer: NodeJS.Timeout | null = null;
@@ -76,6 +78,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle('memory:get-flags', async () => {
     return getActiveFlags();
   });
+  
+  // Browser watcher handlers
+  ipcMain.handle('memory:learn-from-browser', async (_event, event: BrowsingEvent) => {
+    learnFromBrowser(event);
+    return { success: true };
+  });
+  
+  ipcMain.handle('memory:get-filter-stats', async () => {
+    return getFilterStats();
+  });
 }
 
 export async function aggressiveLearn(data: {
@@ -84,13 +96,25 @@ export async function aggressiveLearn(data: {
   source: string;
   metadata?: Record<string, unknown>;
 }): Promise<{ success: boolean; entry?: MemoryEntry; blocked?: string }> {
+  // LAYER 2 FILTER - Final checkpoint before storage
+  const filterResult = filterForMemory(data.content, data.source);
+  recordFilterResult(filterResult);
+  
+  if (!filterResult.allowed) {
+    logAuditEvent('access_denied', `Layer 2 blocked: ${filterResult.reason}`, undefined, data.source);
+    return { success: false, blocked: filterResult.reason };
+  }
+  
+  // Use sanitized content from filter
+  const sanitizedContent = filterResult.content || data.content;
+  
   const rateCheck = checkRateLimit(data.source);
   if (!rateCheck.allowed) {
     logAuditEvent('access_denied', `Rate limited: ${rateCheck.reason}`, undefined, data.source);
     return { success: false, blocked: rateCheck.reason };
   }
   
-  const constitutionCheck = checkConstitution(data.content, {
+  const constitutionCheck = checkConstitution(sanitizedContent, {
     source: data.source,
     category: data.category,
     timestamp: new Date(),
@@ -104,7 +128,7 @@ export async function aggressiveLearn(data: {
   }
   
   const entry = learn({
-    content: data.content,
+    content: sanitizedContent,
     category: data.category,
     source: data.source as any,
   });
@@ -167,10 +191,39 @@ export function learnFromExperience(data: {
     ? `Felt ${data.emotion} (${(data.intensity * 100).toFixed(0)}%) - "${data.thought}" triggered by ${data.trigger}`
     : `Emotional state: ${data.emotion} (${(data.intensity * 100).toFixed(0)}%) from ${data.trigger}`;
   
+  // Layer 2 filter for experience data
+  const filterResult = filterForExperience(content, 'experience_system');
+  recordFilterResult(filterResult);
+  
+  if (!filterResult.allowed) {
+    logAuditEvent('access_denied', `Experience blocked: ${filterResult.reason}`, undefined, 'experience_system');
+    return;
+  }
+  
   aggressiveLearn({
-    content,
+    content: filterResult.content || content,
     category: 'pattern',
     source: 'experience_system',
+  }).catch(() => {});
+}
+
+export function learnFromBrowser(event: BrowsingEvent): void {
+  // Layer 1: Domain whitelist check
+  const filtered = filterBrowsingEvent(event);
+  
+  if (!filtered.safe || !filtered.content) {
+    return;
+  }
+  
+  // Layer 2: Content filter (already applied in aggressiveLearn)
+  aggressiveLearn({
+    content: filtered.content,
+    category: 'context',
+    source: 'browser_watcher',
+    metadata: {
+      domain: filtered.domain,
+      category: filtered.category,
+    },
   }).catch(() => {});
 }
 
