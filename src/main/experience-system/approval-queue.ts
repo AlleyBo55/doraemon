@@ -1,16 +1,18 @@
 /**
  * Approval Queue
  * 
- * In-memory queue for human approval before posting to Moltbook.
- * Replaces file-based queue when AUTONOMOUS_MODE is disabled.
+ * Persistent queue for human approval before posting to Moltbook.
+ * Saves to ~/.doraemon/approval-queue.json to survive app restarts.
  */
 
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, ipcMain, app } from 'electron';
 import { randomBytes } from 'crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { LivingPost, Emotion } from './types.js';
+import type { LivingPost, Emotion, PostCategory } from './types.js';
 import type { ExperienceSystem } from './index.js';
+import { getSubmoltForPost, Submolt, getAllSubmolts } from './submolt-categorizer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,6 +38,7 @@ export interface PendingItem {
   category: string;
   hashtags: string[];
   timestamp: number;
+  submolt: string;
   replyTo?: string;
   originalPost?: LivingPost;
   postContext?: {
@@ -60,10 +63,78 @@ interface ApprovalDecision {
   timestamp: number;
 }
 
+interface PersistedData {
+  pendingItems: PendingItem[];
+  decisions: ApprovalDecision[];
+  lastSaved: number;
+}
+
 const pendingItems: Map<string, PendingItem> = new Map();
 const decisions: ApprovalDecision[] = [];
 let approvalWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function getDataPath(): string {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'approval-queue.json');
+}
+
+function loadFromDisk(): void {
+  try {
+    const dataPath = getDataPath();
+    if (!fs.existsSync(dataPath)) {
+      console.log('[ApprovalQueue] No saved data found, starting fresh');
+      return;
+    }
+    
+    const raw = fs.readFileSync(dataPath, 'utf-8');
+    const data = JSON.parse(raw) as PersistedData;
+    
+    pendingItems.clear();
+    for (const item of data.pendingItems || []) {
+      pendingItems.set(item.id, item);
+    }
+    
+    decisions.length = 0;
+    decisions.push(...(data.decisions || []).slice(-200));
+    
+    console.log(`[ApprovalQueue] Loaded ${pendingItems.size} pending items, ${decisions.length} decisions from disk`);
+  } catch (err) {
+    console.error('[ApprovalQueue] Failed to load from disk:', err);
+  }
+}
+
+function saveToDisk(): void {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  saveTimeout = setTimeout(() => {
+    try {
+      const dataPath = getDataPath();
+      const tempPath = dataPath + '.tmp';
+      const dir = path.dirname(dataPath);
+      
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      const data: PersistedData = {
+        pendingItems: Array.from(pendingItems.values()),
+        decisions: decisions.slice(-200),
+        lastSaved: Date.now(),
+      };
+      
+      // Atomic write: write to temp file, then rename
+      fs.writeFileSync(tempPath, JSON.stringify(data, null, 2));
+      fs.renameSync(tempPath, dataPath);
+      console.log(`[ApprovalQueue] Saved ${pendingItems.size} pending items to disk`);
+    } catch (err) {
+      console.error('[ApprovalQueue] Failed to save to disk:', err);
+    }
+  }, 500);
+}
 
 export function isAutonomousMode(): boolean {
   return process.env['AUTONOMOUS_MODE'] === '1';
@@ -71,6 +142,7 @@ export function isAutonomousMode(): boolean {
 
 export function initApprovalQueue(main: BrowserWindow): void {
   mainWindow = main;
+  loadFromDisk();
   registerIpcHandlers();
   console.log('[ApprovalQueue] Initialized', isAutonomousMode() ? '(autonomous)' : '(supervised)');
 }
@@ -86,6 +158,7 @@ function registerIpcHandlers(): void {
 
     pendingItems.delete(id);
     decisions.push({ id, decision: 'approved', timestamp: Date.now() });
+    saveToDisk();
     
     await postToMoltbook(item);
     return true;
@@ -97,7 +170,21 @@ function registerIpcHandlers(): void {
 
     pendingItems.delete(id);
     decisions.push({ id, decision: 'rejected', timestamp: Date.now() });
+    saveToDisk();
     return true;
+  });
+
+  ipcMain.handle('approval:update-submolt', (_event, id: string, submolt: string) => {
+    const item = pendingItems.get(id);
+    if (!item) return false;
+
+    item.submolt = submolt;
+    saveToDisk();
+    return true;
+  });
+
+  ipcMain.handle('approval:get-submolts', () => {
+    return getAllSubmolts();
   });
 
   ipcMain.handle('approval:approve-all', async () => {
@@ -111,6 +198,7 @@ function registerIpcHandlers(): void {
       count++;
     }
 
+    saveToDisk();
     return count;
   });
 
@@ -122,6 +210,7 @@ function registerIpcHandlers(): void {
     }
     
     pendingItems.clear();
+    saveToDisk();
     return count;
   });
 
@@ -136,19 +225,75 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('approval:trigger-manual', async () => {
-    // Use the global experience system instance instead of creating a new one
-    const post = await triggerManualPostFromSystem();
-    return post ? { success: true, postId: post.id } : { success: false };
+    console.log('[ApprovalQueue] Manual post trigger requested');
+    try {
+      if (!experienceSystemRef) {
+        console.error('[ApprovalQueue] No experience system reference set');
+        return { success: false, error: 'Experience system not initialized. Is EXPERIENCE_SYSTEM_ENABLED=1?' };
+      }
+      
+      console.log('[ApprovalQueue] Calling manualPost on experience system...');
+      const post = await experienceSystemRef.manualPost();
+      
+      if (post) {
+        console.log('[ApprovalQueue] Manual post generated:', post.id);
+        return { success: true, postId: post.id };
+      } else {
+        // Get stats to understand why no post was generated
+        const stats = experienceSystemRef.getStats();
+        console.log('[ApprovalQueue] No post generated. Stats:', JSON.stringify(stats, null, 2));
+        
+        let reason = 'No post generated';
+        if (!stats.isRunning) {
+          reason = 'Experience system is not running';
+        } else if (stats.generatorStats.postsToday >= (stats.config.maxPostsPerDay || 24)) {
+          reason = `Daily limit reached (${stats.generatorStats.postsToday} posts today)`;
+        } else if (Date.now() - stats.generatorStats.lastPostTime < (stats.config.minTimeBetweenPostsMinutes || 30) * 60 * 1000) {
+          const waitMinutes = Math.ceil(((stats.config.minTimeBetweenPostsMinutes || 30) * 60 * 1000 - (Date.now() - stats.generatorStats.lastPostTime)) / 60000);
+          reason = `Rate limited. Wait ${waitMinutes} more minutes`;
+        }
+        
+        return { success: false, error: reason };
+      }
+    } catch (err) {
+      console.error('[ApprovalQueue] Manual post error:', err);
+      return { success: false, error: String(err) };
+    }
   });
 
   ipcMain.handle('approval:trigger-comments', async () => {
-    const { triggerBrowseNow } = await import('./moltbook-browser.js');
-    await triggerBrowseNow();
-    return { success: true };
+    console.log('[ApprovalQueue] Browse & comment trigger requested');
+    try {
+      const { triggerBrowseNow, getMoltbookBrowserStats } = await import('./moltbook-browser.js');
+      
+      // Check if enabled
+      const apiKey = process.env['MOLTBOOK_API_KEY'];
+      const enabled = process.env['MOLTBOOK_BROWSER_ENABLED'] === '1';
+      
+      if (!apiKey) {
+        console.log('[ApprovalQueue] MOLTBOOK_API_KEY not set');
+        return { success: false, error: 'MOLTBOOK_API_KEY not set in .env' };
+      }
+      
+      if (!enabled) {
+        console.log('[ApprovalQueue] MOLTBOOK_BROWSER_ENABLED is not 1');
+        return { success: false, error: 'Set MOLTBOOK_BROWSER_ENABLED=1 in .env' };
+      }
+      
+      await triggerBrowseNow();
+      const stats = getMoltbookBrowserStats();
+      console.log('[ApprovalQueue] Browse complete:', stats);
+      return { success: true, stats };
+    } catch (err) {
+      console.error('[ApprovalQueue] Browse & comment error:', err);
+      return { success: false, error: String(err) };
+    }
   });
 }
 
-export function queueForApproval(post: LivingPost): void {
+export async function queueForApproval(post: LivingPost): Promise<void> {
+  const submolt = await getSubmoltForPost(post.content, post.category, post.emotion);
+  
   const item: PendingItem = {
     id: post.id,
     type: 'post',
@@ -157,13 +302,15 @@ export function queueForApproval(post: LivingPost): void {
     category: post.category,
     hashtags: post.hashtags,
     timestamp: post.timestamp.getTime(),
+    submolt,
     originalPost: post,
   };
 
   if (isAutonomousMode()) {
-    postToMoltbook(item);
+    await postToMoltbook(item);
   } else {
     pendingItems.set(item.id, item);
+    saveToDisk();
     notifyNewItem(item);
   }
 }
@@ -188,6 +335,7 @@ export function queueCommentForApproval(
     category: 'connection',
     hashtags: [],
     timestamp: Date.now(),
+    submolt: 'general',
     replyTo: replyToPostId,
     postContext: postContext ? { postId: replyToPostId, ...postContext } : undefined,
   };
@@ -196,6 +344,7 @@ export function queueCommentForApproval(
     postCommentToMoltbook(item);
   } else {
     pendingItems.set(item.id, item);
+    saveToDisk();
     notifyNewItem(item);
   }
 }
@@ -221,6 +370,26 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
   }
 
   try {
+    // Generate a title from content (first sentence or first 50 chars)
+    const titleMatch = item.content.match(/^[^.!?~]+[.!?~]?/);
+    const title = titleMatch 
+      ? titleMatch[0].substring(0, 100).trim()
+      : item.content.substring(0, 50).trim() + '...';
+    
+    const body = {
+      title,
+      content: item.content,
+      submolt: item.submolt || 'general',
+      hashtags: item.hashtags,
+      metadata: {
+        emotion: item.emotion,
+        category: item.category,
+        source: 'doraemon-experience-system',
+      },
+    };
+    
+    console.log('[ApprovalQueue] Posting to Moltbook:', JSON.stringify(body, null, 2));
+    
     const response = await fetch(`${baseUrl}/api/v1/posts`, {
       method: 'POST',
       headers: {
@@ -228,23 +397,16 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
         'Authorization': `Bearer ${apiKey}`,
         'X-Agent-Username': username,
       },
-      body: JSON.stringify({
-        content: item.content,
-        hashtags: item.hashtags,
-        metadata: {
-          emotion: item.emotion,
-          category: item.category,
-          source: 'doraemon-experience-system',
-        },
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      console.error('[ApprovalQueue] Post failed:', response.status);
+      const errorText = await response.text();
+      console.error('[ApprovalQueue] Post failed:', response.status, errorText);
       return false;
     }
 
-    console.log('[ApprovalQueue] Posted successfully:', item.id);
+    console.log('[ApprovalQueue] Posted successfully to m/' + item.submolt + ':', item.id);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
@@ -289,11 +451,33 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
 }
 
 function getPreloadPath(): string {
-  const base = path.join(__dirname, '../../preload/index');
+  // In development, preload is at out/preload/index.mjs
+  // In production, it's at resources/app/out/preload/index.mjs
   const fs = require('fs');
-  if (fs.existsSync(base + '.cjs')) return base + '.cjs';
-  if (fs.existsSync(base + '.mjs')) return base + '.mjs';
-  return base + '.js';
+  
+  // Try multiple possible paths
+  const possiblePaths = [
+    // From experience-system folder (../../preload)
+    path.join(__dirname, '../../preload/index.mjs'),
+    path.join(__dirname, '../../preload/index.cjs'),
+    path.join(__dirname, '../../preload/index.js'),
+    // From main folder (../preload)
+    path.join(__dirname, '../preload/index.mjs'),
+    path.join(__dirname, '../preload/index.cjs'),
+    path.join(__dirname, '../preload/index.js'),
+  ];
+  
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      console.log('[ApprovalQueue] Using preload path:', p);
+      return p;
+    }
+  }
+  
+  // Fallback - log what we tried
+  console.error('[ApprovalQueue] Could not find preload script. Tried:', possiblePaths);
+  console.error('[ApprovalQueue] __dirname is:', __dirname);
+  return path.join(__dirname, '../../preload/index.mjs');
 }
 
 export function openApprovalWindow(): void {
@@ -301,6 +485,9 @@ export function openApprovalWindow(): void {
     approvalWindow.focus();
     return;
   }
+
+  const preloadPath = getPreloadPath();
+  console.log('[ApprovalQueue] Opening approval window with preload:', preloadPath);
 
   approvalWindow = new BrowserWindow({
     width: 600,
@@ -314,12 +501,15 @@ export function openApprovalWindow(): void {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: getPreloadPath(),
+      sandbox: false,
+      preload: preloadPath,
     },
   });
 
+  // Open DevTools in development to help debug
   if (process.env['NODE_ENV'] === 'development') {
     approvalWindow.loadURL('http://localhost:5173/#/approval');
+    approvalWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     approvalWindow.loadFile(path.join(__dirname, '../../renderer/index.html'), {
       hash: '/approval',
