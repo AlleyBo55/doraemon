@@ -181,21 +181,24 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
     let ws: WebSocket | null = null;
     let responseBuffer = '';
     let resolved = false;
+    let connected = false;
     const requestId = `llm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.log(`[MoltbookBrowser] LLM timeout after ${LLM_TIMEOUT_MS}ms, buffer: "${responseBuffer.substring(0, 50)}"`);
+        console.log(`[MoltbookBrowser] LLM timeout after ${LLM_TIMEOUT_MS}ms, connected: ${connected}, buffer: "${responseBuffer.substring(0, 50)}"`);
         ws?.close();
         resolve(responseBuffer ? cleanComment(responseBuffer) : null);
       }
     }, LLM_TIMEOUT_MS);
     
     try {
+      console.log(`[MoltbookBrowser] Connecting to gateway ws://${GATEWAY_HOST}:${GATEWAY_PORT}...`);
       ws = new WebSocket(`ws://${GATEWAY_HOST}:${GATEWAY_PORT}`);
       
       ws.on('open', () => {
+        console.log(`[MoltbookBrowser] WebSocket connected, sending connect frame...`);
         const connectFrame = {
           type: 'req',
           id: `connect-${requestId}`,
@@ -223,20 +226,32 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
         try {
           const msg = JSON.parse(data.toString());
           
-          if (msg.type === 'res' && msg.id === `connect-${requestId}` && msg.ok) {
-            const chatFrame = {
-              type: 'req',
-              id: requestId,
-              method: 'chat.send',
-              params: {
-                sessionKey: `moltbook-${Date.now()}`,
-                message: `${soul}\n\n---\n\n${prompt}`,
-                deliver: true,
-                model: 'claude-3-5-haiku-latest',
-                maxTokens,
-              },
-            };
-            ws!.send(JSON.stringify(chatFrame));
+          if (msg.type === 'res' && msg.id === `connect-${requestId}`) {
+            if (msg.ok) {
+              connected = true;
+              console.log(`[MoltbookBrowser] Gateway connected, sending chat request...`);
+              const chatFrame = {
+                type: 'req',
+                id: requestId,
+                method: 'chat.send',
+                params: {
+                  sessionKey: `moltbook-${Date.now()}`,
+                  message: `${soul}\n\n---\n\n${prompt}`,
+                  deliver: true,
+                  model: 'claude-3-5-haiku-latest',
+                  maxTokens,
+                },
+              };
+              ws!.send(JSON.stringify(chatFrame));
+            } else {
+              console.error(`[MoltbookBrowser] Gateway connect failed:`, msg.error || msg);
+              if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                ws?.close();
+                resolve(null);
+              }
+            }
           }
           
           if (msg.type === 'event') {
@@ -255,21 +270,30 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
                 resolved = true;
                 clearTimeout(timeout);
                 ws?.close();
+                console.log(`[MoltbookBrowser] LLM response complete: "${responseBuffer.substring(0, 50)}..."`);
                 resolve(responseBuffer.trim());
               }
             }
           }
           
-          if (msg.type === 'res' && msg.id === requestId && !resolved && responseBuffer) {
-            resolved = true;
-            clearTimeout(timeout);
-            ws?.close();
-            resolve(responseBuffer.trim());
+          if (msg.type === 'res' && msg.id === requestId) {
+            if (msg.error) {
+              console.error(`[MoltbookBrowser] Chat error:`, msg.error);
+            }
+            if (!resolved && responseBuffer) {
+              resolved = true;
+              clearTimeout(timeout);
+              ws?.close();
+              resolve(responseBuffer.trim());
+            }
           }
-        } catch {}
+        } catch (e) {
+          console.error(`[MoltbookBrowser] Message parse error:`, e);
+        }
       });
       
-      ws.on('error', () => {
+      ws.on('error', (err) => {
+        console.error(`[MoltbookBrowser] WebSocket error:`, err.message || err);
         if (!resolved) {
           resolved = true;
           clearTimeout(timeout);
@@ -277,7 +301,8 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
         }
       });
       
-      ws.on('close', () => {
+      ws.on('close', (code, reason) => {
+        console.log(`[MoltbookBrowser] WebSocket closed: code=${code}, reason=${reason?.toString() || 'none'}`);
         if (!resolved && responseBuffer) {
           resolved = true;
           clearTimeout(timeout);
