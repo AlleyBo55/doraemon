@@ -235,3 +235,10 @@ export {
   type AutonomousLearningStats,
   type BrowsingSession,
 } from './autonomous-learning.js';
+export {
+  startMoltbookBrowser,
+  stopMoltbookBrowser,
+  triggerBrowseNow,
+  getMoltbookBrowserStats,
+  resetMoltbookBrowserStats,
+} from './moltbook-browser.js';

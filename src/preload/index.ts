@@ -197,6 +197,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('autonomous:get-sessions'),
   autonomousResetStats: () =>
     ipcRenderer.invoke('autonomous:reset-stats'),
+  
+  // Moltbook Browser API (Autonomous Social Engagement)
+  moltbookGetStats: () =>
+    ipcRenderer.invoke('moltbook:get-stats'),
+  moltbookTriggerBrowse: () =>
+    ipcRenderer.invoke('moltbook:trigger-browse'),
+  moltbookResetStats: () =>
+    ipcRenderer.invoke('moltbook:reset-stats'),
 });
 
 // Setup API (for setup window)
