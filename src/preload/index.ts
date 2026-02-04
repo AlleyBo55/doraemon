@@ -249,6 +249,7 @@ contextBridge.exposeInMainWorld('approvalAPI', {
   getStats: () => ipcRenderer.invoke('approval:get-stats'),
   closeWindow: () => ipcRenderer.invoke('approval:close-window'),
   triggerManualPost: () => ipcRenderer.invoke('approval:trigger-manual'),
+  triggerComments: () => ipcRenderer.invoke('approval:trigger-comments'),
   onNewItem: (callback: (item: unknown) => void) => {
     ipcRenderer.on('approval:new-item', (_event: IpcRendererEvent, item: unknown) => callback(item));
   },

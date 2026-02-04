@@ -7,6 +7,15 @@
 
 import { useState, useEffect, useCallback } from 'preact/hooks';
 
+interface PostContext {
+  postId: string;
+  postTitle: string;
+  postContent: string;
+  postAuthor: string;
+  parentCommentAuthor?: string;
+  parentCommentContent?: string;
+}
+
 interface PendingItem {
   id: string;
   type: 'post' | 'comment';
@@ -16,6 +25,7 @@ interface PendingItem {
   hashtags: string[];
   timestamp: number;
   replyTo?: string;
+  postContext?: PostContext;
 }
 
 interface ApprovalStats {
@@ -36,6 +46,7 @@ declare global {
       onNewItem: (callback: (item: PendingItem) => void) => void;
       closeWindow: () => void;
       triggerManualPost: () => Promise<{ success: boolean; postId?: string }>;
+      triggerComments: () => Promise<{ success: boolean }>;
     };
   }
 }
@@ -75,7 +86,7 @@ function getTimeAgo(timestamp: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function ItemCard({ 
+function PostCard({ 
   item, 
   onApprove, 
   onReject,
@@ -93,14 +104,12 @@ function ItemCard({
   const timeAgo = getTimeAgo(item.timestamp);
 
   return (
-    <div 
-      className={`
-        group relative bg-white/80 backdrop-blur-xl rounded-2xl 
-        border border-white/20 shadow-sm hover:shadow-md
-        transition-all duration-200 ease-out
-        ${isExpanded ? 'ring-2 ring-blue-500/30' : ''}
-      `}
-    >
+    <div className={`
+      group relative bg-white/80 backdrop-blur-xl rounded-2xl 
+      border border-white/20 shadow-sm hover:shadow-md
+      transition-all duration-200 ease-out
+      ${isExpanded ? 'ring-2 ring-blue-500/30' : ''}
+    `}>
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
@@ -111,11 +120,6 @@ function ItemCard({
                 {item.category}
               </span>
               <span className="text-xs text-slate-400">{timeAgo}</span>
-              {item.type === 'comment' && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                  Reply
-                </span>
-              )}
             </div>
             
             <p 
@@ -159,21 +163,138 @@ function ItemCard({
   );
 }
 
-function EmptyState({ onTrigger, isTriggering }: { onTrigger: () => void; isTriggering: boolean }) {
+function CommentCard({ 
+  item, 
+  onApprove, 
+  onReject,
+  isExpanded,
+  onToggle,
+}: { 
+  item: PendingItem;
+  onApprove: () => void;
+  onReject: () => void;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
+  const timeAgo = getTimeAgo(item.timestamp);
+  const ctx = item.postContext;
+
+  return (
+    <div className={`
+      group relative bg-white/80 backdrop-blur-xl rounded-2xl 
+      border border-white/20 shadow-sm hover:shadow-md
+      transition-all duration-200 ease-out
+      ${isExpanded ? 'ring-2 ring-amber-500/30' : ''}
+    `}>
+      <div className="p-4">
+        {ctx && (
+          <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium text-slate-500">Replying to post by</span>
+              <span className="text-xs font-semibold text-slate-700">@{ctx.postAuthor}</span>
+            </div>
+            <p className="text-xs text-slate-600 font-medium mb-1">{ctx.postTitle}</p>
+            <p className={`text-xs text-slate-500 ${isExpanded ? '' : 'line-clamp-2'}`}>
+              {ctx.postContent}
+            </p>
+            
+            {ctx.parentCommentAuthor && (
+              <div className="mt-2 pt-2 border-t border-slate-200">
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs text-amber-600">↳ Reply to @{ctx.parentCommentAuthor}</span>
+                </div>
+                <p className="text-xs text-slate-500 italic">"{ctx.parentCommentContent}"</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                {ctx?.parentCommentAuthor ? 'Reply' : 'Comment'}
+              </span>
+              <span className="text-xs text-slate-400">{timeAgo}</span>
+            </div>
+            
+            <p 
+              className={`text-slate-700 text-sm leading-relaxed cursor-pointer ${
+                isExpanded ? '' : 'line-clamp-3'
+              }`}
+              onClick={onToggle}
+            >
+              {item.content}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
+          <button
+            onClick={onReject}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors duration-150"
+          >
+            Reject
+          </button>
+          <button
+            onClick={onApprove}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 shadow-sm hover:shadow transition-all duration-150"
+          >
+            Approve
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ 
+  type, 
+  onTriggerPost, 
+  onTriggerComments,
+  isTriggering,
+}: { 
+  type: 'all' | 'post' | 'comment';
+  onTriggerPost: () => void;
+  onTriggerComments: () => void;
+  isTriggering: boolean;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8">
-      <div className="text-6xl mb-4">✨</div>
-      <h3 className="text-lg font-semibold text-slate-700 mb-2">All caught up!</h3>
+      <div className="text-6xl mb-4">{type === 'comment' ? '💬' : type === 'post' ? '📝' : '✨'}</div>
+      <h3 className="text-lg font-semibold text-slate-700 mb-2">
+        {type === 'comment' ? 'No pending comments' : type === 'post' ? 'No pending posts' : 'All caught up!'}
+      </h3>
       <p className="text-sm text-slate-500 text-center max-w-xs mb-4">
-        No pending posts or comments. Doraemon will generate new content based on experiences.
+        {type === 'comment' 
+          ? 'Generate comments by browsing Moltbook feed.'
+          : type === 'post'
+          ? 'Generate a new post based on recent experiences.'
+          : 'No pending posts or comments. Generate new content below.'}
       </p>
-      <button
-        onClick={onTrigger}
-        disabled={isTriggering}
-        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
-      >
-        {isTriggering ? 'Generating...' : 'Generate Post Now'}
-      </button>
+      <div className="flex gap-2">
+        {(type === 'all' || type === 'post') && (
+          <button
+            onClick={onTriggerPost}
+            disabled={isTriggering}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+          >
+            {isTriggering ? 'Generating...' : 'Generate Post'}
+          </button>
+        )}
+        {(type === 'all' || type === 'comment') && (
+          <button
+            onClick={onTriggerComments}
+            disabled={isTriggering}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+          >
+            {isTriggering ? 'Browsing...' : 'Browse & Comment'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -199,7 +320,7 @@ export function ApprovalPage() {
     }
   }, []);
 
-  const handleTriggerManual = async () => {
+  const handleTriggerPost = async () => {
     setIsTriggering(true);
     try {
       const result = await window.approvalAPI?.triggerManualPost();
@@ -208,6 +329,18 @@ export function ApprovalPage() {
       }
     } catch (e) {
       console.error('Failed to trigger manual post:', e);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
+
+  const handleTriggerComments = async () => {
+    setIsTriggering(true);
+    try {
+      await window.approvalAPI?.triggerComments();
+      await loadItems();
+    } catch (e) {
+      console.error('Failed to trigger comments:', e);
     } finally {
       setIsTriggering(false);
     }
@@ -237,20 +370,30 @@ export function ApprovalPage() {
     }
   };
 
-  const handleApproveAll = async () => {
-    const count = await window.approvalAPI?.approveAll() || 0;
-    if (count > 0) {
-      setItems([]);
-      setStats(prev => ({ ...prev, approved: prev.approved + count, pending: 0 }));
+  const handleApproveFiltered = async () => {
+    const toApprove = filteredItems;
+    for (const item of toApprove) {
+      await window.approvalAPI?.approveItem(item.id);
     }
+    setItems(prev => prev.filter(i => !toApprove.some(t => t.id === i.id)));
+    setStats(prev => ({ 
+      ...prev, 
+      approved: prev.approved + toApprove.length, 
+      pending: prev.pending - toApprove.length 
+    }));
   };
 
-  const handleRejectAll = async () => {
-    const count = await window.approvalAPI?.rejectAll() || 0;
-    if (count > 0) {
-      setItems([]);
-      setStats(prev => ({ ...prev, rejected: prev.rejected + count, pending: 0 }));
+  const handleRejectFiltered = async () => {
+    const toReject = filteredItems;
+    for (const item of toReject) {
+      await window.approvalAPI?.rejectItem(item.id);
     }
+    setItems(prev => prev.filter(i => !toReject.some(t => t.id === i.id)));
+    setStats(prev => ({ 
+      ...prev, 
+      rejected: prev.rejected + toReject.length, 
+      pending: prev.pending - toReject.length 
+    }));
   };
 
   const filteredItems = items.filter(item => filter === 'all' || item.type === filter);
@@ -262,7 +405,7 @@ export function ApprovalPage() {
       <div className="drag-region sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-[70px]" /> {/* Space for native traffic lights */}
+            <div className="w-[70px]" />
             <h1 className="text-sm font-semibold text-slate-700">Moltbook Approval</h1>
           </div>
           
@@ -280,7 +423,7 @@ export function ApprovalPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1 p-1 bg-slate-200/50 rounded-xl">
             {(['all', 'post', 'comment'] as const).map(f => (
               <button
@@ -295,16 +438,41 @@ export function ApprovalPage() {
             ))}
           </div>
 
-          {items.length > 0 && (
+          {filteredItems.length > 0 && (
             <div className="flex gap-2">
-              <button onClick={handleRejectAll} className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors">
-                Reject All
+              <button 
+                onClick={handleRejectFiltered} 
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Reject {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
               </button>
-              <button onClick={handleApproveAll} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500 text-white hover:bg-blue-600 shadow-sm transition-all">
-                Approve All
+              <button 
+                onClick={handleApproveFiltered} 
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white shadow-sm transition-all ${
+                  filter === 'comment' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'
+                }`}
+              >
+                Approve {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
               </button>
             </div>
           )}
+        </div>
+
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={handleTriggerPost}
+            disabled={isTriggering}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-all border border-blue-200"
+          >
+            {isTriggering ? '...' : '📝 Generate Post'}
+          </button>
+          <button
+            onClick={handleTriggerComments}
+            disabled={isTriggering}
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-50 text-amber-600 hover:bg-amber-100 disabled:opacity-50 transition-all border border-amber-200"
+          >
+            {isTriggering ? '...' : '💬 Browse & Comment'}
+          </button>
         </div>
 
         {isLoading ? (
@@ -312,18 +480,34 @@ export function ApprovalPage() {
             <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
           </div>
         ) : filteredItems.length === 0 ? (
-          <EmptyState onTrigger={handleTriggerManual} isTriggering={isTriggering} />
+          <EmptyState 
+            type={filter} 
+            onTriggerPost={handleTriggerPost}
+            onTriggerComments={handleTriggerComments}
+            isTriggering={isTriggering} 
+          />
         ) : (
           <div className="space-y-3">
             {filteredItems.map(item => (
-              <ItemCard
-                key={item.id}
-                item={item}
-                onApprove={() => handleApprove(item.id)}
-                onReject={() => handleReject(item.id)}
-                isExpanded={expandedId === item.id}
-                onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
-              />
+              item.type === 'post' ? (
+                <PostCard
+                  key={item.id}
+                  item={item}
+                  onApprove={() => handleApprove(item.id)}
+                  onReject={() => handleReject(item.id)}
+                  isExpanded={expandedId === item.id}
+                  onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                />
+              ) : (
+                <CommentCard
+                  key={item.id}
+                  item={item}
+                  onApprove={() => handleApprove(item.id)}
+                  onReject={() => handleReject(item.id)}
+                  isExpanded={expandedId === item.id}
+                  onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                />
+              )
             ))}
           </div>
         )}

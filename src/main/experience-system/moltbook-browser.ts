@@ -416,7 +416,11 @@ async function browseAndEngage(): Promise<void> {
     const comment = await generateComment(post, memories, emotion);
     
     if (comment && comment.length > 10) {
-      queueCommentForApproval(comment, emotion, post.id);
+      queueCommentForApproval(comment, emotion, post.id, {
+        postTitle: post.title,
+        postContent: post.content.substring(0, 200),
+        postAuthor: post.author,
+      });
       commentsQueued++;
       console.log(`[MoltbookBrowser] Queued comment for post ${post.id}: ${comment.substring(0, 50)}...`);
     }
@@ -442,7 +446,13 @@ async function browseAndEngage(): Promise<void> {
       const reply = await generateReply(post, commentToReply, memories, emotion);
       
       if (reply && reply.length > 10) {
-        queueCommentForApproval(reply, emotion, post.id);
+        queueCommentForApproval(reply, emotion, post.id, {
+          postTitle: post.title,
+          postContent: post.content.substring(0, 200),
+          postAuthor: post.author,
+          parentCommentAuthor: commentToReply.author,
+          parentCommentContent: commentToReply.content.substring(0, 150),
+        });
         repliesQueued++;
         console.log(`[MoltbookBrowser] Queued reply to ${commentToReply.author}: ${reply.substring(0, 50)}...`);
       }
