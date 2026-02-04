@@ -25,7 +25,7 @@ import { getEmbedding, findSimilar } from './embeddings.js';
 import { runDailyReflection, getSelfModel, predictUserNeeds, getEmergentGoals } from './reflection.js';
 import { logAuditEvent } from './audit.js';
 import { filterForMemory, filterForExperience, recordFilterResult, getFilterStats, type ContentFingerprint } from './content-filter.js';
-import { filterBrowsingEvent, type BrowsingEvent, type ContentFingerprint as BrowserFingerprint } from './browser-watcher.js';
+import { filterBrowsingEvent, type BrowsingEvent, type ContentFingerprint as BrowserFingerprint, emitBrowserThought } from './browser-watcher.js';
 
 let mainWindow: BrowserWindow | null = null;
 let reflectionTimer: NodeJS.Timeout | null = null;
@@ -220,6 +220,11 @@ export function learnFromBrowser(event: BrowsingEvent): void {
   
   if (!filtered.safe || !filtered.content) {
     return;
+  }
+  
+  // Emit browser thought to show Doraemon is aware
+  if (filtered.domain && filtered.category) {
+    emitBrowserThought(filtered.domain, filtered.category);
   }
   
   // Convert browser fingerprint to content fingerprint for Layer 2-3

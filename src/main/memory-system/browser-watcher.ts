@@ -10,6 +10,16 @@
 import { BrowserWindow } from 'electron';
 import { logAuditEvent } from './audit.js';
 
+// Import browsing thoughts
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+let BROWSING_THOUGHTS: Record<string, Record<string, string[]> | string[]>;
+try {
+  BROWSING_THOUGHTS = require('../../../renderer/core/constants/browsing-thoughts.json');
+} catch {
+  BROWSING_THOUGHTS = { general: ['Browsing the web~'] };
+}
+
 export interface BrowsingEvent {
   type: 'page_visit' | 'search' | 'tab_switch' | 'bookmark' | 'video_watch' | 'post_view';
   url?: string;
@@ -303,6 +313,68 @@ export function addAllowedExtension(extensionId: string): void {
 let isWatching = false;
 let mainWindowRef: BrowserWindow | null = null;
 
+function getRandomThought(category: string, domain?: string): string {
+  const thoughts = BROWSING_THOUGHTS as Record<string, Record<string, string[]> | string[]>;
+  
+  // Try domain-specific thoughts first
+  if (domain) {
+    const domainKey = domain.replace('.com', '').replace('www.', '');
+    
+    // Check social category
+    if (thoughts.social && typeof thoughts.social === 'object' && !Array.isArray(thoughts.social)) {
+      const socialThoughts = thoughts.social as Record<string, string[]>;
+      if (socialThoughts[domainKey]) {
+        const arr = socialThoughts[domainKey];
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+    }
+    
+    // Check entertainment category
+    if (thoughts.entertainment && typeof thoughts.entertainment === 'object' && !Array.isArray(thoughts.entertainment)) {
+      const entThoughts = thoughts.entertainment as Record<string, string[]>;
+      if (entThoughts[domainKey]) {
+        const arr = entThoughts[domainKey];
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+      // Check for manhwa/anime sites
+      if (domain.includes('manhwa') || domain.includes('shinigami')) {
+        const manhwaArr = entThoughts.manhwa || entThoughts.anime;
+        if (manhwaArr) return manhwaArr[Math.floor(Math.random() * manhwaArr.length)];
+      }
+    }
+    
+    // Check dev category
+    if (thoughts.dev && typeof thoughts.dev === 'object' && !Array.isArray(thoughts.dev)) {
+      const devThoughts = thoughts.dev as Record<string, string[]>;
+      if (devThoughts[domainKey]) {
+        const arr = devThoughts[domainKey];
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+      // Check for docs sites
+      if (domain.includes('docs') || domain.includes('developer')) {
+        const docsArr = devThoughts.docs;
+        if (docsArr) return docsArr[Math.floor(Math.random() * docsArr.length)];
+      }
+    }
+  }
+  
+  // Fall back to category-based thoughts
+  if (category && thoughts[category]) {
+    const catThoughts = thoughts[category];
+    if (Array.isArray(catThoughts)) {
+      return catThoughts[Math.floor(Math.random() * catThoughts.length)];
+    }
+  }
+  
+  // Fall back to general
+  const general = thoughts.general;
+  if (Array.isArray(general)) {
+    return general[Math.floor(Math.random() * general.length)];
+  }
+  
+  return 'Browsing the web~';
+}
+
 export function startBrowserWatcher(mainWindow: BrowserWindow): void {
   if (isWatching) return;
   isWatching = true;
@@ -313,6 +385,20 @@ export function startBrowserWatcher(mainWindow: BrowserWindow): void {
   console.log('[BrowserWatcher] Two-layer filtering active:');
   console.log('  Layer 1: Domain/Extension whitelist');
   console.log('  Layer 2: Content sanitization');
+}
+
+export function emitBrowserThought(domain: string, category: string): void {
+  if (!mainWindowRef) return;
+  
+  const thought = getRandomThought(category, domain);
+  
+  mainWindowRef.webContents.send('browser-activity', {
+    thought,
+    domain,
+    category,
+    emotion: category === 'dev' ? 'working' : category === 'entertainment' ? 'playful' : 'curious',
+    animation: 'idle',
+  });
 }
 
 export function stopBrowserWatcher(): void {

@@ -160,6 +160,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDailyInsight: (callback: (insight: string) => void) => {
     ipcRenderer.on('memory:daily-insight', (_event: IpcRendererEvent, insight: string) => callback(insight));
   },
+  
+  // Browser activity events (from memory system)
+  onBrowserActivity: (callback: (data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => void) => {
+    ipcRenderer.on('browser-activity', (_event: IpcRendererEvent, data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => callback(data));
+  },
 });
 
 // Setup API (for setup window)
