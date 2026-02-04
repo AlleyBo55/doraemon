@@ -24,8 +24,8 @@ import { initializeDecay, applyDecay, getDecayStats, pruneWeakMemories } from '.
 import { getEmbedding, findSimilar } from './embeddings.js';
 import { runDailyReflection, getSelfModel, predictUserNeeds, getEmergentGoals } from './reflection.js';
 import { logAuditEvent } from './audit.js';
-import { filterForMemory, filterForExperience, recordFilterResult, getFilterStats } from './content-filter.js';
-import { filterBrowsingEvent, type BrowsingEvent } from './browser-watcher.js';
+import { filterForMemory, filterForExperience, recordFilterResult, getFilterStats, type ContentFingerprint } from './content-filter.js';
+import { filterBrowsingEvent, type BrowsingEvent, type ContentFingerprint as BrowserFingerprint } from './browser-watcher.js';
 
 let mainWindow: BrowserWindow | null = null;
 let reflectionTimer: NodeJS.Timeout | null = null;
@@ -95,14 +95,15 @@ export async function aggressiveLearn(data: {
   category: MemoryCategory;
   source: string;
   metadata?: Record<string, unknown>;
-}): Promise<{ success: boolean; entry?: MemoryEntry; blocked?: string }> {
-  // LAYER 2 FILTER - Final checkpoint before storage
-  const filterResult = filterForMemory(data.content, data.source);
+  fingerprint?: ContentFingerprint;
+}): Promise<{ success: boolean; entry?: MemoryEntry; blocked?: string; layer?: number }> {
+  // LAYER 1-3 FILTER - Three layer defense
+  const filterResult = filterForMemory(data.content, data.source, data.fingerprint);
   recordFilterResult(filterResult);
   
   if (!filterResult.allowed) {
-    logAuditEvent('access_denied', `Layer 2 blocked: ${filterResult.reason}`, undefined, data.source);
-    return { success: false, blocked: filterResult.reason };
+    logAuditEvent('access_denied', `Layer ${filterResult.layer} blocked: ${filterResult.reason}`, undefined, data.source);
+    return { success: false, blocked: filterResult.reason, layer: filterResult.layer };
   }
   
   // Use sanitized content from filter
@@ -126,6 +127,12 @@ export async function aggressiveLearn(data: {
     logAuditEvent('access_denied', `Blocked: ${reason}`, undefined, data.source);
     return { success: false, blocked: reason };
   }
+  
+  // Add fingerprint to metadata for traceability
+  const enrichedMetadata = {
+    ...data.metadata,
+    fingerprint: filterResult.fingerprint,
+  };
   
   const entry = learn({
     content: sanitizedContent,
@@ -208,14 +215,23 @@ export function learnFromExperience(data: {
 }
 
 export function learnFromBrowser(event: BrowsingEvent): void {
-  // Layer 1: Domain whitelist check
+  // Layer 1: Domain whitelist check + fingerprint generation
   const filtered = filterBrowsingEvent(event);
   
   if (!filtered.safe || !filtered.content) {
     return;
   }
   
-  // Layer 2: Content filter (already applied in aggressiveLearn)
+  // Convert browser fingerprint to content fingerprint for Layer 2-3
+  const fingerprint: ContentFingerprint | undefined = filtered.fingerprint ? {
+    domain: filtered.fingerprint.domain,
+    category: filtered.fingerprint.category,
+    timestamp: filtered.fingerprint.timestamp,
+    hash: filtered.fingerprint.hash,
+    trusted: filtered.fingerprint.trusted,
+  } : undefined;
+  
+  // Layer 2-3: Content filter with fingerprint validation
   aggressiveLearn({
     content: filtered.content,
     category: 'context',
@@ -224,6 +240,7 @@ export function learnFromBrowser(event: BrowsingEvent): void {
       domain: filtered.domain,
       category: filtered.category,
     },
+    fingerprint,
   }).catch(() => {});
 }
 

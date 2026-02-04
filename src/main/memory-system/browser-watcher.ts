@@ -26,6 +26,15 @@ export interface FilteredContent {
   domain?: string;
   category?: 'social' | 'entertainment' | 'dev' | 'news' | 'learning' | 'personal';
   reason?: string;
+  fingerprint?: ContentFingerprint;
+}
+
+export interface ContentFingerprint {
+  domain: string;
+  category: string;
+  timestamp: string;
+  hash: string;
+  trusted: boolean;
 }
 
 // ============================================
@@ -136,6 +145,25 @@ function isDomainAllowed(url: string): { allowed: boolean; domain?: string; info
   return { allowed: false, domain };
 }
 
+function generateFingerprint(domain: string, category: string, content: string): ContentFingerprint {
+  const timestamp = new Date().toISOString();
+  const hashInput = `${domain}:${category}:${timestamp}:${content.substring(0, 50)}`;
+  let hash = 0;
+  for (let i = 0; i < hashInput.length; i++) {
+    const char = hashInput.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  
+  return {
+    domain,
+    category,
+    timestamp,
+    hash: Math.abs(hash).toString(16).padStart(8, '0'),
+    trusted: ALLOWED_DOMAINS.has(domain),
+  };
+}
+
 function isExtensionAllowed(extensionId?: string): boolean {
   if (!extensionId) return true; // No extension = direct browser event
   return ALLOWED_EXTENSIONS.has(extensionId);
@@ -226,6 +254,11 @@ export function filterBrowsingEvent(event: BrowsingEvent): FilteredContent {
       content,
       domain: domainCheck.domain,
       category,
+      fingerprint: generateFingerprint(
+        domainCheck.domain || 'unknown',
+        category || 'unknown',
+        content
+      ),
     };
   }
   
