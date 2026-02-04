@@ -52,6 +52,23 @@ function learnFromConversation(userMessage: string, assistantResponse: string): 
   } catch {}
 }
 
+async function getMemoryContext(query: string): Promise<string> {
+  try {
+    const electronAPI = (window as unknown as { 
+      electronAPI?: { 
+        memoryGetContext?: (query: string) => Promise<string>;
+        memoryGetPredictions?: () => Promise<string[]>;
+      } 
+    }).electronAPI;
+    
+    if (electronAPI?.memoryGetContext) {
+      const context = await electronAPI.memoryGetContext(query);
+      return context || '';
+    }
+  } catch {}
+  return '';
+}
+
 export const useOpenClaw = () => {
   const [state, setState] = useState<OpenClawState>({
     isConnected: false,
@@ -262,6 +279,15 @@ export const useOpenClaw = () => {
     const runId = generateId();
     currentRunIdRef.current = runId;
 
+    // RAG: Inject memory context before sending
+    let messageWithContext = text;
+    try {
+      const memoryContext = await getMemoryContext(text);
+      if (memoryContext) {
+        messageWithContext = `${memoryContext}\n\nUser message: ${text}`;
+      }
+    } catch {}
+
     try {
       let gotResponse = false;
       const thinkingMessages = [
@@ -321,10 +347,10 @@ export const useOpenClaw = () => {
         });
       });
 
-      // Send chat message
+      // Send chat message with memory context injected
       const sendResult = await sendWsRequest<{ runId?: string; status?: string }>('chat.send', { 
         sessionKey: 'main', 
-        message: text, 
+        message: messageWithContext, 
         deliver: true,
         idempotencyKey: runId 
       });

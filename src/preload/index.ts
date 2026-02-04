@@ -122,6 +122,44 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('memory-system:learn-preference', key, value),
   memoryLearnCorrection: (original: string, corrected: string) => 
     ipcRenderer.invoke('memory-system:learn-correction', original, corrected),
+  
+  // Advanced Memory System API (aggressive learning, RAG, self-reflection)
+  memoryLearnAggressive: (data: { content: string; category: string; source: string; metadata?: Record<string, unknown> }) =>
+    ipcRenderer.invoke('memory:learn-aggressive', data),
+  memorySearchSemantic: (query: string, limit?: number) =>
+    ipcRenderer.invoke('memory:search-semantic', query, limit),
+  memoryGetContext: (query: string) =>
+    ipcRenderer.invoke('memory:get-context', query),
+  memoryGetPredictions: () =>
+    ipcRenderer.invoke('memory:get-predictions'),
+  memoryGetSelfModel: () =>
+    ipcRenderer.invoke('memory:get-self-model'),
+  memoryGetGoals: () =>
+    ipcRenderer.invoke('memory:get-goals'),
+  memoryGetDashboard: () =>
+    ipcRenderer.invoke('memory:get-dashboard'),
+  memoryGetFlags: () =>
+    ipcRenderer.invoke('memory:get-flags'),
+  
+  // Memory dashboard events
+  onShowMemoryDashboard: (callback: () => void) => {
+    ipcRenderer.on('show-memory-dashboard', () => callback());
+  },
+  onShowMemorySummary: (callback: () => void) => {
+    ipcRenderer.on('show-memory-summary', () => callback());
+  },
+  onShowSelfModel: (callback: () => void) => {
+    ipcRenderer.on('show-self-model', () => callback());
+  },
+  onShowEmergentGoals: (callback: () => void) => {
+    ipcRenderer.on('show-emergent-goals', () => callback());
+  },
+  onShowSecurityFlags: (callback: () => void) => {
+    ipcRenderer.on('show-security-flags', () => callback());
+  },
+  onDailyInsight: (callback: (insight: string) => void) => {
+    ipcRenderer.on('memory:daily-insight', (_event: IpcRendererEvent, insight: string) => callback(insight));
+  },
 });
 
 // Setup API (for setup window)

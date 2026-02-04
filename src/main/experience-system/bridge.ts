@@ -3,10 +3,12 @@
  * 
  * Connects the main process experience-system to the renderer's
  * emotion, animation, and thought systems via IPC.
+ * Also feeds emotional data to the memory system for learning.
  */
 
 import type { BrowserWindow } from 'electron';
 import type { EmotionalState, Emotion, LivingPost, ConsciousnessProxy } from './types.js';
+import { learnFromExperience } from '../memory-system/connector.js';
 
 type RendererEmotionType = 
   | 'neutral' | 'happy' | 'sad' | 'excited' | 'thinking' | 'confused'
@@ -59,6 +61,16 @@ export class ExperienceBridge {
         trigger: 'experience-system',
       });
       this.lastEmotionSent = rendererEmotion;
+      
+      // Feed emotional state to memory system for learning
+      if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+        learnFromExperience({
+          emotion: rendererEmotion,
+          intensity: state.intensity,
+          trigger: 'experience-system',
+          thought: this.lastThoughtSent || undefined,
+        });
+      }
     }
   }
 
