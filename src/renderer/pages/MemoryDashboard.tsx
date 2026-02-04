@@ -34,6 +34,15 @@ export function MemoryDashboard({ view, onClose }: MemoryDashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Enable mouse events when modal opens, restore when closed
+  useEffect(() => {
+    const api = window.electronAPI as { setMouseEvents?: (enabled: boolean) => void } | undefined;
+    api?.setMouseEvents?.(true);
+    return () => {
+      api?.setMouseEvents?.(false);
+    };
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
