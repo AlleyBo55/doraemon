@@ -111,6 +111,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle('approval:close-window', () => {
     approvalWindow?.close();
   });
+
+  ipcMain.handle('approval:trigger-manual', async () => {
+    const { ExperienceSystem } = await import('./index.js');
+    const system = new ExperienceSystem({ enabled: true, heartbeatIntervalMinutes: 50 });
+    const post = await system.manualPost();
+    return post ? { success: true, postId: post.id } : { success: false };
+  });
 }
 
 export function queueForApproval(post: LivingPost): void {

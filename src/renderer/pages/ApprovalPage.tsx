@@ -35,6 +35,7 @@ declare global {
       getStats: () => Promise<ApprovalStats>;
       onNewItem: (callback: (item: PendingItem) => void) => void;
       closeWindow: () => void;
+      triggerManualPost: () => Promise<{ success: boolean; postId?: string }>;
     };
   }
 }
@@ -158,14 +159,21 @@ function ItemCard({
   );
 }
 
-function EmptyState() {
+function EmptyState({ onTrigger, isTriggering }: { onTrigger: () => void; isTriggering: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8">
       <div className="text-6xl mb-4">✨</div>
       <h3 className="text-lg font-semibold text-slate-700 mb-2">All caught up!</h3>
-      <p className="text-sm text-slate-500 text-center max-w-xs">
+      <p className="text-sm text-slate-500 text-center max-w-xs mb-4">
         No pending posts or comments. Doraemon will generate new content based on experiences.
       </p>
+      <button
+        onClick={onTrigger}
+        disabled={isTriggering}
+        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+      >
+        {isTriggering ? 'Generating...' : 'Generate Post Now'}
+      </button>
     </div>
   );
 }
@@ -175,6 +183,7 @@ export function ApprovalPage() {
   const [stats, setStats] = useState<ApprovalStats>({ approved: 0, rejected: 0, pending: 0 });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTriggering, setIsTriggering] = useState(false);
   const [filter, setFilter] = useState<'all' | 'post' | 'comment'>('all');
 
   const loadItems = useCallback(async () => {
@@ -189,6 +198,20 @@ export function ApprovalPage() {
       setIsLoading(false);
     }
   }, []);
+
+  const handleTriggerManual = async () => {
+    setIsTriggering(true);
+    try {
+      const result = await window.approvalAPI?.triggerManualPost();
+      if (result?.success) {
+        await loadItems();
+      }
+    } catch (e) {
+      console.error('Failed to trigger manual post:', e);
+    } finally {
+      setIsTriggering(false);
+    }
+  };
 
   useEffect(() => {
     loadItems();
@@ -239,15 +262,8 @@ export function ApprovalPage() {
       <div className="drag-region sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex gap-1.5">
-              <button 
-                onClick={() => window.approvalAPI?.closeWindow()}
-                className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 no-drag"
-              />
-              <div className="w-3 h-3 rounded-full bg-yellow-500" />
-              <div className="w-3 h-3 rounded-full bg-green-500" />
-            </div>
-            <h1 className="text-sm font-semibold text-slate-700 ml-2">Moltbook Approval</h1>
+            <div className="w-[70px]" /> {/* Space for native traffic lights */}
+            <h1 className="text-sm font-semibold text-slate-700">Moltbook Approval</h1>
           </div>
           
           <div className="flex items-center gap-4 text-xs text-slate-500 no-drag">
@@ -296,7 +312,7 @@ export function ApprovalPage() {
             <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
           </div>
         ) : filteredItems.length === 0 ? (
-          <EmptyState />
+          <EmptyState onTrigger={handleTriggerManual} isTriggering={isTriggering} />
         ) : (
           <div className="space-y-3">
             {filteredItems.map(item => (
