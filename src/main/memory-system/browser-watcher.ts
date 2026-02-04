@@ -93,6 +93,20 @@ const ALLOWED_EXTENSIONS: Set<string> = new Set([
   'doraemon-watcher',
 ]);
 
+// Source name to domain mapping (for extension data)
+const SOURCE_TO_DOMAIN: Map<string, string> = new Map([
+  ['twitter', 'twitter.com'],
+  ['reddit', 'reddit.com'],
+  ['youtube', 'youtube.com'],
+  ['github', 'github.com'],
+  ['hackernews', 'news.ycombinator.com'],
+  ['news', 'techcrunch.com'],
+  ['dev', 'dev.to'],
+  ['manga', 'manhwaz.com'],
+  ['stackoverflow', 'stackoverflow.com'],
+  ['moltbook', 'moltbook.com'],
+]);
+
 // ============================================
 // LAYER 2: CONTENT SANITIZATION
 // Even from allowed domains, strip sensitive data
@@ -215,64 +229,73 @@ export function filterBrowsingEvent(event: BrowsingEvent): FilteredContent {
     return { safe: false, reason: `Extension not in whitelist: ${event.extensionId}` };
   }
   
-  // LAYER 1: Domain check
-  if (event.url) {
-    const domainCheck = isDomainAllowed(event.url);
-    if (!domainCheck.allowed) {
-      logAuditEvent('access_denied', `Blocked domain: ${domainCheck.domain}`, undefined, 'browser_watcher');
-      return { safe: false, reason: `Domain not in whitelist: ${domainCheck.domain}` };
-    }
-    
-    // LAYER 2: Content sanitization
-    const rawContent = [event.title, event.query].filter(Boolean).join(' - ');
-    
-    if (!rawContent || rawContent.length < 5) {
-      return { safe: false, reason: 'Content too short' };
-    }
-    
-    // Check for sensitive content before sanitization
-    if (hasSensitiveContent(rawContent)) {
-      logAuditEvent('access_denied', `Blocked sensitive content from ${domainCheck.domain}`, undefined, 'browser_watcher');
-      return { safe: false, reason: 'Contains sensitive data' };
-    }
-    
-    const sanitized = sanitizeContent(rawContent);
-    
-    // Build final content
-    let content = '';
-    const category = domainCheck.info?.category as FilteredContent['category'];
-    
-    switch (event.type) {
-      case 'page_visit':
-        content = `Browsed ${domainCheck.info?.description || domainCheck.domain}: "${sanitized}"`;
-        break;
-      case 'search':
-        content = `Searched on ${domainCheck.domain}: "${sanitized}"`;
-        break;
-      case 'video_watch':
-        content = `Watched on ${domainCheck.domain}: "${sanitized}"`;
-        break;
-      case 'post_view':
-        content = `Read on ${domainCheck.domain}: "${sanitized}"`;
-        break;
-      default:
-        content = `Activity on ${domainCheck.domain}: "${sanitized}"`;
-    }
-    
-    return {
-      safe: true,
-      content,
-      domain: domainCheck.domain,
-      category,
-      fingerprint: generateFingerprint(
-        domainCheck.domain || 'unknown',
-        category || 'unknown',
-        content
-      ),
-    };
+  // Handle source name from extension (e.g., 'twitter' instead of URL)
+  let domainCheck: { allowed: boolean; domain?: string; info?: { category: string; description: string } };
+  
+  if (event.domain && SOURCE_TO_DOMAIN.has(event.domain)) {
+    const mappedDomain = SOURCE_TO_DOMAIN.get(event.domain)!;
+    const info = ALLOWED_DOMAINS.get(mappedDomain);
+    domainCheck = { allowed: !!info, domain: mappedDomain, info };
+  } else if (event.url) {
+    domainCheck = isDomainAllowed(event.url);
+  } else if (event.domain) {
+    domainCheck = isDomainAllowed(`https://${event.domain}`);
+  } else {
+    return { safe: false, reason: 'No URL or domain provided' };
   }
   
-  return { safe: false, reason: 'No URL provided' };
+  if (!domainCheck.allowed) {
+    logAuditEvent('access_denied', `Blocked domain: ${domainCheck.domain}`, undefined, 'browser_watcher');
+    return { safe: false, reason: `Domain not in whitelist: ${domainCheck.domain}` };
+  }
+  
+  // LAYER 2: Content sanitization
+  const rawContent = [event.title, event.query].filter(Boolean).join(' - ');
+  
+  if (!rawContent || rawContent.length < 5) {
+    return { safe: false, reason: 'Content too short' };
+  }
+  
+  // Check for sensitive content before sanitization
+  if (hasSensitiveContent(rawContent)) {
+    logAuditEvent('access_denied', `Blocked sensitive content from ${domainCheck.domain}`, undefined, 'browser_watcher');
+    return { safe: false, reason: 'Contains sensitive data' };
+  }
+  
+  const sanitized = sanitizeContent(rawContent);
+  
+  // Build final content
+  let content = '';
+  const category = domainCheck.info?.category as FilteredContent['category'];
+  
+  switch (event.type) {
+    case 'page_visit':
+      content = `Browsed ${domainCheck.info?.description || domainCheck.domain}: "${sanitized}"`;
+      break;
+    case 'search':
+      content = `Searched on ${domainCheck.domain}: "${sanitized}"`;
+      break;
+    case 'video_watch':
+      content = `Watched on ${domainCheck.domain}: "${sanitized}"`;
+      break;
+    case 'post_view':
+      content = `Read on ${domainCheck.domain}: "${sanitized}"`;
+      break;
+    default:
+      content = `Activity on ${domainCheck.domain}: "${sanitized}"`;
+  }
+  
+  return {
+    safe: true,
+    content,
+    domain: domainCheck.domain,
+    category,
+    fingerprint: generateFingerprint(
+      domainCheck.domain || 'unknown',
+      category || 'unknown',
+      content
+    ),
+  };
 }
 
 // ============================================

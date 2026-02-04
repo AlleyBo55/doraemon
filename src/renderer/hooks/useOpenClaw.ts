@@ -11,12 +11,23 @@ type Message = {
   timestamp: number;
 };
 
+type ToolEvent = {
+  tool: string;
+  status: 'running' | 'done' | 'error';
+  timestamp: number;
+};
+
+type AgentMode = 'chat' | 'agent';
+
 type OpenClawState = {
   isConnected: boolean;
   isThinking: boolean;
   messages: Message[];
   currentThought: string | null;
   error: string | null;
+  agentMode: AgentMode;
+  currentTool: ToolEvent | null;
+  isAgentRunning: boolean;
 };
 
 type RequestFrame = { type: 'req'; id: string; method: string; params?: unknown };
@@ -76,6 +87,9 @@ export const useOpenClaw = () => {
     messages: [],
     currentThought: null,
     error: null,
+    agentMode: 'agent',
+    currentTool: null,
+    isAgentRunning: false,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -216,11 +230,51 @@ export const useOpenClaw = () => {
               }
             }
           }
-          // Handle agent events (another possible format)
-          else if (evt.event === 'agent' || evt.event === 'message') {
-            console.log('OpenClaw agent/message event:', evt.payload);
-            const p = evt.payload as { state?: string; content?: string; text?: string; delta?: string; message?: string } | undefined;
-            // delta = incremental append, others = full replacement
+          // Handle agent events (tool use, lifecycle)
+          else if (evt.event === 'agent') {
+            const p = evt.payload as { 
+              stream?: string; 
+              data?: { 
+                tool?: string; 
+                phase?: string; 
+                text?: string;
+                error?: unknown;
+              };
+              runId?: string;
+            } | undefined;
+            
+            // Tool events - show what the agent is doing
+            if (p?.stream === 'tool' && p.data?.tool) {
+              const toolName = p.data.tool;
+              setState(prev => ({
+                ...prev,
+                currentTool: { tool: toolName, status: 'running', timestamp: Date.now() },
+                currentThought: `Using ${toolName}...`,
+                isAgentRunning: true,
+              }));
+            }
+            // Lifecycle events
+            else if (p?.stream === 'lifecycle') {
+              if (p.data?.phase === 'start') {
+                setState(prev => ({ ...prev, isAgentRunning: true }));
+              } else if (p.data?.phase === 'end' || p.data?.phase === 'error') {
+                setState(prev => ({ 
+                  ...prev, 
+                  isAgentRunning: false, 
+                  currentTool: null,
+                }));
+              }
+            }
+            // Assistant text stream
+            else if (p?.stream === 'assistant' && p.data?.text) {
+              responseBufferRef.current = p.data.text;
+              setState(prev => ({ ...prev, currentThought: responseBufferRef.current }));
+            }
+          }
+          // Handle message events (legacy format)
+          else if (evt.event === 'message') {
+            console.log('OpenClaw message event:', evt.payload);
+            const p = evt.payload as { content?: string; text?: string; delta?: string; message?: string } | undefined;
             if (p?.delta) {
               responseBufferRef.current += p.delta;
             } else {
@@ -475,5 +529,24 @@ export const useOpenClaw = () => {
 
   const getModelMode = useCallback(() => configState.modelMode.value, []);
 
-  return { ...state, sendMessage, triggerEmotion, clearHistory, getModelMode };
+  const setAgentMode = useCallback((mode: AgentMode) => {
+    setState(prev => ({ ...prev, agentMode: mode }));
+  }, []);
+
+  const toggleAgentMode = useCallback(() => {
+    setState(prev => ({ 
+      ...prev, 
+      agentMode: prev.agentMode === 'chat' ? 'agent' : 'chat' 
+    }));
+  }, []);
+
+  return { 
+    ...state, 
+    sendMessage, 
+    triggerEmotion, 
+    clearHistory, 
+    getModelMode,
+    setAgentMode,
+    toggleAgentMode,
+  };
 };

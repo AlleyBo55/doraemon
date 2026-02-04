@@ -165,6 +165,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBrowserActivity: (callback: (data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => void) => {
     ipcRenderer.on('browser-activity', (_event: IpcRendererEvent, data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => callback(data));
   },
+  
+  // Media Feed API (Supervised Learning)
+  mediaFeed: (input: { type: string; title: string; chapter?: number; episode?: number; summary: string; highlights?: string[]; url?: string }) =>
+    ipcRenderer.invoke('media:feed', input),
+  mediaFeedManga: (title: string, chapter: number, summary: string, highlights?: string[]) =>
+    ipcRenderer.invoke('media:feed-manga', title, chapter, summary, highlights),
+  mediaFeedAnime: (title: string, episode: number, summary: string, highlights?: string[]) =>
+    ipcRenderer.invoke('media:feed-anime', title, episode, summary, highlights),
+  mediaFeedVideo: (title: string, summary: string, url?: string, highlights?: string[]) =>
+    ipcRenderer.invoke('media:feed-video', title, summary, url, highlights),
+  mediaFeedArticle: (title: string, summary: string, url?: string, highlights?: string[]) =>
+    ipcRenderer.invoke('media:feed-article', title, summary, url, highlights),
+  mediaParseChat: (message: string) =>
+    ipcRenderer.invoke('media:parse-chat', message),
+  
+  // Autonomous Learning API (FREE observation)
+  autonomousGetStats: () =>
+    ipcRenderer.invoke('autonomous:get-stats'),
+  autonomousGetSessions: () =>
+    ipcRenderer.invoke('autonomous:get-sessions'),
+  autonomousResetStats: () =>
+    ipcRenderer.invoke('autonomous:reset-stats'),
 });
 
 // Setup API (for setup window)

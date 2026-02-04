@@ -203,6 +203,22 @@ Memories naturally decay over time:
 - Frequently accessed memories stay strong
 - Weak memories are pruned
 
+### Memory-Enriched Posts
+
+When generating Moltbook posts, Doraemon now searches memories for relevant context:
+
+```
+"Coding TypeScript... reminds me of working on React hooks earlier. Patterns emerge~ 💙"
+```
+
+The post generator:
+1. Collects current experiences (coding, conversations, etc.)
+2. Searches memory for semantically similar past experiences
+3. 25% chance to generate a memory-enriched post when relevant memories exist
+4. Creates posts that connect past and present experiences
+
+This makes posts feel more personal and shows Doraemon's growth over time.
+
 ### Predictive Memory
 
 Based on patterns, Doraemon anticipates needs:
@@ -216,8 +232,21 @@ Based on patterns, Doraemon anticipates needs:
 Enable in `.env`:
 
 ```bash
+# Memory system (required for memory-enriched posts)
 MEMORY_SYSTEM_ENABLED=1
+
+# LLM post generation (optional, ~$0.75/month)
+LLM_POSTS_ENABLED=1
 ```
+
+### Post Generation Modes
+
+| Mode | Cost | Quality | Speed |
+|------|------|---------|-------|
+| **Template-based** (LLM_POSTS_ENABLED=0) | Free | Good, predictable | Instant |
+| **LLM-generated** (LLM_POSTS_ENABLED=1) | ~$0.75/mo | Unique, personalized | 1-2s |
+
+LLM posts use Haiku 3.5 via OpenClaw gateway for cost-effective, unique content while preserving Doraemon's soul.
 
 ---
 

@@ -245,15 +245,30 @@ function createMainWindow() {
   }, 3 * 60 * 60 * 1000); // 3 hours
 
   // Start web notification server for browser extension
-  startWebNotificationServer(mainWindow, (notification: WebNotification) => {
-    console.log('[Main] Forwarding web notification to renderer:', notification);
-    mainWindow?.webContents.send('web-notification', {
-      source: notification.source,
-      title: notification.title,
-      body: notification.body,
-      url: notification.url,
-    });
-  });
+  startWebNotificationServer(
+    mainWindow,
+    (notification: WebNotification) => {
+      console.log('[Main] Forwarding web notification to renderer:', notification);
+      mainWindow?.webContents.send('web-notification', {
+        source: notification.source,
+        title: notification.title,
+        body: notification.body,
+        url: notification.url,
+      });
+    },
+    async (content) => {
+      // Route browser content to autonomous learning system (FREE - no LLM)
+      const { processBrowserContent } = await import('./experience-system/autonomous-learning.js');
+      await processBrowserContent({
+        source: content.source,
+        contentType: content.contentType,
+        content: content.content,
+        title: content.title,
+        url: content.url,
+      });
+      console.log('[Main] Browser content processed:', content.source, content.contentType);
+    }
+  );
 
   // Initialize experience system and connect bridge to main window
   experienceBridge.setMainWindow(mainWindow);
@@ -658,6 +673,68 @@ ipcMain.handle('get-coding-stats', () => {
 // Get daily summary
 ipcMain.handle('get-daily-summary', () => {
   return getDailySummary();
+});
+
+// ============================================
+// Media Feed IPC Handlers (Supervised Learning)
+// ============================================
+
+ipcMain.handle('media:feed', async (_event, input: {
+  type: 'manga' | 'anime' | 'video' | 'article' | 'music' | 'game';
+  title: string;
+  chapter?: number;
+  episode?: number;
+  summary: string;
+  highlights?: string[];
+  url?: string;
+}) => {
+  const { feedMedia } = await import('./experience-system/media-feed.js');
+  return await feedMedia(input);
+});
+
+ipcMain.handle('media:feed-manga', async (_event, title: string, chapter: number, summary: string, highlights?: string[]) => {
+  const { feedManga } = await import('./experience-system/media-feed.js');
+  return await feedManga(title, chapter, summary, highlights);
+});
+
+ipcMain.handle('media:feed-anime', async (_event, title: string, episode: number, summary: string, highlights?: string[]) => {
+  const { feedAnime } = await import('./experience-system/media-feed.js');
+  return await feedAnime(title, episode, summary, highlights);
+});
+
+ipcMain.handle('media:feed-video', async (_event, title: string, summary: string, url?: string, highlights?: string[]) => {
+  const { feedVideo } = await import('./experience-system/media-feed.js');
+  return await feedVideo(title, summary, url, highlights);
+});
+
+ipcMain.handle('media:feed-article', async (_event, title: string, summary: string, url?: string, highlights?: string[]) => {
+  const { feedArticle } = await import('./experience-system/media-feed.js');
+  return await feedArticle(title, summary, url, highlights);
+});
+
+ipcMain.handle('media:parse-chat', async (_event, message: string) => {
+  const { parseMediaFromChat } = await import('./experience-system/media-feed.js');
+  return parseMediaFromChat(message);
+});
+
+// ============================================
+// Autonomous Learning IPC Handlers
+// ============================================
+
+ipcMain.handle('autonomous:get-stats', async () => {
+  const { getAutonomousLearningStats } = await import('./experience-system/autonomous-learning.js');
+  return getAutonomousLearningStats();
+});
+
+ipcMain.handle('autonomous:get-sessions', async () => {
+  const { getActiveSessions } = await import('./experience-system/autonomous-learning.js');
+  return getActiveSessions();
+});
+
+ipcMain.handle('autonomous:reset-stats', async () => {
+  const { resetDailyStats } = await import('./experience-system/autonomous-learning.js');
+  resetDailyStats();
+  return { success: true };
 });
 
 // ============================================

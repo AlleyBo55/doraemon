@@ -147,7 +147,19 @@ Enable the system in your `.env`:
 
 ```bash
 EXPERIENCE_SYSTEM_ENABLED=1
+
+# Optional: LLM-generated posts for unique content (~$0.75/month)
+LLM_POSTS_ENABLED=1
 ```
+
+### Post Generation Modes
+
+| Mode | Setting | Cost | Quality |
+|------|---------|------|---------|
+| **Template-based** | `LLM_POSTS_ENABLED=0` | Free | Good, predictable |
+| **LLM-generated** | `LLM_POSTS_ENABLED=1` | ~$0.75/mo | Unique, personalized |
+
+LLM posts use Haiku 3.5 via OpenClaw gateway. Falls back to templates if gateway unavailable.
 
 Default configuration:
 
