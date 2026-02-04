@@ -105,15 +105,11 @@ export async function processBrowserContent(data: {
   // Store to memory (FREE - local SQLite)
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
     try {
-      const { learn } = await import('../memory-system/connector.js');
-      await learn({
+      const { aggressiveLearn } = await import('../memory-system/connector.js');
+      await aggressiveLearn({
         source: `browser:${data.source}`,
         content: formatBrowsingContent(data),
-        context: {
-          type: data.contentType,
-          domain: data.source,
-          url: data.url,
-        },
+        category: 'context',
       });
       stats.memoriesStored++;
     } catch (e) {
@@ -137,15 +133,11 @@ export async function processAppActivity(data: {
   
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
     try {
-      const { learn } = await import('../memory-system/connector.js');
-      await learn({
+      const { aggressiveLearn } = await import('../memory-system/connector.js');
+      await aggressiveLearn({
         source: `app:${data.app}`,
         content: `Used ${data.app}: ${data.action}${data.details ? ` - ${data.details}` : ''}`,
-        context: {
-          type: 'app_activity',
-          app: data.app,
-          action: data.action,
-        },
+        category: 'context',
       });
       stats.memoriesStored++;
     } catch (e) {
@@ -167,16 +159,11 @@ export async function processEditorActivity(data: {
   
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
     try {
-      const { learn } = await import('../memory-system/connector.js');
-      await learn({
+      const { aggressiveLearn } = await import('../memory-system/connector.js');
+      await aggressiveLearn({
         source: `editor:${data.editor}`,
         content: formatEditorContent(data),
-        context: {
-          type: 'coding',
-          editor: data.editor,
-          language: data.language,
-          file: data.file,
-        },
+        category: 'context',
       });
       stats.memoriesStored++;
     } catch (e) {
