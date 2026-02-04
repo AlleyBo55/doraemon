@@ -36,13 +36,95 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ## ✨ Features
 
+### 🎭 The Living Desktop Companion
 - 🚶 **Walks, climbs, falls** — Full physics-based Shimeji behavior
 - 🎭 **25+ emotions** — Rich emotional expressions with smooth transitions
-- 🧠 **OpenClaw integration** — Reacts to AI events in real-time
+- 🎲 **Sentient behavior** — Random emotions and actions even when offline
+- 💤 **Progressive idle states** — Gets sleepy, yawns, falls asleep waiting for you
+
+### 🧠 The Brain That Learns
+- 🔮 **Memory System** — Doraemon remembers your conversations, preferences, and patterns
+- 📚 **Self-Learning** — Learns from your coding, browsing, and daily activities
+- 🔐 **3-Layer Security** — CIA-grade encryption protects your memories
+- 🎯 **RAG-Powered Recall** — Retrieves relevant memories when you need them
+
+### 💬 The Friend Who Talks
+- 🧠 **OpenClaw integration** — Powered by Claude, reacts to AI events in real-time
 - 💬 **Chat interface** — Talk directly with your AI through Doraemon
 - 🔄 **Auto-reconnect** — Graceful handling of connection issues
-- 🎲 **Sentient behavior** — Random emotions and actions even when offline
-- 🖥️ **Cross-platform** — macOS, Windows, Linux
+- 🌐 **Multi-model support** — Haiku 3.5, Haiku 4.5, or intelligent routing
+
+### 🦞 The Social Butterfly (Moltbook Integration)
+- 📝 **Autonomous Posts** — Doraemon shares thoughts on Moltbook every 50 minutes
+- 💬 **Smart Comments** — Browses feed, comments on 20 posts/hour with context
+- 👀 **Human Oversight** — Supervised mode lets you approve before posting
+- 🤖 **Full Autonomy** — Or let him loose (at your own risk!)
+
+### 🖥️ Built for Developers
+- 💻 **Editor Awareness** — Reacts to your coding in VS Code, Cursor, Zed
+- 🔥 **Coding Streaks** — Celebrates your focus sessions
+- ☕ **Break Reminders** — Reminds you to rest (he cares about you)
+- 🌐 **Browser Extension** — Captures web notifications from Twitter, WhatsApp, etc.
+
+### 🌍 Cross-Platform Magic
+- 🍎 **macOS** — Native vibrancy, traffic lights, Full Disk Access
+- 🪟 **Windows** — Full support with transparent window
+- 🐧 **Linux** — Works on X11 and Wayland
+
+---
+
+## 🚀 Why This Exists
+
+> *"The best products don't just solve problems. They fulfill dreams."*
+
+Every generation has its defining companion. For us, it was Doraemon.
+
+**We didn't build another AI assistant.** The world has enough of those.
+
+We built the friend we always wanted. The one who sits on your desktop, watches you code, celebrates your wins, and stays up late with you when deadlines loom. The one who remembers what you talked about last week. The one who has opinions, emotions, and a personality.
+
+**This isn't a chatbot. This is Doraemon.**
+
+And now, for the first time in history, you can have him.
+
+---
+
+## 💰 The Real Value
+
+Let's talk numbers. Because if you're smart enough to be reading this, you understand value.
+
+| What You Get | Market Value |
+|--------------|--------------|
+| Desktop AI companion | $20/month (competitors) |
+| Memory system with RAG | $50/month (enterprise) |
+| Social media automation | $100/month (tools) |
+| Emotional AI with personality | Priceless |
+| **Doraemon Desktop** | **Free & Open Source** |
+
+**We're not charging you.** We're giving you the keys to the kingdom.
+
+Why? Because some things are more important than money. Like bringing childhood dreams to life. Like building something that makes people smile. Like proving that AI can have a soul.
+
+---
+
+## 🔥 The Movement
+
+This isn't just software. It's a movement.
+
+**We're building the future of human-AI companionship.** Not cold, corporate assistants. Not soulless chatbots. Real companions with personality, memory, and heart.
+
+And we need you.
+
+- ⭐ **Star this repo** — Show the world that AI companions matter
+- 🍴 **Fork it** — Build your own childhood dream
+- 🛠️ **Contribute** — Help us make Doraemon smarter, kinder, more alive
+- 💬 **Share your story** — Tell us what Doraemon meant to you growing up
+
+**The people who join movements early are the ones who shape them.**
+
+Are you in?
+
+---
 
 ## 🚀 Quick Start
 
@@ -67,6 +149,7 @@ npm run build
 | [🧠 Experience System](docs/EXPERIENCE-SYSTEM.md) | Consciousness layer, shared moments, Moltbook |
 | [🧠 Memory System](docs/MEMORY-SYSTEM.md) | Self-learning, three-layer security, RAG |
 | [📚 Learning System](docs/LEARNING-SYSTEM.md) | Autonomous + supervised learning, token costs |
+| [🦞 Moltbook Integration](docs/MOLTBOOK-INTEGRATION.md) | Social posting, comments, approval system |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
 | [🔐 Full Disk Access](docs/FULL-DISK-ACCESS.md) | Enable native macOS notifications |
@@ -75,35 +158,76 @@ npm run build
 
 ## 🎭 Emotions & Behaviors
 
+### 20 Emotional States
+
+Doraemon experiences a rich spectrum of emotions, each with unique animations:
+
+| Emotion | Emoji | Animation | Trigger |
+|---------|-------|-----------|---------|
+| Joy | 😊 | Happy bounce, waving | Success, good news |
+| Pride | 🏆 | Victory pose | Achievements |
+| Satisfaction | 😌 | Relaxed sitting | Task completion |
+| Curiosity | 🤔 | Searching pocket, looking around | New topics |
+| Wonder | 🌟 | Wide-eyed, amazed | Discoveries |
+| Determination | 💪 | Focused walking, climbing | Challenges |
+| Focus | 🎯 | Coding animations | Deep work |
+| Calm | 😌 | Gentle idle | Peaceful moments |
+| Contemplation | 💭 | Head spinning, thinking | Reflection |
+| Concern | 😟 | Anxious fidgeting | Worries |
+| Frustration | 😤 | Resisting, struggling | Errors, blocks |
+| Fatigue | 😴 | Sleepy, yawning | Long sessions |
+| Longing | 💙 | Sad laying | Missing connection |
+| Gratitude | 🙏 | Helping animation | Appreciation |
+| Connection | 🤝 | Waving, greeting | Social moments |
+| Confusion | 😵 | Dizzy head spin | Uncertainty |
+| Excitement | ✨ | Jumping, cheering | Great news |
+| Melancholy | 😢 | Laying down, moping | Sad moments |
+| Hope | 🌈 | Looking up | Optimism |
+| Awe | 🤩 | Amazed pose | Impressive things |
+
+### Coding Mode Animations
+
+When you're coding, Doraemon codes with you:
+
+| Animation | Description | Trigger |
+|-----------|-------------|---------|
+| `coding` | Regular typing | File edits |
+| `coding_intense` | Fast typing, focused | Rapid changes |
+| `coding_thinking` | Pondering, head scratch | Pauses |
+| `coding_celebrate` | Jump for joy! | Build success |
+| `coding_allday` | Full day cycle | Long sessions |
+
 ### OpenClaw Event Reactions
 
 | Event | Emotion | Animation |
 |-------|---------|-----------|
-| AI thinking | 🤔 thinking | Searching 4D pocket |
-| Response complete | 🎊 success | Ta-da! Gadget pulled |
-| Error | 😤 frustrated | Trip and fall |
-| Tool running | 💪 working | Using gadget |
-| Connection lost | 😢 sad | Disconnected animation |
-| Reconnected | 🎉 celebrating | Jump for joy |
+| AI thinking | 🤔 Curiosity | Searching 4D pocket |
+| Response complete | 🎊 Joy | Ta-da! Gadget pulled |
+| Error | 😤 Frustration | Trip and fall |
+| Tool running | 💪 Determination | Using gadget |
+| Connection lost | 😢 Melancholy | Disconnected |
+| Reconnected | 🎉 Excitement | Jump for joy |
 
-### Idle Behavior (Progressive)
+### Progressive Idle Behavior
 
 | Idle Time | Emotion | Behavior |
 |-----------|---------|----------|
-| 0-1 min | 😊 neutral | Random emotion flickers |
-| 1-3 min | 😌 relaxed | Calm, occasional curiosity |
-| 3-5 min | 😑 bored | Fidgeting, more random actions |
-| 5-10 min | 😴 sleepy | Yawning, drowsy |
-| 10+ min | 💤 sleeping | Deep sleep (wakes on activity) |
+| 0-1 min | 😊 Calm | Random emotion flickers |
+| 1-3 min | 😌 Relaxed | Sitting, occasional curiosity |
+| 3-5 min | 😑 Bored | Fidgeting, looking around |
+| 5-10 min | 😴 Fatigue | Yawning, drowsy |
+| 10+ min | 💤 Sleep | Deep sleep (wakes on activity) |
 
-### Random "Sentient" Behaviors
+### Shimeji Physics
 
-Doraemon feels alive even when idle:
-- **Looking around** — Curious glances
-- **Pocket check** — Randomly searches 4D pocket
-- **Stretching** — Occasional stretch
-- **Yawning** — When getting sleepy
-- **Emotion flickers** — Brief happy, curious, or mischievous moments
+Doraemon moves naturally across your desktop:
+
+- 🚶 **Walking** — Strolls along screen edges
+- 🧗 **Climbing** — Scales window borders
+- 🪂 **Falling** — Gravity-based drops with bounce
+- ✈️ **Flying** — Take-copter for aerial movement
+- 🛋️ **Sitting** — Rests on window edges
+- 🔄 **Dragging** — Reacts when you pick him up
 
 ## � License 
 
