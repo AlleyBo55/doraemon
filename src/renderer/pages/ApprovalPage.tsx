@@ -616,10 +616,17 @@ export function ApprovalPage() {
     if (success) {
       setItems(prev => prev.filter(i => i.id !== id));
       setStats(prev => ({ ...prev, approved: prev.approved + 1, pending: prev.pending - 1 }));
-      // Reload posted items to show the newly approved item
-      const posted = await window.approvalAPI?.getPostedItems() || [];
-      setPostedItems(posted);
+      // Small delay to ensure backend has saved, then reload posted items
+      setTimeout(async () => {
+        const posted = await window.approvalAPI?.getPostedItems() || [];
+        setPostedItems(posted);
+      }, 300);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsLoading(true);
+    await loadItems();
   };
 
   const handleReject = async (id: string) => {
@@ -645,9 +652,11 @@ export function ApprovalPage() {
       approved: prev.approved + toApprove.length, 
       pending: prev.pending - toApprove.length 
     }));
-    // Reload posted items
-    const posted = await window.approvalAPI?.getPostedItems() || [];
-    setPostedItems(posted);
+    // Small delay to ensure backend has saved, then reload posted items
+    setTimeout(async () => {
+      const posted = await window.approvalAPI?.getPostedItems() || [];
+      setPostedItems(posted);
+    }, 500);
   };
 
   const handleRejectFiltered = async () => {
@@ -678,6 +687,14 @@ export function ApprovalPage() {
           </div>
           
           <div className="flex items-center gap-4 text-xs text-slate-500 no-drag">
+            <button
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="px-2 py-1 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              {isLoading ? '⏳' : '🔄'}
+            </button>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-green-500" />
               {stats.approved} approved
