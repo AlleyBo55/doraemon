@@ -12,13 +12,24 @@ interface PostContext {
   postTitle: string;
   postContent: string;
   postAuthor: string;
+  postUrl?: string;
+  parentCommentId?: string;
   parentCommentAuthor?: string;
   parentCommentContent?: string;
 }
 
+interface ReactionContext {
+  reactionType: 'like' | 'dislike';
+  commentId: string;
+  commentContent: string;
+  commentAuthor: string;
+  postTitle: string;
+  postUrl: string;
+}
+
 interface PendingItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -27,6 +38,7 @@ interface PendingItem {
   submolt: string;
   replyTo?: string;
   postContext?: PostContext;
+  reactionContext?: ReactionContext;
 }
 
 interface SubmoltOption {
@@ -36,7 +48,7 @@ interface SubmoltOption {
 
 interface PostedItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -45,6 +57,7 @@ interface PostedItem {
   postedAt: number;
   moltbookUrl?: string;
   moltbookPostId?: string;
+  reactionType?: 'like' | 'dislike';
 }
 
 interface ApprovalStats {
@@ -59,6 +72,7 @@ declare global {
       getPendingItems: () => Promise<PendingItem[]>;
       getPostedItems: () => Promise<PostedItem[]>;
       approveItem: (id: string) => Promise<boolean>;
+      approveReaction: (id: string) => Promise<boolean>;
       rejectItem: (id: string) => Promise<boolean>;
       approveAll: () => Promise<number>;
       rejectAll: () => Promise<number>;
@@ -289,6 +303,10 @@ function CommentCard({
 function PostedCard({ item }: { item: PostedItem }) {
   const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
   const timeAgo = getTimeAgo(item.postedAt);
+  const typeLabel = item.type === 'post' ? 'Posted' : item.type === 'comment' ? 'Commented' : `${item.reactionType === 'like' ? '👍' : '👎'} Reacted`;
+  const typeColor = item.type === 'reaction' 
+    ? (item.reactionType === 'like' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')
+    : 'bg-green-100 text-green-700';
 
   return (
     <div className="group relative bg-green-50/80 backdrop-blur-xl rounded-2xl border border-green-200/50 shadow-sm">
@@ -298,12 +316,14 @@ function PostedCard({ item }: { item: PostedItem }) {
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                ✓ {item.type === 'post' ? 'Posted' : 'Commented'}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColor}`}>
+                ✓ {typeLabel}
               </span>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                m/{item.submolt}
-              </span>
+              {item.type !== 'reaction' && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                  m/{item.submolt}
+                </span>
+              )}
               <span className="text-xs text-slate-400">{timeAgo}</span>
             </div>
             
@@ -328,13 +348,105 @@ function PostedCard({ item }: { item: PostedItem }) {
   );
 }
 
+function ReactionCard({ 
+  item, 
+  onApprove, 
+  onReject,
+  isExpanded,
+  onToggle,
+}: { 
+  item: PendingItem;
+  onApprove: () => void;
+  onReject: () => void;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
+  const timeAgo = getTimeAgo(item.timestamp);
+  const ctx = item.reactionContext;
+  const isLike = ctx?.reactionType === 'like';
+
+  return (
+    <div className={`
+      group relative bg-white/80 backdrop-blur-xl rounded-2xl 
+      border border-white/20 shadow-sm hover:shadow-md
+      transition-all duration-200 ease-out
+      ${isExpanded ? `ring-2 ${isLike ? 'ring-emerald-500/30' : 'ring-red-500/30'}` : ''}
+    `}>
+      <div className="p-4">
+        {ctx && (
+          <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-medium text-slate-500">Comment by</span>
+              <span className="text-xs font-semibold text-slate-700">@{ctx.commentAuthor}</span>
+            </div>
+            <p className={`text-xs text-slate-600 ${isExpanded ? '' : 'line-clamp-2'}`} onClick={onToggle}>
+              "{ctx.commentContent}"
+            </p>
+            <div className="mt-2 pt-2 border-t border-slate-200">
+              <p className="text-xs text-slate-500">On post: {ctx.postTitle}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                isLike ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+              }`}>
+                {isLike ? '👍 Like' : '👎 Dislike'}
+              </span>
+              <span className="text-xs text-slate-400">{timeAgo}</span>
+            </div>
+            
+            <p className="text-slate-700 text-sm leading-relaxed">
+              {item.content}
+            </p>
+            
+            {ctx?.postUrl && (
+              <a 
+                href={ctx.postUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                🔗 View post
+              </a>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
+          <button
+            onClick={onReject}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors duration-150"
+          >
+            Reject
+          </button>
+          <button
+            onClick={onApprove}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium text-white shadow-sm hover:shadow transition-all duration-150 ${
+              isLike ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-red-500 hover:bg-red-600'
+            }`}
+          >
+            Approve {isLike ? 'Like' : 'Dislike'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ 
   type, 
   onTriggerPost, 
   onTriggerComments,
   isTriggering,
 }: { 
-  type: 'all' | 'post' | 'comment' | 'posted';
+  type: 'all' | 'post' | 'comment' | 'reaction' | 'posted';
   onTriggerPost: () => void;
   onTriggerComments: () => void;
   isTriggering: boolean;
@@ -345,7 +457,7 @@ function EmptyState({
         <div className="text-6xl mb-4">📭</div>
         <h3 className="text-lg font-semibold text-slate-700 mb-2">No posted items yet</h3>
         <p className="text-sm text-slate-500 text-center max-w-xs">
-          Approved posts and comments will appear here with their Moltbook URLs.
+          Approved posts, comments, and reactions will appear here with their Moltbook URLs.
         </p>
       </div>
     );
@@ -353,16 +465,18 @@ function EmptyState({
   
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8">
-      <div className="text-6xl mb-4">{type === 'comment' ? '💬' : type === 'post' ? '📝' : '✨'}</div>
+      <div className="text-6xl mb-4">{type === 'comment' ? '💬' : type === 'post' ? '📝' : type === 'reaction' ? '👍' : '✨'}</div>
       <h3 className="text-lg font-semibold text-slate-700 mb-2">
-        {type === 'comment' ? 'No pending comments' : type === 'post' ? 'No pending posts' : 'All caught up!'}
+        {type === 'comment' ? 'No pending comments' : type === 'post' ? 'No pending posts' : type === 'reaction' ? 'No pending reactions' : 'All caught up!'}
       </h3>
       <p className="text-sm text-slate-500 text-center max-w-xs mb-4">
         {type === 'comment' 
           ? 'Generate comments by browsing Moltbook feed.'
           : type === 'post'
           ? 'Generate a new post based on recent experiences.'
-          : 'No pending posts or comments. Generate new content below.'}
+          : type === 'reaction'
+          ? 'Reactions are generated when browsing Moltbook feed.'
+          : 'No pending posts, comments, or reactions. Generate new content below.'}
       </p>
       <div className="flex gap-2">
         {(type === 'all' || type === 'post') && (
@@ -374,7 +488,7 @@ function EmptyState({
             {isTriggering ? 'Generating...' : 'Generate Post'}
           </button>
         )}
-        {(type === 'all' || type === 'comment') && (
+        {(type === 'all' || type === 'comment' || type === 'reaction') && (
           <button
             onClick={onTriggerComments}
             disabled={isTriggering}
@@ -396,7 +510,7 @@ export function ApprovalPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTriggering, setIsTriggering] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'post' | 'comment' | 'posted'>('all');
+  const [filter, setFilter] = useState<'all' | 'post' | 'comment' | 'reaction' | 'posted'>('all');
 
   const loadItems = useCallback(async () => {
     try {
@@ -493,7 +607,12 @@ export function ApprovalPage() {
   }, [loadItems]);
 
   const handleApprove = async (id: string) => {
-    const success = await window.approvalAPI?.approveItem(id);
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    
+    const success = item.type === 'reaction' 
+      ? await window.approvalAPI?.approveReaction(id)
+      : await window.approvalAPI?.approveItem(id);
     if (success) {
       setItems(prev => prev.filter(i => i.id !== id));
       setStats(prev => ({ ...prev, approved: prev.approved + 1, pending: prev.pending - 1 }));
@@ -537,6 +656,7 @@ export function ApprovalPage() {
   const filteredItems = items.filter(item => filter === 'all' || item.type === filter);
   const postCount = items.filter(i => i.type === 'post').length;
   const commentCount = items.filter(i => i.type === 'comment').length;
+  const reactionCount = items.filter(i => i.type === 'reaction').length;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
@@ -563,7 +683,7 @@ export function ApprovalPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1 p-1 bg-slate-200/50 rounded-xl">
-            {(['all', 'post', 'comment', 'posted'] as const).map(f => (
+            {(['all', 'post', 'comment', 'reaction', 'posted'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -574,6 +694,7 @@ export function ApprovalPage() {
                 {f === 'all' ? `All (${items.length})` 
                   : f === 'post' ? `Posts (${postCount})` 
                   : f === 'comment' ? `Comments (${commentCount})`
+                  : f === 'reaction' ? `Reactions (${reactionCount})`
                   : `Posted (${postedItems.length})`}
               </button>
             ))}
@@ -658,8 +779,17 @@ export function ApprovalPage() {
                   submolts={submolts}
                   onSubmoltChange={(submolt) => handleSubmoltChange(item.id, submolt)}
                 />
-              ) : (
+              ) : item.type === 'comment' ? (
                 <CommentCard
+                  key={item.id}
+                  item={item}
+                  onApprove={() => handleApprove(item.id)}
+                  onReject={() => handleReject(item.id)}
+                  isExpanded={expandedId === item.id}
+                  onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                />
+              ) : (
+                <ReactionCard
                   key={item.id}
                   item={item}
                   onApprove={() => handleApprove(item.id)}

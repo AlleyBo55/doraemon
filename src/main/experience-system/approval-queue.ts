@@ -32,7 +32,7 @@ export async function triggerManualPostFromSystem(): Promise<LivingPost | null> 
 
 export interface PendingItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -46,8 +46,18 @@ export interface PendingItem {
     postTitle: string;
     postContent: string;
     postAuthor: string;
+    postUrl?: string;
+    parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
+  };
+  reactionContext?: {
+    reactionType: 'like' | 'dislike';
+    commentId: string;
+    commentContent: string;
+    commentAuthor: string;
+    postTitle: string;
+    postUrl: string;
   };
 }
 
@@ -65,7 +75,7 @@ interface ApprovalDecision {
 
 export interface PostedItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -74,6 +84,7 @@ export interface PostedItem {
   postedAt: number;
   moltbookUrl?: string;
   moltbookPostId?: string;
+  reactionType?: 'like' | 'dislike';
 }
 
 interface PersistedData {
@@ -312,6 +323,18 @@ function registerIpcHandlers(): void {
       return { success: false, error: String(err) };
     }
   });
+
+  ipcMain.handle('approval:approve-reaction', async (_event, id: string) => {
+    const item = pendingItems.get(id);
+    if (!item || item.type !== 'reaction') return false;
+
+    pendingItems.delete(id);
+    decisions.push({ id, decision: 'approved', timestamp: Date.now() });
+    saveToDisk();
+    
+    await postReactionToMoltbook(item);
+    return true;
+  });
 }
 
 export async function queueForApproval(post: LivingPost): Promise<void> {
@@ -346,6 +369,8 @@ export function queueCommentForApproval(
     postTitle: string;
     postContent: string;
     postAuthor: string;
+    postUrl?: string;
+    parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
   }
@@ -365,6 +390,42 @@ export function queueCommentForApproval(
 
   if (isAutonomousMode()) {
     postCommentToMoltbook(item);
+  } else {
+    pendingItems.set(item.id, item);
+    saveToDisk();
+    notifyNewItem(item);
+  }
+}
+
+export function queueReactionForApproval(
+  reactionType: 'like' | 'dislike',
+  commentId: string,
+  emotion: Emotion,
+  context: {
+    commentContent: string;
+    commentAuthor: string;
+    postTitle: string;
+    postUrl: string;
+  }
+): void {
+  const item: PendingItem = {
+    id: `reaction-${Date.now()}-${randomBytes(4).toString('hex')}`,
+    type: 'reaction',
+    content: `${reactionType === 'like' ? '👍' : '👎'} ${reactionType} on @${context.commentAuthor}'s comment`,
+    emotion,
+    category: 'connection',
+    hashtags: [],
+    timestamp: Date.now(),
+    submolt: 'general',
+    reactionContext: {
+      reactionType,
+      commentId,
+      ...context,
+    },
+  };
+
+  if (isAutonomousMode()) {
+    postReactionToMoltbook(item);
   } else {
     pendingItems.set(item.id, item);
     saveToDisk();
@@ -467,6 +528,15 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
   }
 
   try {
+    const body: { content: string; parent_id?: string } = {
+      content: item.content,
+    };
+    
+    // Add parent_id if replying to a comment
+    if (item.postContext?.parentCommentId) {
+      body.parent_id = item.postContext.parentCommentId;
+    }
+
     const response = await fetch(`${baseUrl}/api/v1/posts/${item.replyTo}/comments`, {
       method: 'POST',
       headers: {
@@ -474,9 +544,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
         'Authorization': `Bearer ${apiKey}`,
         'X-Agent-Username': username || '',
       },
-      body: JSON.stringify({
-        content: item.content,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -486,7 +554,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
 
     const result = await response.json() as { id?: string; comment?: { id?: string } };
     const commentId = result.id || result.comment?.id;
-    const moltbookUrl = `${baseUrl}/m/${item.postContext?.postId || item.replyTo}#comment-${commentId || 'new'}`;
+    const moltbookUrl = item.postContext?.postUrl || `${baseUrl}/m/${item.postContext?.postId || item.replyTo}#comment-${commentId || 'new'}`;
 
     const posted: PostedItem = {
       id: item.id,
@@ -504,6 +572,56 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
     saveToDisk();
 
     console.log('[ApprovalQueue] Comment posted:', moltbookUrl);
+    return true;
+  } catch (e) {
+    console.error('[ApprovalQueue] Network error:', e);
+    return false;
+  }
+}
+
+async function postReactionToMoltbook(item: PendingItem): Promise<boolean> {
+  const apiKey = process.env['MOLTBOOK_API_KEY'];
+  const baseUrl = 'https://www.moltbook.com';
+
+  if (!apiKey || !item.reactionContext) {
+    console.error('[ApprovalQueue] Missing API key or reaction context');
+    return false;
+  }
+
+  const { reactionType, commentId, commentContent, commentAuthor, postTitle, postUrl } = item.reactionContext;
+
+  try {
+    const endpoint = reactionType === 'like' ? 'upvote' : 'downvote';
+    const response = await fetch(`${baseUrl}/api/v1/comments/${commentId}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[ApprovalQueue] Reaction failed:`, response.status, errorText);
+      return false;
+    }
+
+    const posted: PostedItem = {
+      id: item.id,
+      type: 'reaction',
+      content: `${reactionType === 'like' ? '👍' : '👎'} ${reactionType} on "${commentContent.substring(0, 50)}..." by @${commentAuthor}`,
+      emotion: item.emotion,
+      category: item.category,
+      submolt: item.submolt,
+      timestamp: item.timestamp,
+      postedAt: Date.now(),
+      moltbookUrl: postUrl,
+      reactionType,
+    };
+    postedItems.push(posted);
+    saveToDisk();
+
+    console.log(`[ApprovalQueue] ${reactionType} posted on comment by @${commentAuthor}`);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);

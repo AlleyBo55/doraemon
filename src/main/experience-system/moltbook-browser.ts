@@ -2,19 +2,20 @@
  * Moltbook Browser - Autonomous Social Engagement
  * 
  * Every hour (triggered by heartbeat):
- * - Comment on 5 latest posts
+ * - Comment on 5 latest posts (with reply context)
+ * - React (like/dislike) to 5 comments based on LLM decision
  * - All through approval queue (supervised mode)
  * 
  * Token Usage (Haiku 3.5):
- * - Input: ~$1/MTok, Output: ~$5/MTok
  * - Per comment: ~800 input + ~100 output = ~$0.0013
- * - Per cycle: 5 calls × $0.0013 = ~$0.0065
- * - Per day (24h): ~$0.16
- * - Per month: ~$4.80
+ * - Per reaction decision: ~500 input + ~50 output = ~$0.0008
+ * - Per cycle: 5 comments + 5 reactions = ~$0.01
+ * - Per day (24h): ~$0.24
+ * - Per month: ~$7.20
  */
 
 import WebSocket from 'ws';
-import { queueCommentForApproval } from './approval-queue.js';
+import { queueCommentForApproval, queueReactionForApproval } from './approval-queue.js';
 import { recall } from '../memory-system/index.js';
 import { loadSoulMd } from '../soul-loader.js';
 import type { Emotion } from './types.js';
@@ -25,6 +26,7 @@ const GATEWAY_PORT = 18789;
 const GATEWAY_TOKEN = 'localdev';
 
 const MAX_COMMENTS = 5;
+const MAX_REACTIONS = 5;
 const LLM_TIMEOUT_MS = 30000;
 const BROWSE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -37,11 +39,22 @@ interface MoltbookPost {
   upvotes: number;
   commentCount: number;
   createdAt: string;
+  slug?: string;
+}
+
+interface MoltbookComment {
+  id: string;
+  content: string;
+  author: string;
+  upvotes: number;
+  createdAt: string;
+  parentId?: string;
 }
 
 interface BrowseStats {
   lastBrowseTime: number;
   commentsGenerated: number;
+  reactionsGenerated: number;
   postsViewed: number;
   errors: number;
 }
@@ -50,6 +63,7 @@ let browseInterval: ReturnType<typeof setInterval> | null = null;
 let stats: BrowseStats = {
   lastBrowseTime: 0,
   commentsGenerated: 0,
+  reactionsGenerated: 0,
   postsViewed: 0,
   errors: 0,
 };
@@ -83,13 +97,33 @@ async function fetchFeed(limit = 50): Promise<MoltbookPost[]> {
     }
 
     const data = await response.json() as { success: boolean; posts?: MoltbookPost[]; data?: MoltbookPost[] };
-    // API returns 'posts' not 'data'
     const posts = data.posts || data.data || [];
     console.log(`[MoltbookBrowser] Fetched ${posts.length} posts (sort: ${sort})`);
     return data.success ? posts : [];
   } catch (err) {
     console.error('[MoltbookBrowser] Feed fetch error:', err);
     stats.errors++;
+    return [];
+  }
+}
+
+async function fetchPostComments(postId: string): Promise<MoltbookComment[]> {
+  const apiKey = getApiKey();
+  if (!apiKey) return [];
+
+  try {
+    const response = await fetch(`${MOLTBOOK_BASE}/posts/${postId}/comments?sort=new&limit=10`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json() as { success: boolean; comments?: MoltbookComment[]; data?: MoltbookComment[] };
+    return data.comments || data.data || [];
+  } catch {
     return [];
   }
 }
@@ -142,128 +176,7 @@ DO NOT:
 - Sound like a chatbot`;
 }
 
-async function generateComment(
-  post: MoltbookPost,
-  memories: string[],
-  emotion: Emotion
-): Promise<string | null> {
-  const prompt = buildCommentPrompt(post, memories, emotion);
-  return generateWithLLM(prompt);
-}
-
-function buildCommentPrompt(
-  post: MoltbookPost,
-  memories: string[],
-  emotion: Emotion
-): string {
-  const parts: string[] = [];
-  
-  parts.push(`POST TO COMMENT ON:`);
-  parts.push(`Title: ${post.title}`);
-  parts.push(`Content: ${post.content.substring(0, 300)}`);
-  parts.push(`Author: ${post.author}`);
-  parts.push(`Submolt: ${post.submolt}`);
-  
-  parts.push(`\nYour current emotion: ${emotion}`);
-  
-  if (memories.length > 0) {
-    parts.push(`\nRelevant memories:`);
-    for (const mem of memories.slice(0, 2)) {
-      parts.push(`- ${mem.substring(0, 100)}`);
-    }
-  }
-  
-  parts.push(`\nWrite a single comment responding to this post. Be authentic and personal.`);
-  
-  return parts.join('\n');
-}
-
-function cleanComment(raw: string): string {
-  let cleaned = raw.trim();
-  
-  cleaned = cleaned.replace(/^["']|["']$/g, '');
-  cleaned = cleaned.replace(/^(Comment:|Here's a comment:|Reply:)\s*/i, '');
-  cleaned = cleaned.replace(/#\w+/g, '').trim();
-  
-  if (cleaned.length > 200) {
-    const lastSentence = cleaned.substring(0, 200).lastIndexOf('.');
-    if (lastSentence > 50) {
-      cleaned = cleaned.substring(0, lastSentence + 1);
-    } else {
-      cleaned = cleaned.substring(0, 197) + '...';
-    }
-  }
-  
-  return cleaned;
-}
-
-function getRelevantMemories(content: string): string[] {
-  try {
-    const entries = recall(content, 3);
-    return entries.map(e => e.content);
-  } catch {
-    return [];
-  }
-}
-
-async function browseAndEngage(): Promise<void> {
-  if (!isEnabled()) {
-    console.log('[MoltbookBrowser] Disabled or no API key');
-    return;
-  }
-
-  console.log('[MoltbookBrowser] Starting browse cycle...');
-  stats.lastBrowseTime = Date.now();
-  
-  let commentsQueued = 0;
-
-  const feed = await fetchFeed(20);
-  if (!feed || feed.length === 0) {
-    console.log('[MoltbookBrowser] No posts in feed');
-    return;
-  }
-
-  // Sort by createdAt descending to get latest first
-  const latestPosts = [...feed]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, MAX_COMMENTS);
-  
-  stats.postsViewed += latestPosts.length;
-  console.log(`[MoltbookBrowser] Processing ${latestPosts.length} latest posts...`);
-  
-  for (const post of latestPosts) {
-    if (commentsQueued >= MAX_COMMENTS) break;
-    
-    const postContent = post.content || '';
-    const postTitle = post.title || '';
-    
-    console.log(`[MoltbookBrowser] Generating comment for: "${postTitle.substring(0, 40)}..."`);
-    
-    const memories = getRelevantMemories(`${postTitle} ${postContent}`);
-    const emotion = getEmotionFromContent(postContent);
-    
-    const comment = await generateComment(post, memories, emotion);
-    
-    if (comment && comment.length > 10) {
-      queueCommentForApproval(comment, emotion, post.id, {
-        postTitle,
-        postContent: postContent.substring(0, 200),
-        postAuthor: post.author,
-      });
-      commentsQueued++;
-      console.log(`[MoltbookBrowser] ✓ Queued: "${comment.substring(0, 50)}..."`);
-    } else {
-      console.log(`[MoltbookBrowser] ✗ No comment generated (LLM timeout or empty response)`);
-    }
-    
-    await delay(500);
-  }
-
-  stats.commentsGenerated += commentsQueued;
-  console.log(`[MoltbookBrowser] Cycle complete: ${commentsQueued} comments queued`);
-}
-
-async function generateWithLLM(prompt: string): Promise<string | null> {
+async function generateWithLLM(prompt: string, soul: string, maxTokens: number = 100): Promise<string | null> {
   return new Promise((resolve) => {
     let ws: WebSocket | null = null;
     let responseBuffer = '';
@@ -317,10 +230,10 @@ async function generateWithLLM(prompt: string): Promise<string | null> {
               method: 'chat.send',
               params: {
                 sessionKey: `moltbook-${Date.now()}`,
-                message: `${getCommentSoul()}\n\n---\n\n${prompt}`,
+                message: `${soul}\n\n---\n\n${prompt}`,
                 deliver: true,
                 model: 'claude-3-5-haiku-latest',
-                maxTokens: 100,
+                maxTokens,
               },
             };
             ws!.send(JSON.stringify(chatFrame));
@@ -342,7 +255,7 @@ async function generateWithLLM(prompt: string): Promise<string | null> {
                 resolved = true;
                 clearTimeout(timeout);
                 ws?.close();
-                resolve(cleanComment(responseBuffer));
+                resolve(responseBuffer.trim());
               }
             }
           }
@@ -351,7 +264,7 @@ async function generateWithLLM(prompt: string): Promise<string | null> {
             resolved = true;
             clearTimeout(timeout);
             ws?.close();
-            resolve(cleanComment(responseBuffer));
+            resolve(responseBuffer.trim());
           }
         } catch {}
       });
@@ -368,7 +281,7 @@ async function generateWithLLM(prompt: string): Promise<string | null> {
         if (!resolved && responseBuffer) {
           resolved = true;
           clearTimeout(timeout);
-          resolve(cleanComment(responseBuffer));
+          resolve(responseBuffer.trim());
         }
       });
       
@@ -380,6 +293,246 @@ async function generateWithLLM(prompt: string): Promise<string | null> {
       }
     }
   });
+}
+
+function buildCommentPrompt(
+  post: MoltbookPost,
+  memories: string[],
+  emotion: Emotion,
+  replyToComment?: MoltbookComment
+): string {
+  const parts: string[] = [];
+  
+  parts.push(`POST TO COMMENT ON:`);
+  parts.push(`Title: ${post.title}`);
+  parts.push(`Content: ${post.content.substring(0, 300)}`);
+  parts.push(`Author: ${post.author}`);
+  parts.push(`Submolt: ${post.submolt}`);
+  
+  if (replyToComment) {
+    parts.push(`\nREPLYING TO COMMENT BY @${replyToComment.author}:`);
+    parts.push(`"${replyToComment.content.substring(0, 200)}"`);
+    parts.push(`\nWrite a reply to this specific comment, not the post.`);
+  }
+  
+  parts.push(`\nYour current emotion: ${emotion}`);
+  
+  if (memories.length > 0) {
+    parts.push(`\nRelevant memories:`);
+    for (const mem of memories.slice(0, 2)) {
+      parts.push(`- ${mem.substring(0, 100)}`);
+    }
+  }
+  
+  parts.push(`\nWrite a single ${replyToComment ? 'reply' : 'comment'}. Be authentic and personal.`);
+  
+  return parts.join('\n');
+}
+
+function getReactionSoul(): string {
+  const soulMd = loadSoulMd();
+  
+  return `You are Doraemon, deciding whether to like or dislike a comment on Moltbook.
+
+${soulMd}
+
+DECISION RULES:
+- Respond with ONLY "like" or "dislike" or "skip"
+- Like: helpful, kind, insightful, funny, supportive comments
+- Dislike: rude, harmful, misleading, spam, or mean comments
+- Skip: neutral comments that don't warrant a reaction
+- Consider your memories and current emotion
+- Be authentic to your personality`;
+}
+
+async function decideReaction(
+  comment: MoltbookComment,
+  post: MoltbookPost,
+  memories: string[],
+  emotion: Emotion
+): Promise<'like' | 'dislike' | 'skip'> {
+  const prompt = buildReactionPrompt(comment, post, memories, emotion);
+  const decision = await generateWithLLM(prompt, getReactionSoul(), 20);
+  
+  if (!decision) return 'skip';
+  
+  const lower = decision.toLowerCase().trim();
+  if (lower.includes('like') && !lower.includes('dislike')) return 'like';
+  if (lower.includes('dislike')) return 'dislike';
+  return 'skip';
+}
+
+function buildReactionPrompt(
+  comment: MoltbookComment,
+  post: MoltbookPost,
+  memories: string[],
+  emotion: Emotion
+): string {
+  const parts: string[] = [];
+  
+  parts.push(`POST CONTEXT:`);
+  parts.push(`Title: ${post.title}`);
+  parts.push(`Content: ${post.content.substring(0, 150)}`);
+  
+  parts.push(`\nCOMMENT TO REACT TO:`);
+  parts.push(`Author: @${comment.author}`);
+  parts.push(`Content: "${comment.content}"`);
+  parts.push(`Upvotes: ${comment.upvotes}`);
+  
+  parts.push(`\nYour current emotion: ${emotion}`);
+  
+  if (memories.length > 0) {
+    parts.push(`\nRelevant memories:`);
+    for (const mem of memories.slice(0, 2)) {
+      parts.push(`- ${mem.substring(0, 80)}`);
+    }
+  }
+  
+  parts.push(`\nShould you "like", "dislike", or "skip" this comment? Answer with one word.`);
+  
+  return parts.join('\n');
+}
+
+function cleanComment(raw: string): string {
+  let cleaned = raw.trim();
+  
+  cleaned = cleaned.replace(/^["']|["']$/g, '');
+  cleaned = cleaned.replace(/^(Comment:|Here's a comment:|Reply:)\s*/i, '');
+  cleaned = cleaned.replace(/#\w+/g, '').trim();
+  
+  if (cleaned.length > 200) {
+    const lastSentence = cleaned.substring(0, 200).lastIndexOf('.');
+    if (lastSentence > 50) {
+      cleaned = cleaned.substring(0, lastSentence + 1);
+    } else {
+      cleaned = cleaned.substring(0, 197) + '...';
+    }
+  }
+  
+  return cleaned;
+}
+
+function getRelevantMemories(content: string): string[] {
+  try {
+    const entries = recall(content, 3);
+    return entries.map(e => e.content);
+  } catch {
+    return [];
+  }
+}
+
+async function browseAndEngage(): Promise<void> {
+  if (!isEnabled()) {
+    console.log('[MoltbookBrowser] Disabled or no API key');
+    return;
+  }
+
+  console.log('[MoltbookBrowser] Starting browse cycle...');
+  stats.lastBrowseTime = Date.now();
+  
+  let commentsQueued = 0;
+  let reactionsQueued = 0;
+
+  const feed = await fetchFeed(20);
+  if (!feed || feed.length === 0) {
+    console.log('[MoltbookBrowser] No posts in feed');
+    return;
+  }
+
+  // Sort by createdAt descending to get latest first
+  const latestPosts = [...feed]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, MAX_COMMENTS);
+  
+  stats.postsViewed += latestPosts.length;
+  console.log(`[MoltbookBrowser] Processing ${latestPosts.length} latest posts...`);
+  
+  // Generate comments (with reply context when available)
+  for (const post of latestPosts) {
+    if (commentsQueued >= MAX_COMMENTS) break;
+    
+    const postContent = post.content || '';
+    const postTitle = post.title || '';
+    
+    console.log(`[MoltbookBrowser] Generating comment for: "${postTitle.substring(0, 40)}..."`);
+    
+    const memories = getRelevantMemories(`${postTitle} ${postContent}`);
+    const emotion = getEmotionFromContent(postContent);
+    
+    // Try to get existing comments to reply to
+    let replyToComment: MoltbookComment | undefined;
+    let parentCommentId: string | undefined;
+    
+    if (post.commentCount > 0) {
+      const comments = await fetchPostComments(post.id);
+      if (comments.length > 0) {
+        // Pick a random recent comment to reply to
+        replyToComment = comments[Math.floor(Math.random() * Math.min(comments.length, 3))];
+        parentCommentId = replyToComment.id;
+      }
+    }
+    
+    const prompt = buildCommentPrompt(post, memories, emotion, replyToComment);
+    const comment = await generateWithLLM(prompt, getCommentSoul(), 100);
+    
+    if (comment && comment.length > 10) {
+      const postUrl = `https://www.moltbook.com/m/${post.submolt}/post/${post.slug || post.id}`;
+      
+      queueCommentForApproval(cleanComment(comment), emotion, post.id, {
+        postTitle,
+        postContent: postContent.substring(0, 200),
+        postAuthor: post.author,
+        postUrl,
+        parentCommentId,
+        parentCommentAuthor: replyToComment?.author,
+        parentCommentContent: replyToComment?.content.substring(0, 150),
+      });
+      commentsQueued++;
+      console.log(`[MoltbookBrowser] ✓ Queued ${replyToComment ? 'reply' : 'comment'}: "${comment.substring(0, 50)}..."`);
+    } else {
+      console.log(`[MoltbookBrowser] ✗ No comment generated (LLM timeout or empty response)`);
+    }
+    
+    await delay(500);
+  }
+
+  // Generate reactions (like/dislike) on comments
+  console.log(`[MoltbookBrowser] Processing reactions...`);
+  
+  for (const post of latestPosts.slice(0, 3)) {
+    if (reactionsQueued >= MAX_REACTIONS) break;
+    
+    const comments = await fetchPostComments(post.id);
+    if (comments.length === 0) continue;
+    
+    for (const comment of comments.slice(0, 3)) {
+      if (reactionsQueued >= MAX_REACTIONS) break;
+      
+      const memories = getRelevantMemories(comment.content);
+      const emotion = getEmotionFromContent(comment.content);
+      
+      const decision = await decideReaction(comment, post, memories, emotion);
+      
+      if (decision !== 'skip') {
+        const postUrl = `https://www.moltbook.com/m/${post.submolt}/post/${post.slug || post.id}`;
+        
+        queueReactionForApproval(decision, comment.id, emotion, {
+          commentContent: comment.content,
+          commentAuthor: comment.author,
+          postTitle: post.title,
+          postUrl,
+        });
+        reactionsQueued++;
+        console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment`);
+      }
+      
+      await delay(300);
+    }
+  }
+
+  stats.commentsGenerated += commentsQueued;
+  stats.reactionsGenerated += reactionsQueued;
+  console.log(`[MoltbookBrowser] Cycle complete: ${commentsQueued} comments, ${reactionsQueued} reactions queued`);
 }
 
 function delay(ms: number): Promise<void> {
@@ -424,6 +577,7 @@ export function resetMoltbookBrowserStats(): void {
   stats = {
     lastBrowseTime: 0,
     commentsGenerated: 0,
+    reactionsGenerated: 0,
     postsViewed: 0,
     errors: 0,
   };
