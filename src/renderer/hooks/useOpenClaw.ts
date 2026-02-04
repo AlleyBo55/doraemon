@@ -27,6 +27,48 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+function learnFromConversation(userMessage: string, assistantResponse: string): void {
+  if (userMessage.length < 15 || assistantResponse.length < 30) return;
+  
+  const skipPatterns = [
+    /^(hi|hello|hey|thanks|ok|yes|no|bye|good|nice)/i,
+    /^(what time|how are you|who are you)/i,
+  ];
+  
+  for (const pattern of skipPatterns) {
+    if (pattern.test(userMessage.trim())) return;
+  }
+  
+  try {
+    const electronAPI = (window as unknown as { electronAPI?: { memoryLearn?: (input: unknown) => Promise<unknown> } }).electronAPI;
+    if (electronAPI?.memoryLearn) {
+      const summary = `Q: ${userMessage.substring(0, 100)}... A: ${assistantResponse.substring(0, 150)}...`;
+      electronAPI.memoryLearn({
+        content: summary,
+        category: 'interaction',
+        source: 'conversation',
+      }).catch(() => {});
+    }
+  } catch {}
+}
+
+async function getMemoryContext(query: string): Promise<string> {
+  try {
+    const electronAPI = (window as unknown as { 
+      electronAPI?: { 
+        memoryGetContext?: (query: string) => Promise<string>;
+        memoryGetPredictions?: () => Promise<string[]>;
+      } 
+    }).electronAPI;
+    
+    if (electronAPI?.memoryGetContext) {
+      const context = await electronAPI.memoryGetContext(query);
+      return context || '';
+    }
+  } catch {}
+  return '';
+}
+
 export const useOpenClaw = () => {
   const [state, setState] = useState<OpenClawState>({
     isConnected: false,
@@ -237,6 +279,15 @@ export const useOpenClaw = () => {
     const runId = generateId();
     currentRunIdRef.current = runId;
 
+    // RAG: Inject memory context before sending
+    let messageWithContext = text;
+    try {
+      const memoryContext = await getMemoryContext(text);
+      if (memoryContext) {
+        messageWithContext = `${memoryContext}\n\nUser message: ${text}`;
+      }
+    } catch {}
+
     try {
       let gotResponse = false;
       const thinkingMessages = [
@@ -296,10 +347,10 @@ export const useOpenClaw = () => {
         });
       });
 
-      // Send chat message
+      // Send chat message with memory context injected
       const sendResult = await sendWsRequest<{ runId?: string; status?: string }>('chat.send', { 
         sessionKey: 'main', 
-        message: text, 
+        message: messageWithContext, 
         deliver: true,
         idempotencyKey: runId 
       });
@@ -320,8 +371,12 @@ export const useOpenClaw = () => {
             currentThought: extractThought(content),
             error: null,
           }));
-          emotionStore.actions.setEmotion(detectEmotion(content), 'ai');
+          emotionStore.actions.setEmotionProtected(detectEmotion(content), 'ai');
           setBubbleTimeout(50000);
+          
+          // Learn from conversation (secure memory system)
+          learnFromConversation(text, content);
+          
           return content;
         }
       }
@@ -339,8 +394,12 @@ export const useOpenClaw = () => {
           currentThought: extractThought(content),
           error: null,
         }));
-        emotionStore.actions.setEmotion(detectEmotion(content), 'ai');
+        emotionStore.actions.setEmotionProtected(detectEmotion(content), 'ai');
         setBubbleTimeout(50000);
+        
+        // Learn from conversation (secure memory system)
+        learnFromConversation(text, content);
+        
         return content;
       }
 
@@ -358,7 +417,7 @@ export const useOpenClaw = () => {
         error: null,
       }));
 
-      emotionStore.actions.setEmotion('confused', 'ai');
+      emotionStore.actions.setEmotionProtected('confused', 'ai');
       setBubbleTimeout(50000);
       return fallbackMsg;
 
@@ -373,7 +432,7 @@ export const useOpenClaw = () => {
         error: errorMsg,
       }));
 
-      emotionStore.actions.setEmotion('confused', 'ai');
+      emotionStore.actions.setEmotionProtected('confused', 'ai');
       setBubbleTimeout(50000);
 
       return null;

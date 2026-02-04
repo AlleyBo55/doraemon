@@ -2,13 +2,16 @@ import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
 import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
-import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts } from './hooks';
+import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts, useExperienceSystem } from './hooks';
+import { emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
 import { getAnimation } from './core/constants/sprites';
 import './styles/globals.css';
 
 const SPRITE_BASE = '/dora-sprites';
+
+type ScreenBounds = { width: number; height: number; x: number; y: number };
 
 declare global {
   interface Window {
@@ -29,6 +32,11 @@ declare global {
       onStopCodingMode: (callback: () => void) => void;
       onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
     };
+    doraemon?: {
+      getScreenSize: () => Promise<ScreenBounds>;
+      getDisplayAtPoint: (x: number, y: number) => Promise<ScreenBounds>;
+      onScreenChange: (callback: (bounds: ScreenBounds) => void) => void;
+    };
   }
 }
 
@@ -37,6 +45,10 @@ type NotificationData = {
   title: string;
   body?: string;
 } | null;
+
+type ActivityType = 'notification' | 'chat' | null;
+
+const ACTIVITY_PROTECTION_DURATION = 15000; // 15 seconds protection for activity messages
 
 const App = () => {
   const [position, setPosition] = useState<Position>({ x: window.innerWidth / 2 - 64, y: window.innerHeight - 200 });
@@ -50,6 +62,11 @@ const App = () => {
   const [isCodingMode, setIsCodingMode] = useState(false);
   const [priorityMessage, setPriorityMessage] = useState<string | null>(null);
   
+  // Activity protection: track when activity started and what type
+  const [activeActivityType, setActiveActivityType] = useState<ActivityType>(null);
+  const activityStartTimeRef = useRef<number>(0);
+  const activityProtectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
   const { current: emotion } = useEmotion();
   const {
     isConnected,
@@ -60,8 +77,28 @@ const App = () => {
     clearHistory,
   } = useOpenClaw();
 
-  // Pass externalThought to pause random thoughts, but let coding mode handle its own thoughts
-  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, externalThought !== null || notificationData !== null, isCodingMode);
+  // Check if activity is currently protected (within 15s window)
+  const isActivityProtected = useCallback(() => {
+    if (!activeActivityType) return false;
+    return (Date.now() - activityStartTimeRef.current) < ACTIVITY_PROTECTION_DURATION;
+  }, [activeActivityType]);
+
+  // Start activity protection - prevents random/dev thoughts from overriding
+  const startActivityProtection = useCallback((type: ActivityType) => {
+    if (activityProtectionTimerRef.current) {
+      clearTimeout(activityProtectionTimerRef.current);
+    }
+    setActiveActivityType(type);
+    activityStartTimeRef.current = Date.now();
+    
+    activityProtectionTimerRef.current = setTimeout(() => {
+      setActiveActivityType(null);
+    }, ACTIVITY_PROTECTION_DURATION);
+  }, []);
+
+  // Pass activity protection state to pause random thoughts
+  const shouldPauseRandomThoughts = externalThought !== null || notificationData !== null || isActivityProtected();
+  const { thought: randomThought } = useRandomThoughts(emotion, isConnected, shouldPauseRandomThoughts, isCodingMode);
 
   const engineRef = useRef<ShimejiEngine | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -117,6 +154,9 @@ const App = () => {
     externalThoughtTimerRef.current = setTimeout(() => setExternalThought(null), duration);
   }, []);
 
+  // Connect experience system - emotions update the store directly, thoughts via callback
+  useExperienceSystem(showExternalThought);
+
   // Listen for web notifications from browser extension - separate effect, runs once
   useEffect(() => {
     console.log('[App] Registering web notification listener');
@@ -133,18 +173,21 @@ const App = () => {
         title: data.title,
         body: data.body,
       });
-      setExternalThought(null); // Clear any text-based external thought
+      setExternalThought(null);
+      
+      // Start activity protection - prevents random/dev thoughts for 15s
+      startActivityProtection('notification');
       
       // Auto-dismiss after 15 seconds
       notificationTimerRef.current = setTimeout(() => {
         setNotificationData(null);
-      }, 15000);
+      }, ACTIVITY_PROTECTION_DURATION);
     });
     
     return () => {
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
     };
-  }, []);
+  }, [startActivityProtection]);
 
   // Listen for other notifications and editor activity
   useEffect(() => {
@@ -172,9 +215,12 @@ const App = () => {
       });
       setExternalThought(null);
       
+      // Start activity protection - prevents random/dev thoughts for 15s
+      startActivityProtection('notification');
+      
       notificationTimerRef.current = setTimeout(() => {
         setNotificationData(null);
-      }, 15000);
+      }, ACTIVITY_PROTECTION_DURATION);
     });
 
     window.electronAPI?.onEditorActivity?.((data) => {
@@ -185,14 +231,15 @@ const App = () => {
       if (codingModeTimerRef.current) clearTimeout(codingModeTimerRef.current);
       codingModeTimerRef.current = setTimeout(() => {
         setIsCodingMode(false);
-      }, 15000);
+      }, ACTIVITY_PROTECTION_DURATION);
       
       if (data.thought) {
         // Show thought for same duration as animation (8s) to keep them synced
         showExternalThought(data.thought, 8000);
       }
       if (data.emotion) {
-        triggerEmotion(data.emotion as any);
+        // Set emotion with protection - tied to the activity, protected for 15s
+        emotionStore.actions.setEmotionProtected(data.emotion as any, 'interaction');
       }
       if (data.animation) {
         triggerCodingAnimation(data.animation, 8000);
@@ -266,41 +313,67 @@ const App = () => {
       if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
       if (codingModeTimerRef.current) clearTimeout(codingModeTimerRef.current);
       if (priorityMessageTimerRef.current) clearTimeout(priorityMessageTimerRef.current);
+      if (activityProtectionTimerRef.current) clearTimeout(activityProtectionTimerRef.current);
     };
-  }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation]);
+  }, [triggerEmotion, clearHistory, showExternalThought, triggerCodingAnimation, startActivityProtection]);
+
+  const currentDisplayRef = useRef<string>('');
 
   useEffect(() => {
-    const engine = new ShimejiEngine(window.innerWidth, window.innerHeight);
-    engineRef.current = engine;
-    engine.setPosition(position.x, position.y);
+    const initEngine = async () => {
+      const bounds = await window.doraemon?.getScreenSize() ?? { 
+        width: window.innerWidth, 
+        height: window.innerHeight, 
+        x: 0, 
+        y: 0 
+      };
+      
+      currentDisplayRef.current = `${bounds.x},${bounds.y},${bounds.width},${bounds.height}`;
+      
+      const engine = new ShimejiEngine(bounds.width, bounds.height, bounds.x, bounds.y);
+      engineRef.current = engine;
+      
+      const startX = bounds.x + bounds.width / 2 - 64;
+      const startY = bounds.y + bounds.height - 200;
+      engine.setPosition(startX, startY);
+      setPosition({ x: startX, y: startY });
 
-    engine.setCallbacks(
-      (pos) => setPosition(pos),
-      (state, _frame, shouldFlip) => {
-        setFlip(shouldFlip);
-        // Don't override animation if coding lock is active
-        if ((engine as any)._codingLock) return;
-        
-        const animName = getAnimationForState(state);
-        if (animName !== currentAnimRef.current) {
-          currentAnimRef.current = animName;
-          frameIndexRef.current = 0;
-          frameTimerRef.current = 0;
+      engine.setCallbacks(
+        async (pos) => {
+          setPosition(pos);
+          
+          // Check if mascot moved to a different display
+          const newBounds = await window.doraemon?.getDisplayAtPoint(pos.x + 64, pos.y + 64);
+          if (newBounds) {
+            const newDisplayKey = `${newBounds.x},${newBounds.y},${newBounds.width},${newBounds.height}`;
+            if (newDisplayKey !== currentDisplayRef.current) {
+              currentDisplayRef.current = newDisplayKey;
+              engine.updateScreenSize(newBounds.width, newBounds.height, newBounds.x, newBounds.y);
+            }
+          }
+        },
+        (state, _frame, shouldFlip) => {
+          setFlip(shouldFlip);
+          if ((engine as any)._codingLock) return;
+          
+          const animName = getAnimationForState(state);
+          if (animName !== currentAnimRef.current) {
+            currentAnimRef.current = animName;
+            frameIndexRef.current = 0;
+            frameTimerRef.current = 0;
+          }
         }
-      }
-    );
+      );
 
-    const handleResize = () => engine.updateScreenSize(window.innerWidth, window.innerHeight);
-    window.addEventListener('resize', handleResize);
+      window.electronAPI?.onResetPosition?.((pos) => {
+        engine.setPosition(pos.x, pos.y);
+        setPosition(pos);
+      });
+    };
 
-    // Listen for reset position from tray menu
-    window.electronAPI?.onResetPosition?.((pos) => {
-      engine.setPosition(pos.x, pos.y);
-      setPosition(pos);
-    });
+    initEngine();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, []);
@@ -407,24 +480,36 @@ const App = () => {
   const currentThoughtTimeRef = useRef<number>(0);
   const lastCurrentThoughtRef = useRef<string | null>(null);
   
+  // Track chat response activity for protection
   useEffect(() => {
     if (currentThought !== lastCurrentThoughtRef.current) {
       lastCurrentThoughtRef.current = currentThought;
       currentThoughtTimeRef.current = Date.now();
+      
+      // Start activity protection when we get a real chat response (not thinking messages)
+      if (currentThought && !currentThought.includes('Hmm, let me think') && 
+          !currentThought.includes('Processing') && !currentThought.includes('Still thinking') &&
+          !currentThought.includes('Almost there') && !currentThought.includes('Connecting to AI') &&
+          !currentThought.includes('Waiting for response')) {
+        startActivityProtection('chat');
+      }
     }
-  }, [currentThought]);
+  }, [currentThought, startActivityProtection]);
 
   // Show bubble when: thinking, has thought, has external thought, or has random thought
   // Priority during coding mode:
-  // Priority: priorityMessage (daily summary) > externalThought > coding thoughts > OpenClaw
-  // Priority message cannot be overridden for its duration
+  // Priority: priorityMessage (daily summary) > notification > externalThought > chat (protected) > coding thoughts > random thoughts
+  // Activity protection prevents random/dev thoughts from overriding for 15s
   
   const getDisplayMessage = () => {
     // Priority message (daily summary) takes absolute highest priority - cannot be overridden
     if (priorityMessage) return priorityMessage;
     
-    // External thought takes next priority
+    // External thought takes next priority (dev thoughts from editor activity)
     if (externalThought) return externalThought;
+    
+    // Check if we're in activity protection period
+    const activityProtected = isActivityProtected();
     
     // Check if currentThought is a stale generic response (older than 10 seconds)
     const isStaleGenericThought = currentThought && 
@@ -433,15 +518,29 @@ const App = () => {
     
     if (isCodingMode) {
       // During coding mode, prefer coding thoughts over generic OpenClaw responses
+      // But if activity is protected (chat response), show that instead
+      if (activityProtected && activeActivityType === 'chat' && currentThought && !isStaleGenericThought) {
+        return currentThought;
+      }
       if (randomThought) return randomThought;
-      // Only show currentThought if it's not a generic response
       if (currentThought && !currentThought.includes('Interesting')) return currentThought;
       return null;
     }
     
-    // Normal mode - OpenClaw takes priority, but suppress stale generic thoughts
+    // Normal mode - respect activity protection
+    if (activityProtected && activeActivityType === 'chat' && currentThought && !isStaleGenericThought) {
+      return currentThought;
+    }
+    
+    // OpenClaw takes priority if not stale
     if (currentThought && !isStaleGenericThought) return currentThought;
-    return randomThought || null;
+    
+    // Only show random thought if no activity is protected
+    if (!activityProtected) {
+      return randomThought || null;
+    }
+    
+    return null;
   };
   
   const displayMessage = getDisplayMessage();

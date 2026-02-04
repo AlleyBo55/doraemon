@@ -65,6 +65,7 @@ npm run build
 | [🦞 OpenClaw Local](docs/OPENCLAW-LOCAL.md) | Quick setup guide for local OpenClaw |
 | [🐱 Doraemon Persona](docs/DORAEMON-PERSONA.md) | Inject Doraemon's soul into the AI |
 | [🧠 Experience System](docs/EXPERIENCE-SYSTEM.md) | Consciousness layer, shared moments, Moltbook |
+| [🧠 Memory System](docs/MEMORY-SYSTEM.md) | Self-learning, three-layer security, RAG |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
 | [🔐 Full Disk Access](docs/FULL-DISK-ACCESS.md) | Enable native macOS notifications |

@@ -1,0 +1,176 @@
+{
+  "social": {
+    "twitter": [
+      "Scrolling through the timeline~",
+      "What's trending today?",
+      "Interesting thread!",
+      "The discourse is wild today~",
+      "Hot takes everywhere!",
+      "Quote tweet worthy~",
+      "Ratio incoming!",
+      "Main character energy~",
+      "Touch grass reminder~",
+      "The algorithm knows~"
+    ],
+    "reddit": [
+      "Down the rabbit hole~",
+      "Upvote worthy content!",
+      "The comments are gold~",
+      "Subreddit diving!",
+      "TIL something new~",
+      "AITA? Definitely NTA~",
+      "ELI5 this please!",
+      "Wholesome content found~",
+      "Cursed comments ahead!",
+      "Reddit moment~"
+    ],
+    "instagram": [
+      "Aesthetic vibes~",
+      "Story time!",
+      "Reels are addictive~",
+      "Double tap worthy!",
+      "Explore page adventures~",
+      "Influencer content~",
+      "Food pics incoming!",
+      "Travel goals~",
+      "OOTD spotted!",
+      "Filter game strong~"
+    ],
+    "tiktok": [
+      "For You Page magic~",
+      "This sound is everywhere!",
+      "Viral dance incoming~",
+      "POV: watching TikTok~",
+      "Duet this!",
+      "Stitch worthy~",
+      "The algorithm knows me~",
+      "One more video...",
+      "It's been 3 hours?!",
+      "Brain rot activated~"
+    ]
+  },
+  "entertainment": {
+    "youtube": [
+      "Video essay time~",
+      "Tutorial mode activated!",
+      "Music video vibes~",
+      "Podcast in the background~",
+      "Recommended rabbit hole~",
+      "Like and subscribe!",
+      "Comment section adventures~",
+      "Watch later growing~",
+      "Premiere waiting room~",
+      "Live stream hype!"
+    ],
+    "manhwa": [
+      "New chapter dropped!",
+      "Cliffhanger again?!",
+      "The art is beautiful~",
+      "Plot twist incoming!",
+      "MC is OP~",
+      "Regression arc!",
+      "System activated~",
+      "Tower climbing time!",
+      "Dungeon diving~",
+      "Solo leveling vibes~"
+    ],
+    "anime": [
+      "Seasonal anime check~",
+      "Opening is a banger!",
+      "Filler episode skip?",
+      "Canon content!",
+      "Manga was better~",
+      "Anime original ending?",
+      "Studio quality!",
+      "Animation sakuga~",
+      "Voice acting perfect!",
+      "OST is fire~"
+    ]
+  },
+  "dev": {
+    "github": [
+      "Star that repo!",
+      "PR review time~",
+      "Issues to triage!",
+      "Actions running~",
+      "Dependabot alerts!",
+      "Fork and clone~",
+      "Contribution graph goals!",
+      "Open source love~",
+      "README reading~",
+      "License check!"
+    ],
+    "stackoverflow": [
+      "The answer exists!",
+      "Duplicate question~",
+      "Accepted answer found!",
+      "Upvote the solution~",
+      "Copy-paste engineering!",
+      "Error message googled~",
+      "Community saves the day!",
+      "Reputation farming~",
+      "Badge unlocked!",
+      "Question closed as duplicate~"
+    ],
+    "docs": [
+      "RTFM moment~",
+      "Documentation diving!",
+      "API reference check~",
+      "Examples are helpful!",
+      "Changelog reading~",
+      "Migration guide needed~",
+      "Getting started tutorial~",
+      "Advanced usage!",
+      "Best practices found~",
+      "Deprecated warning!"
+    ],
+    "hackernews": [
+      "Orange site browsing~",
+      "Show HN interesting!",
+      "Ask HN wisdom~",
+      "Comments are the content!",
+      "Startup news~",
+      "Tech drama today!",
+      "Flagged already?",
+      "Front page worthy~",
+      "Deep discussion!",
+      "Contrarian takes~"
+    ]
+  },
+  "news": [
+    "Breaking news!",
+    "Tech news update~",
+    "Industry insights!",
+    "Trending story~",
+    "Opinion piece~",
+    "Analysis deep dive!",
+    "Exclusive report~",
+    "Press release~",
+    "Interview highlights!",
+    "Fact check needed~"
+  ],
+  "learning": [
+    "Learning something new!",
+    "Course progress~",
+    "Tutorial following!",
+    "Skill building~",
+    "Knowledge expanding!",
+    "Notes taking~",
+    "Practice time!",
+    "Quiz incoming~",
+    "Certificate soon!",
+    "Leveling up~"
+  ],
+  "general": [
+    "Browsing the web~",
+    "Internet exploration!",
+    "Tab hoarding activated~",
+    "Bookmark this!",
+    "Interesting find~",
+    "Down the rabbit hole~",
+    "Research mode!",
+    "Information gathering~",
+    "Web surfing~",
+    "Digital wandering~"
+  ]
+}

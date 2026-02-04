@@ -33,6 +33,8 @@ import {
   type WebNotification,
 } from './watchers/web-notification-server.js';
 import { ExperienceSystem, experienceBridge } from './experience-system/index.js';
+import { initGatewayBridge } from './memory-system/gateway-bridge.js';
+import { initConnector, learnFromExperience, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,6 +67,32 @@ function getCombinedDisplayBounds(displays: Electron.Display[]) {
     y: minY,
     width: maxX - minX,
     height: maxY - minY,
+  };
+}
+
+/**
+ * Get primary display bounds for mascot movement
+ */
+function getPrimaryDisplayBounds() {
+  const primary = screen.getPrimaryDisplay();
+  return {
+    x: primary.bounds.x,
+    y: primary.bounds.y,
+    width: primary.bounds.width,
+    height: primary.bounds.height,
+  };
+}
+
+/**
+ * Get display bounds for a given point (mascot position)
+ */
+function getDisplayBoundsAtPoint(x: number, y: number) {
+  const display = screen.getDisplayNearestPoint({ x, y });
+  return {
+    x: display.bounds.x,
+    y: display.bounds.y,
+    width: display.bounds.width,
+    height: display.bounds.height,
   };
 }
 
@@ -158,6 +186,15 @@ function createMainWindow() {
       title: notification.title,
       message: notification.message,
     });
+    
+    // Learn from notifications (aggressive learning)
+    if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+      learnFromNotification({
+        app: notification.app,
+        title: notification.title,
+        body: notification.message,
+      });
+    }
   });
 
   startEditorWatcher(mainWindow, (activity) => {
@@ -168,6 +205,15 @@ function createMainWindow() {
       emotion,
       animation,
     });
+    
+    // Learn from editor activity (aggressive learning)
+    if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+      learnFromEditor({
+        action: activity.action,
+        language: activity.language,
+        file: activity.file,
+      });
+    }
   });
 
   // Set up break reminder callback
@@ -218,6 +264,13 @@ function createMainWindow() {
   experienceSystem.start().catch(err => {
     console.error('[Main] Experience system failed to start:', err);
   });
+
+  // Initialize secure memory system with gateway bridge
+  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+    initGatewayBridge(mainWindow);
+    initConnector(mainWindow);
+    console.log('[Main] Memory system initialized with full connectivity');
+  }
 }
 
 function createTray() {
@@ -362,6 +415,34 @@ function updateTrayMenu() {
       }
     },
     { type: 'separator' },
+    {
+      label: '🧠 Memory',
+      submenu: [
+        { 
+          label: 'Show Dashboard', 
+          click: () => mainWindow?.webContents.send('show-memory-dashboard') 
+        },
+        { 
+          label: 'What I Remember...', 
+          click: () => mainWindow?.webContents.send('show-memory-summary') 
+        },
+        { type: 'separator' },
+        { 
+          label: 'Self Model', 
+          click: () => mainWindow?.webContents.send('show-self-model') 
+        },
+        { 
+          label: 'Emergent Goals', 
+          click: () => mainWindow?.webContents.send('show-emergent-goals') 
+        },
+        { type: 'separator' },
+        { 
+          label: 'Security Flags', 
+          click: () => mainWindow?.webContents.send('show-security-flags') 
+        },
+      ]
+    },
+    { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]);
 
@@ -497,13 +578,22 @@ ipcMain.handle('get-config', () => {
 });
 
 ipcMain.handle('get-screen-size', () => {
-  const allDisplays = screen.getAllDisplays();
-  const combinedBounds = getCombinedDisplayBounds(allDisplays);
+  const bounds = getPrimaryDisplayBounds();
   return { 
-    width: combinedBounds.width, 
-    height: combinedBounds.height,
-    x: combinedBounds.x,
-    y: combinedBounds.y,
+    width: bounds.width, 
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+  };
+});
+
+ipcMain.handle('get-display-at-point', (_event, { x, y }: { x: number; y: number }) => {
+  const bounds = getDisplayBoundsAtPoint(x, y);
+  return {
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
   };
 });
 
@@ -529,7 +619,7 @@ ipcMain.on('focus-window', () => {
 });
 
 // Sync model mode from renderer
-ipcMain.on('sync-model-mode', (_event: IpcMainEvent, mode: 'single' | 'multi') => {
+ipcMain.on('sync-model-mode', (_event: IpcMainEvent, mode: 'haiku35' | 'haiku45' | 'multi') => {
   currentModelMode = mode;
   updateTrayMenu();
 });
@@ -598,21 +688,18 @@ app.whenReady().then(() => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
   });
 
   screen.on('display-added', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
   });
 
   screen.on('display-removed', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
-    mainWindow?.webContents.send('screen-change', combinedBounds);
   });
 });
 

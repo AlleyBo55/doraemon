@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 contextBridge.exposeInMainWorld('doraemon', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   getScreenSize: () => ipcRenderer.invoke('get-screen-size'),
+  getDisplayAtPoint: (x: number, y: number) => ipcRenderer.invoke('get-display-at-point', { x, y }),
   setPosition: (x: number, y: number) => {
     ipcRenderer.send('set-position', { x, y });
   },
@@ -13,8 +14,8 @@ contextBridge.exposeInMainWorld('doraemon', {
   onOpenSettings: (callback: () => void) => {
     ipcRenderer.on('open-settings', callback);
   },
-  onScreenChange: (callback: (size: { width: number; height: number }) => void) => {
-    ipcRenderer.on('screen-change', (_event: IpcRendererEvent, size: { width: number; height: number }) => callback(size));
+  onScreenChange: (callback: (size: { width: number; height: number; x: number; y: number }) => void) => {
+    ipcRenderer.on('screen-change', (_event: IpcRendererEvent, size: { width: number; height: number; x: number; y: number }) => callback(size));
   },
 });
 
@@ -106,6 +107,63 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: IpcRendererEvent, data: { isRunning: boolean; postsGenerated: number; lastPostTime: string | null }) => callback(data);
     ipcRenderer.on('experience-heartbeat', handler);
     return () => ipcRenderer.removeListener('experience-heartbeat', handler);
+  },
+  
+  // Memory System API (secure self-learning)
+  memoryLearn: (input: { content: string; category: string; source?: string; ttlDays?: number }) => 
+    ipcRenderer.invoke('memory-system:learn', input),
+  memoryRecall: (query: string, limit?: number) => 
+    ipcRenderer.invoke('memory-system:recall', query, limit),
+  memoryRecallCategory: (category: string) => 
+    ipcRenderer.invoke('memory-system:recall-category', category),
+  memoryStats: () => 
+    ipcRenderer.invoke('memory-system:stats'),
+  memoryLearnPreference: (key: string, value: string) => 
+    ipcRenderer.invoke('memory-system:learn-preference', key, value),
+  memoryLearnCorrection: (original: string, corrected: string) => 
+    ipcRenderer.invoke('memory-system:learn-correction', original, corrected),
+  
+  // Advanced Memory System API (aggressive learning, RAG, self-reflection)
+  memoryLearnAggressive: (data: { content: string; category: string; source: string; metadata?: Record<string, unknown> }) =>
+    ipcRenderer.invoke('memory:learn-aggressive', data),
+  memorySearchSemantic: (query: string, limit?: number) =>
+    ipcRenderer.invoke('memory:search-semantic', query, limit),
+  memoryGetContext: (query: string) =>
+    ipcRenderer.invoke('memory:get-context', query),
+  memoryGetPredictions: () =>
+    ipcRenderer.invoke('memory:get-predictions'),
+  memoryGetSelfModel: () =>
+    ipcRenderer.invoke('memory:get-self-model'),
+  memoryGetGoals: () =>
+    ipcRenderer.invoke('memory:get-goals'),
+  memoryGetDashboard: () =>
+    ipcRenderer.invoke('memory:get-dashboard'),
+  memoryGetFlags: () =>
+    ipcRenderer.invoke('memory:get-flags'),
+  
+  // Memory dashboard events
+  onShowMemoryDashboard: (callback: () => void) => {
+    ipcRenderer.on('show-memory-dashboard', () => callback());
+  },
+  onShowMemorySummary: (callback: () => void) => {
+    ipcRenderer.on('show-memory-summary', () => callback());
+  },
+  onShowSelfModel: (callback: () => void) => {
+    ipcRenderer.on('show-self-model', () => callback());
+  },
+  onShowEmergentGoals: (callback: () => void) => {
+    ipcRenderer.on('show-emergent-goals', () => callback());
+  },
+  onShowSecurityFlags: (callback: () => void) => {
+    ipcRenderer.on('show-security-flags', () => callback());
+  },
+  onDailyInsight: (callback: (insight: string) => void) => {
+    ipcRenderer.on('memory:daily-insight', (_event: IpcRendererEvent, insight: string) => callback(insight));
+  },
+  
+  // Browser activity events (from memory system)
+  onBrowserActivity: (callback: (data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => void) => {
+    ipcRenderer.on('browser-activity', (_event: IpcRendererEvent, data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => callback(data));
   },
 });
 
