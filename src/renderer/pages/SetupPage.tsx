@@ -1,6 +1,10 @@
-import { render } from 'preact';
+/**
+ * Setup Page
+ * 
+ * Pre-flight checks for Node.js, OpenClaw, port, daemon, and permissions.
+ */
+
 import { useState, useEffect, useCallback } from 'preact/hooks';
-import './styles/globals.css';
 
 type StepStatus = 'pending' | 'running' | 'success' | 'error';
 
@@ -63,17 +67,29 @@ const CopyButton = ({ text }: { text: string }) => {
   };
 
   return (
-    <button
-      onClick={handleCopy}
-      class="flex items-center gap-1.5 text-[11px] text-[#0099FF] hover:text-[#0077CC] transition-colors"
-    >
+    <button onClick={handleCopy} class="flex items-center gap-1.5 text-[11px] text-[#0099FF] hover:text-[#0077CC] transition-colors">
       <CopyIcon />
       {copied ? 'Copied!' : 'Copy'}
     </button>
   );
 };
 
-const SetupApp = () => {
+declare global {
+  interface Window {
+    setupAPI?: {
+      checkNode: () => Promise<{ success: boolean; version?: string }>;
+      checkOpenClaw: () => Promise<{ success: boolean }>;
+      checkPort: () => Promise<{ success: boolean }>;
+      killPort: () => Promise<void>;
+      startDaemon: () => Promise<{ success: boolean }>;
+      checkFullDiskAccess: () => Promise<boolean>;
+      requestFullDiskAccess: () => Promise<void>;
+      setupComplete: () => void;
+    };
+  }
+}
+
+export function SetupPage() {
   const [steps, setSteps] = useState<Step[]>(INITIAL_STEPS);
   const [failedStep, setFailedStep] = useState<Step | null>(null);
   const [phase, setPhase] = useState<'checking' | 'complete' | 'failed'>('checking');
@@ -87,16 +103,13 @@ const SetupApp = () => {
     setPhase('checking');
     setSteps(INITIAL_STEPS);
     
-    const api = (window as any).setupAPI;
+    const api = window.setupAPI;
     if (!api) {
       const errorStep: Step = {
         id: 'api',
         label: 'Setup API',
         status: 'error',
-        help: {
-          title: 'Preload Script Error',
-          description: 'The app failed to initialize. Try restarting or rebuilding the app.',
-        },
+        help: { title: 'Preload Script Error', description: 'The app failed to initialize. Try restarting or rebuilding the app.' },
       };
       setFailedStep(errorStep);
       setPhase('failed');
@@ -108,14 +121,8 @@ const SetupApp = () => {
     const node = await api.checkNode();
     if (!node.success) {
       const step: Step = {
-        id: 'node',
-        label: 'Node.js Runtime',
-        status: 'error',
-        detail: 'v22+ required',
-        help: {
-          title: 'Install Node.js',
-          description: 'Doraemon needs Node.js 22 or newer to run. Visit nodejs.org to download and install it, then restart this app.',
-        },
+        id: 'node', label: 'Node.js Runtime', status: 'error', detail: 'v22+ required',
+        help: { title: 'Install Node.js', description: 'Doraemon needs Node.js 22 or newer. Visit nodejs.org to download and install it, then restart this app.' },
       };
       updateStep('node', step);
       setFailedStep(step);
@@ -129,15 +136,8 @@ const SetupApp = () => {
     const claw = await api.checkOpenClaw();
     if (!claw.success) {
       const step: Step = {
-        id: 'openclaw',
-        label: 'OpenClaw CLI',
-        status: 'error',
-        detail: 'Not installed',
-        help: {
-          title: 'Install OpenClaw',
-          command: 'npm install -g openclaw',
-          description: 'OpenClaw powers Doraemon\'s AI features. Open the Terminal app (search "Terminal" in Spotlight), paste the command above, press Enter, then click Try Again.',
-        },
+        id: 'openclaw', label: 'OpenClaw CLI', status: 'error', detail: 'Not installed',
+        help: { title: 'Install OpenClaw', command: 'npm install -g openclaw', description: 'OpenClaw powers Doraemon\'s AI features. Open Terminal, paste the command above, press Enter, then click Try Again.' },
       };
       updateStep('openclaw', step);
       setFailedStep(step);
@@ -160,15 +160,8 @@ const SetupApp = () => {
     const daemon = await api.startDaemon();
     if (!daemon.success) {
       const step: Step = {
-        id: 'daemon',
-        label: 'Background Service',
-        status: 'error',
-        detail: 'Failed to start',
-        help: {
-          title: 'Service Error',
-          command: 'openclaw daemon',
-          description: 'The background service couldn\'t start. Try running the command above in Terminal to see what went wrong, then click Try Again.',
-        },
+        id: 'daemon', label: 'Background Service', status: 'error', detail: 'Failed to start',
+        help: { title: 'Service Error', command: 'openclaw daemon', description: 'The background service couldn\'t start. Try running the command above in Terminal to see what went wrong, then click Try Again.' },
       };
       updateStep('daemon', step);
       setFailedStep(step);
@@ -177,19 +170,13 @@ const SetupApp = () => {
     }
     updateStep('daemon', { status: 'success', detail: 'Running' });
 
-    // Full Disk Access check (required for native notifications)
+    // Full Disk Access check
     updateStep('fulldisk', { status: 'running' });
     const hasFullDisk = await api.checkFullDiskAccess();
     if (!hasFullDisk) {
       const step: Step = {
-        id: 'fulldisk',
-        label: 'Native Notifications',
-        status: 'error',
-        detail: 'Permission needed',
-        help: {
-          title: 'Grant Full Disk Access',
-          description: 'Doraemon needs Full Disk Access to read notifications from apps like WhatsApp, Slack, and Discord. Click "Open Settings" below, click the + button, add Doraemon to the list, then click "Try Again".',
-        },
+        id: 'fulldisk', label: 'Native Notifications', status: 'error', detail: 'Permission needed',
+        help: { title: 'Grant Full Disk Access', description: 'Doraemon needs Full Disk Access to read notifications from apps like WhatsApp, Slack, and Discord. Click "Open Settings" below, add Doraemon to the list, then click "Try Again".' },
       };
       updateStep('fulldisk', step);
       setFailedStep(step);
@@ -203,10 +190,7 @@ const SetupApp = () => {
   }, [updateStep]);
 
   const handleOpenFullDiskSettings = async () => {
-    const api = (window as any).setupAPI;
-    if (api?.requestFullDiskAccess) {
-      await api.requestFullDiskAccess();
-    }
+    await window.setupAPI?.requestFullDiskAccess?.();
   };
 
   useEffect(() => { runSetup(); }, [runSetup]);
@@ -231,10 +215,7 @@ const SetupApp = () => {
 
         <div class="w-full max-w-[300px] mt-5 mb-3">
           <div class="h-[3px] bg-[#E8E8ED] rounded-full overflow-hidden">
-            <div 
-              class="h-full bg-[#0099FF] rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progress * 100}%` }}
-            />
+            <div class="h-full bg-[#0099FF] rounded-full transition-all duration-500 ease-out" style={{ width: `${progress * 100}%` }} />
           </div>
         </div>
 
@@ -274,10 +255,7 @@ const SetupApp = () => {
             <p class="text-[11px] text-[#86868B] leading-relaxed">{failedStep.help.description}</p>
             
             {failedStep.id === 'fulldisk' && (
-              <button
-                onClick={handleOpenFullDiskSettings}
-                class="mt-2 text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors"
-              >
+              <button onClick={handleOpenFullDiskSettings} class="mt-2 text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors">
                 Open Settings →
               </button>
             )}
@@ -285,16 +263,11 @@ const SetupApp = () => {
         )}
 
         {phase === 'failed' && (
-          <button
-            onClick={runSetup}
-            class="mt-4 h-[30px] px-4 text-[12px] font-medium text-white bg-[#0099FF] rounded-lg hover:bg-[#0088E6] active:bg-[#0077CC] transition-colors"
-          >
+          <button onClick={runSetup} class="mt-4 h-[30px] px-4 text-[12px] font-medium text-white bg-[#0099FF] rounded-lg hover:bg-[#0088E6] active:bg-[#0077CC] transition-colors">
             Try Again
           </button>
         )}
       </div>
     </div>
   );
-};
-
-render(<SetupApp />, document.getElementById('app')!);
+}
