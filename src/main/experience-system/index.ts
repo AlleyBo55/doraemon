@@ -116,8 +116,8 @@ export class ExperienceSystem {
     console.log('[ExperienceSystem] Stopped');
   }
 
-  async heartbeat(): Promise<LivingPost | null> {
-    console.log('[ExperienceSystem] Heartbeat triggered at', new Date().toISOString());
+  async heartbeat(force = false): Promise<LivingPost | null> {
+    console.log('[ExperienceSystem] Heartbeat triggered at', new Date().toISOString(), force ? '(forced)' : '');
 
     experienceBridge.sendHeartbeat({
       isRunning: this.isRunning,
@@ -126,7 +126,7 @@ export class ExperienceSystem {
     });
 
     try {
-      const post = await this.postGenerator.generatePost();
+      const post = await this.postGenerator.generatePost(force);
 
       if (post) {
         // Send emotional state to renderer for animation sync
@@ -146,7 +146,7 @@ export class ExperienceSystem {
         }
 
         // Queue for approval (supervised) or post directly (autonomous)
-        queueForApproval(post);
+        await queueForApproval(post);
         console.log('[ExperienceSystem] Post queued:', post.id, '-', post.content.substring(0, 50), isAutonomousMode() ? '(autonomous)' : '(supervised)');
         this.postsGenerated++;
         this.lastPostTime = new Date();
@@ -168,7 +168,8 @@ export class ExperienceSystem {
   }
 
   async manualPost(): Promise<LivingPost | null> {
-    return this.heartbeat();
+    // Manual posts bypass rate limiting
+    return this.heartbeat(true);
   }
 
   getStats() {
@@ -242,3 +243,11 @@ export {
   getMoltbookBrowserStats,
   resetMoltbookBrowserStats,
 } from './moltbook-browser.js';
+export {
+  categorizeToSubmolt,
+  getSubmoltForPost,
+  getAllSubmolts,
+  getSubmoltDisplayName,
+  AVAILABLE_SUBMOLTS,
+  Submolt,
+} from './submolt-categorizer.js';
