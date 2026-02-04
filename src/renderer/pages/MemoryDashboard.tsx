@@ -10,9 +10,8 @@ import { useState, useEffect } from 'preact/hooks';
 interface MemoryStatsResult {
   success: boolean;
   stats?: {
-    totalEntries?: number;
-    byCategory?: Record<string, number>;
-    storageBytes?: number;
+    entryCount?: number;
+    categories?: Record<string, number>;
   };
   error?: string;
 }
@@ -60,10 +59,10 @@ export function MemoryDashboard({ view, onClose }: MemoryDashboardProps) {
         
         if (result?.success && result.stats) {
           setData({
-            totalMemories: result.stats.totalEntries || 0,
-            categories: result.stats.byCategory || {},
+            totalMemories: result.stats.entryCount || 0,
+            categories: result.stats.categories || {},
             recentActivity: [],
-            storageUsed: `${Math.round((result.stats.storageBytes || 0) / 1024)} KB`,
+            storageUsed: `${Object.values(result.stats.categories || {}).reduce((a, b) => a + b, 0)} entries`,
           });
         } else {
           setData({
