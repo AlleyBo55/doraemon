@@ -64,5 +64,9 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
     "vitest": "^4.0.18"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.1.0",
+    "utf-8-validate": "^6.0.6"
   }
 }

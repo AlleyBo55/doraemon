@@ -137,6 +137,54 @@ export class ExperienceBridge {
       lastPostTime: stats.lastPostTime?.toISOString() || null,
     });
   }
+
+  sendBrowsingThought(domain: string, category: string): void {
+    if (!this.mainWindow) return;
+
+    // Import browsing thoughts dynamically
+    const thoughts = this.getBrowsingThought(domain, category);
+    
+    this.mainWindow.webContents.send('browser-activity', {
+      thought: thoughts,
+      domain,
+      category,
+      emotion: category === 'dev' ? 'working' : category === 'entertainment' ? 'playful' : 'curious',
+      animation: 'idle',
+    });
+  }
+
+  private getBrowsingThought(domain: string, category: string): string {
+    const thoughts: Record<string, string[]> = {
+      social: [
+        'Scrolling through the feed~',
+        'So many posts to see!',
+        'What\'s everyone talking about?',
+      ],
+      entertainment: [
+        'Entertainment time~!',
+        'This looks interesting!',
+        'Relaxing with some content~',
+      ],
+      dev: [
+        'Learning something new~',
+        'Code is beautiful!',
+        'Developer mode activated!',
+      ],
+      news: [
+        'Catching up on news~',
+        'What\'s happening in the world?',
+        'Staying informed!',
+      ],
+      general: [
+        'Browsing the web~',
+        'Exploring the internet!',
+        'What will we find?',
+      ],
+    };
+
+    const categoryThoughts = thoughts[category] || thoughts.general;
+    return categoryThoughts[Math.floor(Math.random() * categoryThoughts.length)];
+  }
 }
 
 export const experienceBridge = new ExperienceBridge();

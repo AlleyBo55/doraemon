@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 import { EventEmitter } from 'events';
 
 export type WebNotification = {
-  source: 'twitter' | 'outlook' | 'teams' | 'github' | 'unknown';
+  source: string;
   title: string;
   body: string;
   icon?: string;
@@ -12,7 +12,18 @@ export type WebNotification = {
   timestamp: number;
 };
 
+export type WebContent = {
+  type: 'content';
+  source: string;
+  contentType: string;
+  content: string;
+  title?: string;
+  url?: string;
+  timestamp: number;
+};
+
 type NotificationCallback = (notification: WebNotification) => void;
+type ContentCallback = (content: WebContent) => void;
 
 const WEB_NOTIFICATION_PORT = 18790;
 
@@ -109,7 +120,8 @@ function handleUpgrade(req: IncomingMessage, socket: import('net').Socket) {
 
 export function startWebNotificationServer(
   mainWindow: BrowserWindow,
-  onNotification: NotificationCallback
+  onNotification: NotificationCallback,
+  onContent?: ContentCallback
 ) {
   if (server) return;
 
@@ -124,12 +136,41 @@ export function startWebNotificationServer(
     
     client.on('message', (data: string) => {
       try {
-        const notification = JSON.parse(data) as WebNotification;
-        notification.timestamp = Date.now();
+        const parsed = JSON.parse(data);
         
-        console.log('[WebNotificationServer] Received:', notification.source, notification.title, notification.body);
+        if (parsed.type === 'ping') {
+          return;
+        }
         
-        onNotification(notification);
+        if (parsed.type === 'content' && onContent) {
+          const content: WebContent = {
+            type: 'content',
+            source: parsed.source || 'unknown',
+            contentType: parsed.contentType || 'unknown',
+            content: parsed.content || '',
+            title: parsed.title,
+            url: parsed.url,
+            timestamp: Date.now(),
+          };
+          
+          console.log('[WebNotificationServer] Content:', content.source, content.contentType, content.content?.substring(0, 50));
+          onContent(content);
+          return;
+        }
+        
+        if (parsed.type === 'notification' || !parsed.type) {
+          const notification: WebNotification = {
+            source: parsed.source || 'unknown',
+            title: parsed.title || 'Notification',
+            body: parsed.body || '',
+            icon: parsed.icon,
+            url: parsed.url,
+            timestamp: Date.now(),
+          };
+          
+          console.log('[WebNotificationServer] Notification:', notification.source, notification.title);
+          onNotification(notification);
+        }
       } catch (err) {
         console.error('[WebNotificationServer] Parse error:', err);
       }

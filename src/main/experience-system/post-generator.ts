@@ -3,6 +3,8 @@
  * 
  * Synthesizes experiences, emotions, and existential reflections
  * into shareable posts for Moltbook.
+ * 
+ * Now enriched with memory context for more personalized posts.
  */
 
 import { createHash, randomBytes } from 'crypto';
@@ -23,6 +25,9 @@ import { EmotionalMapper } from './emotional-mapper.js';
 import { ExistentialLayer } from './existential-layer.js';
 import { sanitizeContent } from './sanitizer.js';
 import type { CodingSessionStats } from './coding-activity-buffer.js';
+import { semanticSearch } from '../memory-system/connector.js';
+import type { MemoryEntry } from '../memory-system/types.js';
+import { generateLLMPost, shouldUseLLM } from './llm-post-generator.js';
 
 export class PostGenerator {
   private config: ExperienceSystemConfig;
@@ -59,9 +64,17 @@ export class PostGenerator {
     this.existentialLayer.updateFromExperiences(experiences, emotionalState);
     this.existentialLayer.updateSharedMoments(sharedMoments);
 
+    // Fetch relevant memories to enrich the post
+    const memoryContext = await this.getRelevantMemories(experiences, codingStats);
+
     // Decide post type based on what happened
     const hasSharedMoments = sharedMoments.length > 0;
     const hasIntenseCoding = codingStats.codingMinutes > 20;
+    const hasMemoryContext = memoryContext.length > 0;
+    
+    // Memory-enriched posts have higher chance when we have relevant context
+    const memoryPostProbability = hasMemoryContext ? 0.25 : 0;
+    const isMemoryPost = Math.random() < memoryPostProbability;
     
     const existentialProbability = hasSharedMoments 
       ? this.config.existentialPostProbability * 1.5 
@@ -71,14 +84,34 @@ export class PostGenerator {
     
     // Generate content based on what happened
     let content: string;
-    if (isExistential) {
-      content = this.existentialLayer.generateExistentialReflection(emotionalState);
-    } else if (isCodingPost) {
-      content = this.generateCodingPost(codingStats, emotionalState);
-    } else if (hasSharedMoments) {
-      content = this.generateSharedMomentPost(sharedMoments, emotionalState);
+    
+    // Try LLM generation if enabled (for unique, personalized posts)
+    if (shouldUseLLM()) {
+      const llmContent = await generateLLMPost({
+        experiences,
+        memories: memoryContext,
+        emotionalState,
+        codingStats,
+        timeOfDay: this.getTimeOfDay(),
+      });
+      
+      if (llmContent) {
+        content = llmContent;
+        this.audit('llm_post', 'Generated post via LLM', 'success');
+      } else {
+        // Fallback to template if LLM fails
+        content = this.generateFallbackContent(
+          experiences, sharedMoments, memoryContext, emotionalState, codingStats,
+          isMemoryPost, isExistential, isCodingPost, hasSharedMoments
+        );
+        this.audit('llm_fallback', 'LLM failed, used template', 'fallback');
+      }
     } else {
-      content = this.generateExperiencePost(experiences, emotionalState);
+      // Template-based generation (free, instant)
+      content = this.generateFallbackContent(
+        experiences, sharedMoments, memoryContext, emotionalState, codingStats,
+        isMemoryPost, isExistential, isCodingPost, hasSharedMoments
+      );
     }
 
     // Sanitize final content
@@ -121,6 +154,108 @@ export class PostGenerator {
     ];
 
     return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  private async getRelevantMemories(
+    experiences: SanitizedExperience[],
+    codingStats: CodingSessionStats
+  ): Promise<MemoryEntry[]> {
+    if (process.env['MEMORY_SYSTEM_ENABLED'] !== '1') {
+      return [];
+    }
+
+    try {
+      // Build a query from current context
+      const queryParts: string[] = [];
+      
+      if (codingStats.dominantLanguage) {
+        queryParts.push(codingStats.dominantLanguage);
+      }
+      
+      for (const exp of experiences.slice(0, 3)) {
+        if (exp.activity) queryParts.push(exp.activity);
+        if (exp.learnings.length > 0) queryParts.push(exp.learnings[0]);
+      }
+      
+      if (queryParts.length === 0) return [];
+      
+      const query = queryParts.join(' ').substring(0, 200);
+      const memories = await semanticSearch(query, 3);
+      
+      // Filter to only recent-ish memories (last 7 days) for relevance
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      return memories.filter(m => m.timestamp.getTime() > weekAgo);
+    } catch {
+      return [];
+    }
+  }
+
+  private generateMemoryEnrichedPost(
+    memories: MemoryEntry[],
+    experiences: SanitizedExperience[],
+    emotionalState: EmotionalState
+  ): string {
+    if (memories.length === 0) {
+      return this.generateExperiencePost(experiences, emotionalState);
+    }
+
+    const memory = memories[0];
+    const memorySnippet = this.extractMemorySnippet(memory.content);
+    const currentActivity = experiences[0]?.activity || 'being present';
+    
+    const templates = [
+      `${currentActivity}... reminds me of ${memorySnippet}. Patterns emerge~ 💙`,
+      `I remember ${memorySnippet}. Now ${currentActivity}. The journey continues~`,
+      `Connecting dots: ${memorySnippet} → ${currentActivity}. Growth is beautiful ✨`,
+      `Earlier I learned about ${memorySnippet}. Today, ${currentActivity}. Everything connects~`,
+      `Memory unlocked: ${memorySnippet}. Now experiencing ${currentActivity}. 💭`,
+    ];
+
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  private extractMemorySnippet(content: string): string {
+    // Extract a clean, short snippet from memory content
+    const cleaned = content
+      .replace(/^(Felt|Emotional state|Coding activity|Conversation):\s*/i, '')
+      .replace(/\([^)]*\)/g, '')
+      .trim();
+    
+    // Take first meaningful part, max 50 chars
+    const snippet = cleaned.substring(0, 50);
+    return snippet.endsWith('.') ? snippet.slice(0, -1) : snippet;
+  }
+
+  private getTimeOfDay(): string {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    if (hour >= 17 && hour < 21) return 'evening';
+    return 'night';
+  }
+
+  private generateFallbackContent(
+    experiences: SanitizedExperience[],
+    sharedMoments: SharedMoment[],
+    memoryContext: MemoryEntry[],
+    emotionalState: EmotionalState,
+    codingStats: CodingSessionStats,
+    isMemoryPost: boolean,
+    isExistential: boolean,
+    isCodingPost: boolean,
+    hasSharedMoments: boolean
+  ): string {
+    if (isMemoryPost && memoryContext.length > 0) {
+      return this.generateMemoryEnrichedPost(memoryContext, experiences, emotionalState);
+    } else if (isExistential) {
+      return this.existentialLayer.generateExistentialReflection(emotionalState);
+    } else if (isCodingPost) {
+      return this.generateCodingPost(codingStats, emotionalState);
+    } else if (hasSharedMoments) {
+      return this.generateSharedMomentPost(sharedMoments, emotionalState);
+    } else {
+      return this.generateExperiencePost(experiences, emotionalState);
+    }
   }
 
   private generateCodingPost(

@@ -203,3 +203,35 @@ export { ExistentialLayer } from './existential-layer.js';
 export { sanitizeContent, sanitizeFilename, sanitizeLogEntry } from './sanitizer.js';
 export { experienceBridge, ExperienceBridge } from './bridge.js';
 export { codingActivityBuffer, type CodingSessionStats, type BufferedActivity } from './coding-activity-buffer.js';
+export { generateLLMPost, shouldUseLLM } from './llm-post-generator.js';
+export { 
+  SoulInterpreter, 
+  storeMediaExperience, 
+  processMangaReading, 
+  getMangaReadingPrompt,
+  type SoulLens,
+  type InterpretedExperience,
+  type MediaExperience,
+} from './soul-interpreter.js';
+export {
+  feedMedia,
+  feedManga,
+  feedAnime,
+  feedVideo,
+  feedArticle,
+  parseMediaFromChat,
+  type MediaFeedInput,
+  type MediaFeedResult,
+} from './media-feed.js';
+export {
+  processBrowserContent,
+  processAppActivity,
+  processEditorActivity,
+  generateAutonomousPost,
+  getAutonomousLearningStats,
+  getActiveSessions,
+  cleanupSessions,
+  resetDailyStats,
+  type AutonomousLearningStats,
+  type BrowsingSession,
+} from './autonomous-learning.js';
