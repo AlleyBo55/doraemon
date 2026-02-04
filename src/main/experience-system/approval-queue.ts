@@ -251,6 +251,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('approval:get-posted', () => {
+    console.log('[ApprovalQueue] get-posted called, returning', postedItems.length, 'items');
     return [...postedItems].sort((a, b) => b.postedAt - a.postedAt);
   });
 
@@ -489,10 +490,18 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
       return false;
     }
 
-    const result = await response.json() as { id?: string; slug?: string; post?: { id?: string; slug?: string } };
-    const postId = result.id || result.post?.id;
-    const slug = result.slug || result.post?.slug;
+    const result = await response.json() as Record<string, unknown>;
+    console.log('[ApprovalQueue] API response:', JSON.stringify(result, null, 2));
+    
+    // Try multiple possible response structures
+    const postData = (result.post || result.data || result) as Record<string, unknown>;
+    const postId = (postData.id || result.id) as string | undefined;
+    const slug = (postData.slug || result.slug) as string | undefined;
     const moltbookUrl = postId ? `${baseUrl}/post/${slug || postId}` : undefined;
+
+    if (!postId) {
+      console.warn('[ApprovalQueue] No post ID in response, post may not have been created');
+    }
 
     const posted: PostedItem = {
       id: item.id,
@@ -509,7 +518,7 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
     postedItems.push(posted);
     saveToDisk();
 
-    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || `post/${postId}`);
+    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || 'no URL');
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);

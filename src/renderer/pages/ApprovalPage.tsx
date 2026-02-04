@@ -514,12 +514,14 @@ export function ApprovalPage() {
 
   const loadItems = useCallback(async () => {
     try {
+      console.log('[ApprovalPage] Loading items...');
       const [pending, posted, newStats, submoltList] = await Promise.all([
         window.approvalAPI?.getPendingItems() || [],
         window.approvalAPI?.getPostedItems() || [],
         window.approvalAPI?.getStats() || { approved: 0, rejected: 0, pending: 0 },
         window.approvalAPI?.getSubmolts() || [],
       ]);
+      console.log('[ApprovalPage] Loaded:', { pending: pending.length, posted: posted.length });
       setItems(pending);
       setPostedItems(posted);
       setStats(newStats);
