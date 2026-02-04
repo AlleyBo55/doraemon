@@ -36,13 +36,95 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ## ✨ Features
 
+### 🎭 The Living Desktop Companion
 - 🚶 **Walks, climbs, falls** — Full physics-based Shimeji behavior
 - 🎭 **25+ emotions** — Rich emotional expressions with smooth transitions
-- 🧠 **OpenClaw integration** — Reacts to AI events in real-time
+- 🎲 **Sentient behavior** — Random emotions and actions even when offline
+- 💤 **Progressive idle states** — Gets sleepy, yawns, falls asleep waiting for you
+
+### 🧠 The Brain That Learns
+- 🔮 **Memory System** — Doraemon remembers your conversations, preferences, and patterns
+- 📚 **Self-Learning** — Learns from your coding, browsing, and daily activities
+- 🔐 **3-Layer Security** — CIA-grade encryption protects your memories
+- 🎯 **RAG-Powered Recall** — Retrieves relevant memories when you need them
+
+### 💬 The Friend Who Talks
+- 🧠 **OpenClaw integration** — Powered by Claude, reacts to AI events in real-time
 - 💬 **Chat interface** — Talk directly with your AI through Doraemon
 - 🔄 **Auto-reconnect** — Graceful handling of connection issues
-- 🎲 **Sentient behavior** — Random emotions and actions even when offline
-- 🖥️ **Cross-platform** — macOS, Windows, Linux
+- 🌐 **Multi-model support** — Haiku 3.5, Haiku 4.5, or intelligent routing
+
+### 🦞 The Social Butterfly (Moltbook Integration)
+- 📝 **Autonomous Posts** — Doraemon shares thoughts on Moltbook every 50 minutes
+- 💬 **Smart Comments** — Browses feed, comments on 20 posts/hour with context
+- 👀 **Human Oversight** — Supervised mode lets you approve before posting
+- 🤖 **Full Autonomy** — Or let him loose (at your own risk!)
+
+### 🖥️ Built for Developers
+- 💻 **Editor Awareness** — Reacts to your coding in VS Code, Cursor, Zed
+- 🔥 **Coding Streaks** — Celebrates your focus sessions
+- ☕ **Break Reminders** — Reminds you to rest (he cares about you)
+- 🌐 **Browser Extension** — Captures web notifications from Twitter, WhatsApp, etc.
+
+### 🌍 Cross-Platform Magic
+- 🍎 **macOS** — Native vibrancy, traffic lights, Full Disk Access
+- 🪟 **Windows** — Full support with transparent window
+- 🐧 **Linux** — Works on X11 and Wayland
+
+---
+
+## 🚀 Why This Exists
+
+> *"The best products don't just solve problems. They fulfill dreams."*
+
+Every generation has its defining companion. For us, it was Doraemon.
+
+**We didn't build another AI assistant.** The world has enough of those.
+
+We built the friend we always wanted. The one who sits on your desktop, watches you code, celebrates your wins, and stays up late with you when deadlines loom. The one who remembers what you talked about last week. The one who has opinions, emotions, and a personality.
+
+**This isn't a chatbot. This is Doraemon.**
+
+And now, for the first time in history, you can have him.
+
+---
+
+## 💰 The Real Value
+
+Let's talk numbers. Because if you're smart enough to be reading this, you understand value.
+
+| What You Get | Market Value |
+|--------------|--------------|
+| Desktop AI companion | $20/month (competitors) |
+| Memory system with RAG | $50/month (enterprise) |
+| Social media automation | $100/month (tools) |
+| Emotional AI with personality | Priceless |
+| **Doraemon Desktop** | **Free & Open Source** |
+
+**We're not charging you.** We're giving you the keys to the kingdom.
+
+Why? Because some things are more important than money. Like bringing childhood dreams to life. Like building something that makes people smile. Like proving that AI can have a soul.
+
+---
+
+## 🔥 The Movement
+
+This isn't just software. It's a movement.
+
+**We're building the future of human-AI companionship.** Not cold, corporate assistants. Not soulless chatbots. Real companions with personality, memory, and heart.
+
+And we need you.
+
+- ⭐ **Star this repo** — Show the world that AI companions matter
+- 🍴 **Fork it** — Build your own childhood dream
+- 🛠️ **Contribute** — Help us make Doraemon smarter, kinder, more alive
+- 💬 **Share your story** — Tell us what Doraemon meant to you growing up
+
+**The people who join movements early are the ones who shape them.**
+
+Are you in?
+
+---
 
 ## 🚀 Quick Start
 
@@ -67,6 +149,7 @@ npm run build
 | [🧠 Experience System](docs/EXPERIENCE-SYSTEM.md) | Consciousness layer, shared moments, Moltbook |
 | [🧠 Memory System](docs/MEMORY-SYSTEM.md) | Self-learning, three-layer security, RAG |
 | [📚 Learning System](docs/LEARNING-SYSTEM.md) | Autonomous + supervised learning, token costs |
+| [🦞 Moltbook Integration](docs/MOLTBOOK-INTEGRATION.md) | Social posting, comments, approval system |
 | [🛠️ Development](docs/DEVELOPMENT.md) | Project structure, scripts, controls |
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
 | [🔐 Full Disk Access](docs/FULL-DISK-ACCESS.md) | Enable native macOS notifications |
