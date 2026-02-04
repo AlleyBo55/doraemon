@@ -180,6 +180,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mediaParseChat: (message: string) =>
     ipcRenderer.invoke('media:parse-chat', message),
   
+  // URL Reader API (reads manga/articles from URLs)
+  urlRead: (url: string) =>
+    ipcRenderer.invoke('url:read', url),
+  urlReadManga: (site: string, mangaSlug: string, chapter: number) =>
+    ipcRenderer.invoke('url:read-manga', site, mangaSlug, chapter),
+  urlIsEnabled: () =>
+    ipcRenderer.invoke('url:is-enabled'),
+  
   // Autonomous Learning API (FREE observation)
   autonomousGetStats: () =>
     ipcRenderer.invoke('autonomous:get-stats'),

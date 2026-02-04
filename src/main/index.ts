@@ -718,6 +718,31 @@ ipcMain.handle('media:parse-chat', async (_event, message: string) => {
 });
 
 // ============================================
+// URL Reader IPC Handlers
+// ============================================
+
+ipcMain.handle('url:read', async (_event, url: string) => {
+  const { readURL, isURLReaderEnabled } = await import('./experience-system/url-reader.js');
+  if (!isURLReaderEnabled()) {
+    return { success: false, error: 'URL_READER_ENABLED is not set to 1' };
+  }
+  return readURL(url);
+});
+
+ipcMain.handle('url:read-manga', async (_event, site: string, mangaSlug: string, chapter: number) => {
+  const { readMangaChapter, isURLReaderEnabled } = await import('./experience-system/url-reader.js');
+  if (!isURLReaderEnabled()) {
+    return { success: false, error: 'URL_READER_ENABLED is not set to 1' };
+  }
+  return readMangaChapter(site, mangaSlug, chapter);
+});
+
+ipcMain.handle('url:is-enabled', async () => {
+  const { isURLReaderEnabled } = await import('./experience-system/url-reader.js');
+  return isURLReaderEnabled();
+});
+
+// ============================================
 // Autonomous Learning IPC Handlers
 // ============================================
 

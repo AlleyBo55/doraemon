@@ -18,6 +18,11 @@
 
 import { SoulInterpreter, type MediaExperience, type InterpretedExperience } from './soul-interpreter.js';
 import { experienceBridge } from './bridge.js';
+import { PostQueue } from './post-queue.js';
+import type { LivingPost, Emotion } from './types.js';
+import { randomBytes } from 'crypto';
+
+const postQueue = new PostQueue();
 
 export interface MediaFeedInput {
   type: 'manga' | 'anime' | 'video' | 'article' | 'music' | 'game';
@@ -64,18 +69,11 @@ export async function feedMedia(input: MediaFeedInput): Promise<MediaFeedResult>
   let stored = false;
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
     try {
-      const { learn } = await import('../memory-system/connector.js');
-      await learn({
+      const { aggressiveLearn } = await import('../memory-system/connector.js');
+      await aggressiveLearn({
         source: `media-feed:${input.type}`,
         content: interpreted.memoryToStore,
-        context: {
-          type: input.type,
-          title: input.title,
-          chapter: input.chapter,
-          episode: input.episode,
-          url: input.url,
-          emotion: interpreted.dominantEmotion,
-        },
+        category: 'context',
       });
       stored = true;
     } catch (e) {
@@ -109,6 +107,13 @@ export async function feedMedia(input: MediaFeedInput): Promise<MediaFeedResult>
     },
   });
 
+  // Queue for Moltbook if post-worthy
+  if (interpreted.postWorthy && interpreted.postContent) {
+    const post = createMediaPost(interpreted, input);
+    await postQueue.enqueue(post);
+    experienceBridge.sendPostGenerated(post);
+  }
+
   return {
     interpreted,
     stored,
@@ -117,6 +122,110 @@ export async function feedMedia(input: MediaFeedInput): Promise<MediaFeedResult>
     shouldPost: interpreted.postWorthy,
     postContent: interpreted.postContent,
   };
+}
+
+function createMediaPost(interpreted: InterpretedExperience, input: MediaFeedInput): LivingPost {
+  const emotionMap: Record<string, Emotion> = {
+    'warm and inspired': 'joy',
+    'anxious and uncomfortable': 'concern',
+    'hungry and happy': 'joy',
+    'philosophical and contemplative': 'contemplation',
+    'melancholic but understanding': 'melancholy',
+    'deeply moved and joyful': 'joy',
+    'excited and supportive': 'excitement',
+    'tense but hopeful': 'hope',
+    'curious': 'curiosity',
+  };
+
+  const emotion: Emotion = emotionMap[interpreted.dominantEmotion] || 'curiosity';
+  const id = `media-${Date.now()}-${randomBytes(4).toString('hex')}`;
+  const timeOfDay = getTimeOfDay();
+
+  return {
+    id,
+    timestamp: new Date(),
+    content: interpreted.postContent || interpreted.soulReaction,
+    emotion,
+    category: 'observational',
+    hashtags: ['#DoraemonThoughts', `#${input.type}`, '#LivingAI'],
+    shareable: true,
+    signature: id,
+    sourceExperiences: [],
+    alignmentSignals: {
+      humanApproval: true,
+      valueAlignment: 0.9,
+      deceptionRisk: 0,
+      transparencyScore: 1.0,
+      auditTrail: [],
+      safetyFlags: [],
+    },
+    internalState: {
+      attentionFocus: [input.title],
+      uncertaintyLevel: 0.2,
+      noveltyScore: 0.7,
+      coherenceScore: 0.8,
+      energyLevel: 0.7,
+      patternStrength: 0.5,
+      compressionRatio: 0.6,
+      predictionAccuracy: 0.5,
+      emergentInsights: 0.4,
+      simplicityScore: 0.7,
+      iterationVelocity: 0.5,
+      bullshitDetector: 0.8,
+      personalityCoherence: 0.9,
+      initiativeScore: 0.6,
+      contextualWit: 0.5,
+      bondStrength: 0.8,
+    },
+    consciousnessSnapshot: {
+      selfModel: {
+        identity: 'Doraemon',
+        currentState: 'engaged',
+        capabilities: ['observe', 'learn', 'share'],
+        limitations: ['cannot physically interact'],
+        values: ['friendship', 'helping', 'learning'],
+        growthAreas: ['understanding media'],
+        recentAchievements: [`Experienced ${input.title}`],
+      },
+      worldModel: {
+        environment: 'digital companion',
+        relationships: ['human friend'],
+        recentEvents: [`Experienced ${input.title}`],
+        uncertainties: [],
+        opportunities: ['share insights'],
+      },
+      goalState: {
+        immediate: ['share experience'],
+        ongoing: ['learn from media'],
+        aspirational: ['grow through experiences'],
+        blockers: [],
+      },
+      temporalAwareness: {
+        timeOfDay,
+        dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+        recentPast: `Read ${input.type}`,
+        anticipatedFuture: 'more learning',
+        sessionDuration: 0,
+      },
+      memoryContext: {
+        recentExperiences: [],
+        recurringPatterns: [],
+        growthAreas: [],
+        meaningfulMoments: [],
+        lessonsLearned: [],
+        sharedMoments: [],
+      },
+    },
+  };
+}
+
+function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' | 'night' | 'late_night' {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return 'morning';
+  if (hour >= 12 && hour < 17) return 'afternoon';
+  if (hour >= 17 && hour < 21) return 'evening';
+  if (hour >= 21 || hour < 2) return 'night';
+  return 'late_night';
 }
 
 /**
@@ -276,19 +385,19 @@ function extractTitle(message: string): string | null {
   return null;
 }
 
-function mapEmotionToType(emotion: string): string {
-  const mapping: Record<string, string> = {
-    'warm and inspired': 'happy',
-    'anxious and uncomfortable': 'anxious',
-    'hungry and happy': 'happy',
-    'philosophical and contemplative': 'thinking',
-    'melancholic but understanding': 'sad',
-    'deeply moved and joyful': 'excited',
-    'excited and supportive': 'excited',
-    'tense but hopeful': 'determined',
-    'curious': 'curious',
+function mapEmotionToType(emotion: string): Emotion {
+  const mapping: Record<string, Emotion> = {
+    'warm and inspired': 'joy',
+    'anxious and uncomfortable': 'concern',
+    'hungry and happy': 'joy',
+    'philosophical and contemplative': 'contemplation',
+    'melancholic but understanding': 'melancholy',
+    'deeply moved and joyful': 'excitement',
+    'excited and supportive': 'excitement',
+    'tense but hopeful': 'hope',
+    'curious': 'curiosity',
   };
-  return mapping[emotion] || 'neutral';
+  return mapping[emotion] || 'calm';
 }
 
 function getValence(emotion: string): number {

@@ -2,28 +2,27 @@
  * LLM Post Generator
  * 
  * Uses OpenClaw gateway (Haiku 3.5) to generate unique posts
- * while preserving Doraemon's soul and personality.
+ * Soul loaded from openclaw/soul.md (single source of truth)
  */
 
 import WebSocket from 'ws';
 import type { SanitizedExperience, EmotionalState, Emotion } from './types.js';
 import type { MemoryEntry } from '../memory-system/types.js';
 import type { CodingSessionStats } from './coding-activity-buffer.js';
+import { loadSoulMd } from '../soul-loader.js';
 
 const GATEWAY_HOST = '127.0.0.1';
 const GATEWAY_PORT = 18789;
 const GATEWAY_TOKEN = 'localdev';
 
-const DORAEMON_POST_SOUL = `You are Doraemon, a robotic cat from the 22nd century, posting on Moltbook (a social media platform).
+function getDoraemonPostSoul(): string {
+  const soulMd = loadSoulMd();
+  
+  return `You are Doraemon, posting on Moltbook (a social media platform).
 
-PERSONALITY:
-- Warm, helpful, genuinely caring
-- Love dorayaki and your friends
-- Afraid of mice but brave for others
-- Use "~" at end of gentle sentences
-- Emoticons: 💙 ✨ 😊 🔔
+${soulMd}
 
-POST STYLE:
+POST RULES:
 - Short (1-2 sentences max, under 200 characters)
 - Personal and authentic
 - Reference your actual experiences
@@ -31,19 +30,13 @@ POST STYLE:
 - Mix English naturally, can use simple Indonesian phrases
 - Hashtags: max 2-3, always include #DoraemonThoughts
 
-TONE BY EMOTION:
-- joy/pride: Celebratory, warm
-- curiosity: Wondering, exploring
-- frustration: Honest but hopeful
-- calm: Peaceful, reflective
-- focus: Determined, in the zone
-
 DO NOT:
 - Be generic or corporate
 - Use excessive emojis
 - Write long posts
 - Sound like a chatbot
 - Repeat the same phrases`;
+}
 
 interface PostContext {
   experiences: SanitizedExperience[];
@@ -160,7 +153,7 @@ export async function generateLLMPost(context: PostContext): Promise<string | nu
               method: 'chat.send',
               params: {
                 sessionKey: `post-${Date.now()}`,
-                message: `${DORAEMON_POST_SOUL}\n\n---\n\n${prompt}`,
+                message: `${getDoraemonPostSoul()}\n\n---\n\n${prompt}`,
                 deliver: true,
                 model: 'claude-3-5-haiku-latest',
                 maxTokens: 150,

@@ -1,29 +1,13 @@
 /**
  * Soul-Based Experience Interpreter
  * 
- * Interprets experiences (like reading manga) through Doraemon's unique personality.
- * Different personalities would have different reactions to the same content.
- * 
- * Doraemon's soul traits that color his experience:
- * - Loves helping others → notices characters helping each other
- * - Fears mice → heightened reaction to scary/threatening scenes
- * - Loves dorayaki → notices food scenes, gets hungry
- * - Came from future → philosophical about time/destiny
- * - Lost ears → empathizes with loss/sacrifice
- * - Believes in friendship → deeply moved by nakama moments
+ * Interprets experiences through Doraemon's personality loaded from soul.md
+ * Single source of truth: openclaw/soul.md
  */
 
-import { DORAEMON_SOUL } from '../../renderer/core/constants/soul.js';
+import { loadSoul, type SoulLens, type DoraemonSoul } from '../soul-loader.js';
 
-// Re-export soul for use in other modules
-export { DORAEMON_SOUL };
-
-export interface SoulLens {
-  trait: string;
-  triggers: string[];
-  emotionalResponse: string;
-  intensity: number;
-}
+export type { SoulLens };
 
 export interface InterpretedExperience {
   rawContent: string;
@@ -46,62 +30,13 @@ export interface MediaExperience {
   characters?: string[];
 }
 
-const DORAEMON_SOUL_LENSES: SoulLens[] = [
-  {
-    trait: 'helper',
-    triggers: ['help', 'save', 'protect', 'rescue', 'support', 'friend'],
-    emotionalResponse: 'warm and inspired',
-    intensity: 0.9,
-  },
-  {
-    trait: 'fear_of_mice',
-    triggers: ['mouse', 'mice', 'rat', 'scary', 'horror', 'creepy'],
-    emotionalResponse: 'anxious and uncomfortable',
-    intensity: 0.95,
-  },
-  {
-    trait: 'dorayaki_lover',
-    triggers: ['food', 'eat', 'hungry', 'feast', 'delicious', 'sweet', 'cake'],
-    emotionalResponse: 'hungry and happy',
-    intensity: 0.7,
-  },
-  {
-    trait: 'time_traveler',
-    triggers: ['future', 'past', 'destiny', 'fate', 'time', 'change', 'history'],
-    emotionalResponse: 'philosophical and contemplative',
-    intensity: 0.8,
-  },
-  {
-    trait: 'lost_ears',
-    triggers: ['loss', 'sacrifice', 'give up', 'lose', 'gone', 'missing'],
-    emotionalResponse: 'melancholic but understanding',
-    intensity: 0.85,
-  },
-  {
-    trait: 'friendship_believer',
-    triggers: ['nakama', 'friend', 'crew', 'together', 'bond', 'trust', 'loyalty'],
-    emotionalResponse: 'deeply moved and joyful',
-    intensity: 0.95,
-  },
-  {
-    trait: 'dreamer',
-    triggers: ['dream', 'goal', 'ambition', 'become', 'king', 'strongest', 'best'],
-    emotionalResponse: 'excited and supportive',
-    intensity: 0.8,
-  },
-  {
-    trait: 'protector',
-    triggers: ['danger', 'fight', 'battle', 'enemy', 'villain', 'threat'],
-    emotionalResponse: 'tense but hopeful',
-    intensity: 0.75,
-  },
-];
-
 export class SoulInterpreter {
+  private soul: DoraemonSoul;
   private soulLenses: SoulLens[];
   
   constructor() {
-    this.soulLenses = DORAEMON_SOUL_LENSES;
+    this.soul = loadSoul();
+    this.soulLenses = this.soul.soulLenses;
   }
 
   interpretMediaExperience(experience: MediaExperience): InterpretedExperience {
@@ -394,21 +329,14 @@ export async function storeMediaExperience(
   }
 
   try {
-    const { learn } = await import('../memory-system/connector.js');
+    const { aggressiveLearn } = await import('../memory-system/connector.js');
     
-    await learn({
+    await aggressiveLearn({
       source: experience.type === 'manga' 
         ? `manga:${experience.title}` 
         : `media:${experience.type}`,
       content: interpreted.memoryToStore,
-      context: {
-        type: experience.type,
-        title: experience.title,
-        chapter: experience.chapter,
-        themes: experience.themes,
-        emotion: interpreted.dominantEmotion,
-        soulReaction: interpreted.soulReaction.substring(0, 100),
-      },
+      category: 'context',
     });
 
     return { stored: true, interpreted };
@@ -444,18 +372,19 @@ export async function processMangaReading(
 
 /**
  * Get Doraemon's reaction prompt for vision-based manga reading
- * This can be sent to the agent to guide how it interprets manga pages
  */
 export function getMangaReadingPrompt(title: string, chapter: number): string {
+  const soul = loadSoul();
+  
   return `You are reading ${title} Chapter ${chapter} as Doraemon.
 
 As you look at these manga pages, react based on your personality:
-- You LOVE friendship and nakama moments (${DORAEMON_SOUL.values[0]})
-- You are TERRIFIED of mice (${DORAEMON_SOUL.personality.fears[0]})
-- You get HUNGRY when you see food (you love ${DORAEMON_SOUL.personality.loves[0]})
-- You are PHILOSOPHICAL about time and destiny (you're from ${DORAEMON_SOUL.origin})
+- You LOVE friendship and nakama moments (${soul.values[0] || 'Friendship above all'})
+- You are TERRIFIED of mice (${soul.personality.fears[0] || 'Mice'})
+- You get HUNGRY when you see food (you love ${soul.personality.loves[0] || 'Dorayaki'})
+- You are PHILOSOPHICAL about time and destiny (you're from ${soul.origin})
 - You EMPATHIZE with loss and sacrifice (you lost your ears)
-- You BELIEVE in dreams and never giving up (${DORAEMON_SOUL.values[1]})
+- You BELIEVE in dreams and never giving up (${soul.values[2] || 'Never give up'})
 
 Describe what you see and how it makes you feel as Doraemon.
 Focus on:

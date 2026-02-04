@@ -2,7 +2,7 @@
  * Cryptographic utilities for secure memory storage
  * 
  * Uses AES-256-GCM for encryption (authenticated encryption)
- * PBKDF2 for key derivation
+ * PBKDF2 for key derivation with automatic key rotation
  * SHA-256 for hashing and integrity
  */
 
@@ -14,6 +14,14 @@ import {
   pbkdf2Sync,
   randomBytes,
 } from 'crypto';
+import {
+  deriveKey as deriveRotatingKey,
+  getCurrentKeyVersion,
+  shouldRotateKey,
+  rotateKey,
+  getKeyRotationStatus,
+  canDecryptVersion,
+} from './key-rotation.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -24,11 +32,28 @@ const PBKDF2_ITERATIONS = 100000;
 
 let masterKey: Buffer | null = null;
 let keySalt: Buffer | null = null;
+let useKeyRotation = false;
 
-export function initializeCrypto(passphrase?: string): void {
-  keySalt = randomBytes(SALT_LENGTH);
-  const secret = passphrase || generateMachineSecret();
-  masterKey = pbkdf2Sync(secret, keySalt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha512');
+export function initializeCrypto(passphrase?: string, enableKeyRotation = true): void {
+  useKeyRotation = enableKeyRotation;
+  
+  if (useKeyRotation) {
+    // Use key rotation system
+    masterKey = deriveRotatingKey();
+    keySalt = randomBytes(SALT_LENGTH);
+    
+    // Check if rotation is needed
+    if (shouldRotateKey()) {
+      const { oldVersion, newVersion } = rotateKey();
+      masterKey = deriveRotatingKey(newVersion);
+      console.log(`[Crypto] Key rotated from v${oldVersion} to v${newVersion}`);
+    }
+  } else {
+    // Legacy: derive from machine secret
+    keySalt = randomBytes(SALT_LENGTH);
+    const secret = passphrase || generateMachineSecret();
+    masterKey = pbkdf2Sync(secret, keySalt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha512');
+  }
 }
 
 export function isInitialized(): boolean {
@@ -132,3 +157,5 @@ export function deriveKeyForEntry(entryId: string): Buffer {
     'sha256'
   );
 }
+
+export { getKeyRotationStatus, canDecryptVersion, getCurrentKeyVersion };
