@@ -71,17 +71,9 @@ function ensureDirectories(): void {
 }
 
 function loadIndex(): void {
-  const indexPath = join(STORAGE_DIR, INDEX_FILE);
-  if (!existsSync(indexPath)) {
-    saveIndex();
-    return;
-  }
+  const entriesDir = join(STORAGE_DIR, ENTRIES_DIR);
   
   try {
-    const content = readFileSync(indexPath, 'utf-8');
-    const index = JSON.parse(content) as StorageIndex;
-    
-    const entriesDir = join(STORAGE_DIR, ENTRIES_DIR);
     const files = readdirSync(entriesDir).filter(f => f.endsWith('.enc'));
     
     for (const file of files) {
@@ -100,8 +92,12 @@ function loadIndex(): void {
         logAuditEvent('read', `Failed to load entry: ${file}`);
       }
     }
+    
+    // Update index to reflect actual loaded entries
+    saveIndex();
+    logAuditEvent('read', `Loaded ${memoryCache.size} entries from disk`);
   } catch {
-    logAuditEvent('read', 'Failed to load index, starting fresh');
+    logAuditEvent('read', 'Failed to load entries directory');
   }
 }
 
