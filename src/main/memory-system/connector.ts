@@ -63,13 +63,8 @@ function registerIpcHandlers(): void {
     return predictUserNeeds(memories);
   });
   
-  ipcMain.handle('memory:get-self-model', async () => {
-    return getSelfModel();
-  });
-  
-  ipcMain.handle('memory:get-goals', async () => {
-    return getEmergentGoals();
-  });
+  // Note: memory:get-self-model and memory:get-goals are registered in gateway-bridge.ts
+  // They use ExistentialLayer for richer self-model data
   
   ipcMain.handle('memory:get-dashboard', async () => {
     return getDashboardData();

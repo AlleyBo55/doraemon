@@ -24,8 +24,27 @@ interface PendingItem {
   category: string;
   hashtags: string[];
   timestamp: number;
+  submolt: string;
   replyTo?: string;
   postContext?: PostContext;
+}
+
+interface SubmoltOption {
+  value: string;
+  label: string;
+}
+
+interface PostedItem {
+  id: string;
+  type: 'post' | 'comment';
+  content: string;
+  emotion: string;
+  category: string;
+  submolt: string;
+  timestamp: number;
+  postedAt: number;
+  moltbookUrl?: string;
+  moltbookPostId?: string;
 }
 
 interface ApprovalStats {
@@ -38,6 +57,7 @@ declare global {
   interface Window {
     approvalAPI?: {
       getPendingItems: () => Promise<PendingItem[]>;
+      getPostedItems: () => Promise<PostedItem[]>;
       approveItem: (id: string) => Promise<boolean>;
       rejectItem: (id: string) => Promise<boolean>;
       approveAll: () => Promise<number>;
@@ -45,8 +65,10 @@ declare global {
       getStats: () => Promise<ApprovalStats>;
       onNewItem: (callback: (item: PendingItem) => void) => void;
       closeWindow: () => void;
-      triggerManualPost: () => Promise<{ success: boolean; postId?: string }>;
-      triggerComments: () => Promise<{ success: boolean }>;
+      triggerManualPost: () => Promise<{ success: boolean; postId?: string; error?: string }>;
+      triggerComments: () => Promise<{ success: boolean; error?: string }>;
+      updateSubmolt: (id: string, submolt: string) => Promise<boolean>;
+      getSubmolts: () => Promise<SubmoltOption[]>;
     };
   }
 }
@@ -92,12 +114,16 @@ function PostCard({
   onReject,
   isExpanded,
   onToggle,
+  submolts,
+  onSubmoltChange,
 }: { 
   item: PendingItem;
   onApprove: () => void;
   onReject: () => void;
   isExpanded: boolean;
   onToggle: () => void;
+  submolts: SubmoltOption[];
+  onSubmoltChange: (submolt: string) => void;
 }) {
   const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
   const categoryClass = categoryColors[item.category] || categoryColors.default;
@@ -115,10 +141,19 @@ function PostCard({
           <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
           
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${categoryClass}`}>
                 {item.category}
               </span>
+              <select
+                value={item.submolt}
+                onChange={(e) => onSubmoltChange((e.target as HTMLSelectElement).value)}
+                className="px-2 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-600 border-0 cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                {submolts.map(s => (
+                  <option key={s.value} value={s.value}>m/{s.value}</option>
+                ))}
+              </select>
               <span className="text-xs text-slate-400">{timeAgo}</span>
             </div>
             
@@ -251,17 +286,71 @@ function CommentCard({
   );
 }
 
+function PostedCard({ item }: { item: PostedItem }) {
+  const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
+  const timeAgo = getTimeAgo(item.postedAt);
+
+  return (
+    <div className="group relative bg-green-50/80 backdrop-blur-xl rounded-2xl border border-green-200/50 shadow-sm">
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                ✓ {item.type === 'post' ? 'Posted' : 'Commented'}
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                m/{item.submolt}
+              </span>
+              <span className="text-xs text-slate-400">{timeAgo}</span>
+            </div>
+            
+            <p className="text-slate-700 text-sm leading-relaxed line-clamp-2">
+              {item.content}
+            </p>
+            
+            {item.moltbookUrl && (
+              <a 
+                href={item.moltbookUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+              >
+                🔗 {item.moltbookUrl}
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ 
   type, 
   onTriggerPost, 
   onTriggerComments,
   isTriggering,
 }: { 
-  type: 'all' | 'post' | 'comment';
+  type: 'all' | 'post' | 'comment' | 'posted';
   onTriggerPost: () => void;
   onTriggerComments: () => void;
   isTriggering: boolean;
 }) {
+  if (type === 'posted') {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-8">
+        <div className="text-6xl mb-4">📭</div>
+        <h3 className="text-lg font-semibold text-slate-700 mb-2">No posted items yet</h3>
+        <p className="text-sm text-slate-500 text-center max-w-xs">
+          Approved posts and comments will appear here with their Moltbook URLs.
+        </p>
+      </div>
+    );
+  }
+  
   return (
     <div className="flex flex-col items-center justify-center py-16 px-8">
       <div className="text-6xl mb-4">{type === 'comment' ? '💬' : type === 'post' ? '📝' : '✨'}</div>
@@ -301,18 +390,26 @@ function EmptyState({
 
 export function ApprovalPage() {
   const [items, setItems] = useState<PendingItem[]>([]);
+  const [postedItems, setPostedItems] = useState<PostedItem[]>([]);
   const [stats, setStats] = useState<ApprovalStats>({ approved: 0, rejected: 0, pending: 0 });
+  const [submolts, setSubmolts] = useState<SubmoltOption[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isTriggering, setIsTriggering] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'post' | 'comment'>('all');
+  const [filter, setFilter] = useState<'all' | 'post' | 'comment' | 'posted'>('all');
 
   const loadItems = useCallback(async () => {
     try {
-      const pending = await window.approvalAPI?.getPendingItems() || [];
-      const newStats = await window.approvalAPI?.getStats() || { approved: 0, rejected: 0, pending: 0 };
+      const [pending, posted, newStats, submoltList] = await Promise.all([
+        window.approvalAPI?.getPendingItems() || [],
+        window.approvalAPI?.getPostedItems() || [],
+        window.approvalAPI?.getStats() || { approved: 0, rejected: 0, pending: 0 },
+        window.approvalAPI?.getSubmolts() || [],
+      ]);
       setItems(pending);
+      setPostedItems(posted);
       setStats(newStats);
+      setSubmolts(submoltList);
     } catch (e) {
       console.error('Failed to load items:', e);
     } finally {
@@ -320,27 +417,68 @@ export function ApprovalPage() {
     }
   }, []);
 
+  const handleSubmoltChange = async (id: string, submolt: string) => {
+    const success = await window.approvalAPI?.updateSubmolt(id, submolt);
+    if (success) {
+      setItems(prev => prev.map(item => 
+        item.id === id ? { ...item, submolt } : item
+      ));
+    }
+  };
+
   const handleTriggerPost = async () => {
+    console.log('[ApprovalPage] Trigger post clicked');
+    console.log('[ApprovalPage] approvalAPI available:', !!window.approvalAPI);
+    
+    if (!window.approvalAPI) {
+      alert('approvalAPI not available - preload may not be loaded');
+      return;
+    }
+    
     setIsTriggering(true);
     try {
-      const result = await window.approvalAPI?.triggerManualPost();
+      console.log('[ApprovalPage] Calling triggerManualPost...');
+      const result = await window.approvalAPI.triggerManualPost();
+      console.log('[ApprovalPage] Result:', result);
       if (result?.success) {
         await loadItems();
+      } else if (result?.error) {
+        alert(`Failed to generate post: ${result.error}`);
+      } else {
+        alert('No response from triggerManualPost');
       }
     } catch (e) {
-      console.error('Failed to trigger manual post:', e);
+      console.error('[ApprovalPage] Failed to trigger manual post:', e);
+      alert(`Error: ${e}`);
     } finally {
       setIsTriggering(false);
     }
   };
 
   const handleTriggerComments = async () => {
+    console.log('[ApprovalPage] Trigger comments clicked');
+    console.log('[ApprovalPage] approvalAPI available:', !!window.approvalAPI);
+    
+    if (!window.approvalAPI) {
+      alert('approvalAPI not available - preload may not be loaded');
+      return;
+    }
+    
     setIsTriggering(true);
     try {
-      await window.approvalAPI?.triggerComments();
-      await loadItems();
+      console.log('[ApprovalPage] Calling triggerComments...');
+      const result = await window.approvalAPI.triggerComments();
+      console.log('[ApprovalPage] Result:', result);
+      if (result?.success) {
+        await loadItems();
+      } else if (result?.error) {
+        alert(`Failed to browse: ${result.error}`);
+      } else {
+        alert('No response from triggerComments');
+      }
     } catch (e) {
-      console.error('Failed to trigger comments:', e);
+      console.error('[ApprovalPage] Failed to trigger comments:', e);
+      alert(`Error: ${e}`);
     } finally {
       setIsTriggering(false);
     }
@@ -425,20 +563,23 @@ export function ApprovalPage() {
       <div className="max-w-2xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1 p-1 bg-slate-200/50 rounded-xl">
-            {(['all', 'post', 'comment'] as const).map(f => (
+            {(['all', 'post', 'comment', 'posted'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                   filter === f ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {f === 'all' ? `All (${items.length})` : f === 'post' ? `Posts (${postCount})` : `Comments (${commentCount})`}
+                {f === 'all' ? `All (${items.length})` 
+                  : f === 'post' ? `Posts (${postCount})` 
+                  : f === 'comment' ? `Comments (${commentCount})`
+                  : `Posted (${postedItems.length})`}
               </button>
             ))}
           </div>
 
-          {filteredItems.length > 0 && (
+          {filter !== 'posted' && filteredItems.length > 0 && (
             <div className="flex gap-2">
               <button 
                 onClick={handleRejectFiltered} 
@@ -458,27 +599,44 @@ export function ApprovalPage() {
           )}
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={handleTriggerPost}
-            disabled={isTriggering}
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-all border border-blue-200"
-          >
-            {isTriggering ? '...' : '📝 Generate Post'}
-          </button>
-          <button
-            onClick={handleTriggerComments}
-            disabled={isTriggering}
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-50 text-amber-600 hover:bg-amber-100 disabled:opacity-50 transition-all border border-amber-200"
-          >
-            {isTriggering ? '...' : '💬 Browse & Comment'}
-          </button>
-        </div>
+        {filter !== 'posted' && (
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={handleTriggerPost}
+              disabled={isTriggering}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-all border border-blue-200"
+            >
+              {isTriggering ? '...' : '📝 Generate Post'}
+            </button>
+            <button
+              onClick={handleTriggerComments}
+              disabled={isTriggering}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-50 text-amber-600 hover:bg-amber-100 disabled:opacity-50 transition-all border border-amber-200"
+            >
+              {isTriggering ? '...' : '💬 Browse & Comment'}
+            </button>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
             <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
           </div>
+        ) : filter === 'posted' ? (
+          postedItems.length === 0 ? (
+            <EmptyState 
+              type="posted" 
+              onTriggerPost={handleTriggerPost}
+              onTriggerComments={handleTriggerComments}
+              isTriggering={isTriggering} 
+            />
+          ) : (
+            <div className="space-y-3">
+              {postedItems.map(item => (
+                <PostedCard key={item.id} item={item} />
+              ))}
+            </div>
+          )
         ) : filteredItems.length === 0 ? (
           <EmptyState 
             type={filter} 
@@ -497,6 +655,8 @@ export function ApprovalPage() {
                   onReject={() => handleReject(item.id)}
                   isExpanded={expandedId === item.id}
                   onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  submolts={submolts}
+                  onSubmoltChange={(submolt) => handleSubmoltChange(item.id, submolt)}
                 />
               ) : (
                 <CommentCard

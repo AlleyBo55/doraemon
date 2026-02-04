@@ -55,15 +55,19 @@ class CodingActivityBuffer {
     const commitCount = recent.filter(a => a.action === 'git_commit').length;
 
     // Calculate coding minutes based on activity gaps
+    // Use 10 min gap threshold (more forgiving for thinking/reading time)
     let codingMinutes = 0;
     if (recent.length > 1) {
       const sorted = recent.sort((a, b) => a.timestamp - b.timestamp);
       for (let i = 1; i < sorted.length; i++) {
         const gap = sorted[i].timestamp - sorted[i - 1].timestamp;
-        if (gap < 5 * 60 * 1000) { // 5 min gap = still coding
+        if (gap < 10 * 60 * 1000) { // 10 min gap = still coding
           codingMinutes += gap / 60000;
         }
       }
+    } else if (recent.length === 1) {
+      // Single activity - count at least 1 minute
+      codingMinutes = 1;
     }
 
     // Find dominant language

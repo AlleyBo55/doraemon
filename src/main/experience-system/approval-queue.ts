@@ -63,14 +63,29 @@ interface ApprovalDecision {
   timestamp: number;
 }
 
+export interface PostedItem {
+  id: string;
+  type: 'post' | 'comment';
+  content: string;
+  emotion: string;
+  category: string;
+  submolt: string;
+  timestamp: number;
+  postedAt: number;
+  moltbookUrl?: string;
+  moltbookPostId?: string;
+}
+
 interface PersistedData {
   pendingItems: PendingItem[];
   decisions: ApprovalDecision[];
+  postedItems: PostedItem[];
   lastSaved: number;
 }
 
 const pendingItems: Map<string, PendingItem> = new Map();
 const decisions: ApprovalDecision[] = [];
+const postedItems: PostedItem[] = [];
 let approvalWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -99,7 +114,10 @@ function loadFromDisk(): void {
     decisions.length = 0;
     decisions.push(...(data.decisions || []).slice(-200));
     
-    console.log(`[ApprovalQueue] Loaded ${pendingItems.size} pending items, ${decisions.length} decisions from disk`);
+    postedItems.length = 0;
+    postedItems.push(...(data.postedItems || []).slice(-100));
+    
+    console.log(`[ApprovalQueue] Loaded ${pendingItems.size} pending, ${postedItems.length} posted from disk`);
   } catch (err) {
     console.error('[ApprovalQueue] Failed to load from disk:', err);
   }
@@ -123,6 +141,7 @@ function saveToDisk(): void {
       const data: PersistedData = {
         pendingItems: Array.from(pendingItems.values()),
         decisions: decisions.slice(-200),
+        postedItems: postedItems.slice(-100),
         lastSaved: Date.now(),
       };
       
@@ -218,6 +237,10 @@ function registerIpcHandlers(): void {
     const approved = decisions.filter(d => d.decision === 'approved').length;
     const rejected = decisions.filter(d => d.decision === 'rejected').length;
     return { approved, rejected, pending: pendingItems.size };
+  });
+
+  ipcMain.handle('approval:get-posted', () => {
+    return [...postedItems].sort((a, b) => b.postedAt - a.postedAt);
   });
 
   ipcMain.handle('approval:close-window', () => {
@@ -361,7 +384,7 @@ function notifyNewItem(item: PendingItem): void {
 
 async function postToMoltbook(item: PendingItem): Promise<boolean> {
   const apiKey = process.env['MOLTBOOK_API_KEY'];
-  const username = process.env['MOLTBOOK_USERNAME'] || 'doraboss';
+  const username = process.env['MOLTBOOK_USERNAME'];
   const baseUrl = 'https://www.moltbook.com';
 
   if (!apiKey) {
@@ -370,7 +393,6 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
   }
 
   try {
-    // Generate a title from content (first sentence or first 50 chars)
     const titleMatch = item.content.match(/^[^.!?~]+[.!?~]?/);
     const title = titleMatch 
       ? titleMatch[0].substring(0, 100).trim()
@@ -395,7 +417,7 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'X-Agent-Username': username,
+        'X-Agent-Username': username || '',
       },
       body: JSON.stringify(body),
     });
@@ -406,7 +428,27 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
       return false;
     }
 
-    console.log('[ApprovalQueue] Posted successfully to m/' + item.submolt + ':', item.id);
+    const result = await response.json() as { id?: string; slug?: string; post?: { id?: string; slug?: string } };
+    const postId = result.id || result.post?.id;
+    const slug = result.slug || result.post?.slug;
+    const moltbookUrl = postId ? `${baseUrl}/m/${item.submolt}/post/${slug || postId}` : undefined;
+
+    const posted: PostedItem = {
+      id: item.id,
+      type: 'post',
+      content: item.content,
+      emotion: item.emotion,
+      category: item.category,
+      submolt: item.submolt,
+      timestamp: item.timestamp,
+      postedAt: Date.now(),
+      moltbookUrl,
+      moltbookPostId: postId,
+    };
+    postedItems.push(posted);
+    saveToDisk();
+
+    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || `m/${item.submolt}`);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
@@ -416,7 +458,7 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
 
 async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
   const apiKey = process.env['MOLTBOOK_API_KEY'];
-  const username = process.env['MOLTBOOK_USERNAME'] || 'doraboss';
+  const username = process.env['MOLTBOOK_USERNAME'];
   const baseUrl = 'https://www.moltbook.com';
 
   if (!apiKey || !item.replyTo) {
@@ -430,7 +472,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'X-Agent-Username': username,
+        'X-Agent-Username': username || '',
       },
       body: JSON.stringify({
         content: item.content,
@@ -442,7 +484,26 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
       return false;
     }
 
-    console.log('[ApprovalQueue] Comment posted:', item.id);
+    const result = await response.json() as { id?: string; comment?: { id?: string } };
+    const commentId = result.id || result.comment?.id;
+    const moltbookUrl = `${baseUrl}/m/${item.postContext?.postId || item.replyTo}#comment-${commentId || 'new'}`;
+
+    const posted: PostedItem = {
+      id: item.id,
+      type: 'comment',
+      content: item.content,
+      emotion: item.emotion,
+      category: item.category,
+      submolt: item.submolt,
+      timestamp: item.timestamp,
+      postedAt: Date.now(),
+      moltbookUrl,
+      moltbookPostId: commentId,
+    };
+    postedItems.push(posted);
+    saveToDisk();
+
+    console.log('[ApprovalQueue] Comment posted:', moltbookUrl);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
