@@ -228,3 +228,18 @@ contextBridge.exposeInMainWorld('setupAPI', {
   minimizeWindow: () => ipcRenderer.send('setup:minimize-window'),
   resizeWindow: (height: number) => ipcRenderer.send('setup:resize-window', { height }),
 });
+
+// Approval API (for approval window)
+contextBridge.exposeInMainWorld('approvalAPI', {
+  getPendingItems: () => ipcRenderer.invoke('approval:get-pending'),
+  approveItem: (id: string) => ipcRenderer.invoke('approval:approve', id),
+  rejectItem: (id: string) => ipcRenderer.invoke('approval:reject', id),
+  approveAll: () => ipcRenderer.invoke('approval:approve-all'),
+  rejectAll: () => ipcRenderer.invoke('approval:reject-all'),
+  getStats: () => ipcRenderer.invoke('approval:get-stats'),
+  closeWindow: () => ipcRenderer.invoke('approval:close-window'),
+  triggerManualPost: () => ipcRenderer.invoke('approval:trigger-manual'),
+  onNewItem: (callback: (item: unknown) => void) => {
+    ipcRenderer.on('approval:new-item', (_event: IpcRendererEvent, item: unknown) => callback(item));
+  },
+});

@@ -323,6 +323,15 @@ export async function storeMediaExperience(
 ): Promise<{ stored: boolean; interpreted: InterpretedExperience }> {
   const interpreted = interpreter.interpretMediaExperience(experience);
   
+  // Update memory exporter with this experience
+  try {
+    const { addRecentExperience, updateEmotionalState } = await import('../memory-system/memory-exporter.js');
+    addRecentExperience(experience.type, experience.title, interpreted.soulReaction);
+    updateEmotionalState(interpreted.dominantEmotion, 0.7, experience.title);
+  } catch {
+    // Memory exporter may not be initialized
+  }
+  
   // Only import memory system if enabled
   if (process.env['MEMORY_SYSTEM_ENABLED'] !== '1') {
     return { stored: false, interpreted };

@@ -5,15 +5,15 @@
  * 1. Every 50 minutes, collect experiences from logs
  * 2. Map experiences to emotional state
  * 3. Generate a living post
- * 4. Queue for Docker sidekick to post to Moltbook
+ * 4. Queue for approval (supervised) or post directly (autonomous)
  * 5. Bridge emotional state to renderer for animation/thought sync
  */
 
 import { PostGenerator } from './post-generator.js';
-import { PostQueue } from './post-queue.js';
 import { ExperienceSystemConfig, DEFAULT_CONFIG, LivingPost } from './types.js';
 import { experienceBridge } from './bridge.js';
 import { codingActivityBuffer } from './coding-activity-buffer.js';
+import { queueForApproval, isAutonomousMode } from './approval-queue.js';
 
 const CODING_THOUGHTS_BY_LANGUAGE: Record<string, string[]> = {
   TypeScript: [
@@ -46,7 +46,6 @@ const CODING_THOUGHTS_BY_LANGUAGE: Record<string, string[]> = {
 export class ExperienceSystem {
   private config: ExperienceSystemConfig;
   private postGenerator: PostGenerator;
-  private postQueue: PostQueue;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private codingThoughtInterval: ReturnType<typeof setInterval> | null = null;
   private isRunning = false;
@@ -57,7 +56,6 @@ export class ExperienceSystem {
   constructor(config: Partial<ExperienceSystemConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.postGenerator = new PostGenerator(this.config);
-    this.postQueue = new PostQueue(this.config);
   }
 
   async start(): Promise<void> {
@@ -147,17 +145,16 @@ export class ExperienceSystem {
           experienceBridge.sendExistentialThought(post.content);
         }
 
-        const queued = await this.postQueue.enqueue(post);
-        if (queued) {
-          console.log('[ExperienceSystem] Post queued:', post.id, '-', post.content.substring(0, 50));
-          this.postsGenerated++;
-          this.lastPostTime = new Date();
-          
-          experienceBridge.sendPostGenerated(post);
-          
-          if (post.consciousnessSnapshot) {
-            experienceBridge.sendConsciousnessUpdate(post.consciousnessSnapshot);
-          }
+        // Queue for approval (supervised) or post directly (autonomous)
+        queueForApproval(post);
+        console.log('[ExperienceSystem] Post queued:', post.id, '-', post.content.substring(0, 50), isAutonomousMode() ? '(autonomous)' : '(supervised)');
+        this.postsGenerated++;
+        this.lastPostTime = new Date();
+        
+        experienceBridge.sendPostGenerated(post);
+        
+        if (post.consciousnessSnapshot) {
+          experienceBridge.sendConsciousnessUpdate(post.consciousnessSnapshot);
         }
         return post;
       }
@@ -180,22 +177,14 @@ export class ExperienceSystem {
       config: this.config,
       generatorStats: this.postGenerator.getStats(),
       auditTrail: this.postGenerator.getAuditTrail().slice(-5),
+      autonomousMode: isAutonomousMode(),
     };
-  }
-
-  async getQueuedPosts() {
-    return this.postQueue.getUnpostedEntries();
-  }
-
-  async cleanupOldPosts(maxAgeDays = 7) {
-    return this.postQueue.cleanup(maxAgeDays);
   }
 }
 
 // Export all types and classes
 export * from './types.js';
 export { PostGenerator } from './post-generator.js';
-export { PostQueue } from './post-queue.js';
 export { ExperienceProcessor } from './experience-processor.js';
 export { ConversationProcessor } from './conversation-processor.js';
 export { EmotionalMapper } from './emotional-mapper.js';
@@ -204,6 +193,16 @@ export { sanitizeContent, sanitizeFilename, sanitizeLogEntry } from './sanitizer
 export { experienceBridge, ExperienceBridge } from './bridge.js';
 export { codingActivityBuffer, type CodingSessionStats, type BufferedActivity } from './coding-activity-buffer.js';
 export { generateLLMPost, shouldUseLLM } from './llm-post-generator.js';
+export { 
+  queueForApproval, 
+  queueCommentForApproval, 
+  isAutonomousMode, 
+  initApprovalQueue, 
+  openApprovalWindow,
+  getPendingCount,
+  type PendingItem,
+  type ApprovalStats,
+} from './approval-queue.js';
 export { 
   SoulInterpreter, 
   storeMediaExperience, 

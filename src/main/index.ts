@@ -35,6 +35,8 @@ import {
 import { ExperienceSystem, experienceBridge } from './experience-system/index.js';
 import { initGatewayBridge } from './memory-system/gateway-bridge.js';
 import { initConnector, learnFromExperience, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
+import { startMemoryExporter, stopMemoryExporter } from './memory-system/memory-exporter.js';
+import { initApprovalQueue, openApprovalWindow, getPendingCount } from './experience-system/approval-queue.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -125,10 +127,12 @@ function createSetupWindow() {
   });
 
   if (process.env['NODE_ENV'] === 'development') {
-    setupWindow.loadURL('http://localhost:5173/setup.html');
+    setupWindow.loadURL('http://localhost:5173/#/setup');
     setupWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    setupWindow.loadFile(path.join(__dirname, '../renderer/setup.html'));
+    setupWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
+      hash: '/setup',
+    });
   }
 
   setupWindow.once('ready-to-show', () => {
@@ -280,10 +284,15 @@ function createMainWindow() {
     console.error('[Main] Experience system failed to start:', err);
   });
 
+  // Initialize approval queue for supervised posting
+  initApprovalQueue(mainWindow);
+
   // Initialize secure memory system with gateway bridge
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
     initGatewayBridge(mainWindow);
     initConnector(mainWindow);
+    // Memory exporter kept as library - not auto-started
+    // startMemoryExporter();
     console.log('[Main] Memory system initialized with full connectivity');
   }
 }
@@ -428,6 +437,14 @@ function updateTrayMenu() {
           y: displayY + height / 2 - 64 
         });
       }
+    },
+    { type: 'separator' },
+    {
+      label: '📝 Moltbook Approval',
+      click: () => {
+        openApprovalWindow();
+      },
+      sublabel: getPendingCount() > 0 ? `${getPendingCount()} pending` : undefined,
     },
     { type: 'separator' },
     {

@@ -7,6 +7,7 @@ import { emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
 import { getAnimation } from './core/constants/sprites';
+import { MemoryDashboard } from './pages/MemoryDashboard';
 import './styles/globals.css';
 
 const SPRITE_BASE = '/dora-sprites';
@@ -31,6 +32,15 @@ declare global {
       onTriggerEmotion: (callback: (emotion: string) => void) => void;
       onStopCodingMode: (callback: () => void) => void;
       onWebNotification: (callback: (data: { source: string; title: string; body: string; url?: string }) => void) => void;
+      onShowMemoryDashboard: (callback: () => void) => void;
+      onShowMemorySummary: (callback: () => void) => void;
+      onShowSelfModel: (callback: () => void) => void;
+      onShowEmergentGoals: (callback: () => void) => void;
+      onShowSecurityFlags: (callback: () => void) => void;
+      memoryGetDashboard: () => Promise<unknown>;
+      memoryGetSelfModel: () => Promise<unknown>;
+      memoryGetGoals: () => Promise<unknown>;
+      memoryGetFlags: () => Promise<unknown>;
     };
     doraemon?: {
       getScreenSize: () => Promise<ScreenBounds>;
@@ -61,6 +71,7 @@ const App = () => {
   const [notificationData, setNotificationData] = useState<NotificationData>(null);
   const [isCodingMode, setIsCodingMode] = useState(false);
   const [priorityMessage, setPriorityMessage] = useState<string | null>(null);
+  const [memoryView, setMemoryView] = useState<'dashboard' | 'summary' | 'self-model' | 'goals' | 'security' | null>(null);
   
   // Activity protection: track when activity started and what type
   const [activeActivityType, setActiveActivityType] = useState<ActivityType>(null);
@@ -306,6 +317,13 @@ const App = () => {
       setIsCodingMode(false);
       showExternalThought('Back to normal~', 2000);
     });
+
+    // Memory dashboard events from tray menu
+    window.electronAPI?.onShowMemoryDashboard?.(() => setMemoryView('dashboard'));
+    window.electronAPI?.onShowMemorySummary?.(() => setMemoryView('summary'));
+    window.electronAPI?.onShowSelfModel?.(() => setMemoryView('self-model'));
+    window.electronAPI?.onShowEmergentGoals?.(() => setMemoryView('goals'));
+    window.electronAPI?.onShowSecurityFlags?.(() => setMemoryView('security'));
 
     return () => {
       if (externalThoughtTimerRef.current) clearTimeout(externalThoughtTimerRef.current);
@@ -606,8 +624,12 @@ const App = () => {
           onClose={closeChat}
         />
       )}
+
+      {memoryView && (
+        <MemoryDashboard view={memoryView} onClose={() => setMemoryView(null)} />
+      )}
     </MascotLayout>
   );
-};
+}
 
-render(<App />, document.getElementById('app')!);
+export { App as MascotApp };
