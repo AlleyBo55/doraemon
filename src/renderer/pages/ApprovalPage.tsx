@@ -616,6 +616,9 @@ export function ApprovalPage() {
     if (success) {
       setItems(prev => prev.filter(i => i.id !== id));
       setStats(prev => ({ ...prev, approved: prev.approved + 1, pending: prev.pending - 1 }));
+      // Reload posted items to show the newly approved item
+      const posted = await window.approvalAPI?.getPostedItems() || [];
+      setPostedItems(posted);
     }
   };
 
@@ -630,7 +633,11 @@ export function ApprovalPage() {
   const handleApproveFiltered = async () => {
     const toApprove = filteredItems;
     for (const item of toApprove) {
-      await window.approvalAPI?.approveItem(item.id);
+      if (item.type === 'reaction') {
+        await window.approvalAPI?.approveReaction(item.id);
+      } else {
+        await window.approvalAPI?.approveItem(item.id);
+      }
     }
     setItems(prev => prev.filter(i => !toApprove.some(t => t.id === i.id)));
     setStats(prev => ({ 
@@ -638,6 +645,9 @@ export function ApprovalPage() {
       approved: prev.approved + toApprove.length, 
       pending: prev.pending - toApprove.length 
     }));
+    // Reload posted items
+    const posted = await window.approvalAPI?.getPostedItems() || [];
+    setPostedItems(posted);
   };
 
   const handleRejectFiltered = async () => {
