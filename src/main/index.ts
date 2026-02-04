@@ -36,7 +36,7 @@ import { ExperienceSystem, experienceBridge } from './experience-system/index.js
 import { initGatewayBridge } from './memory-system/gateway-bridge.js';
 import { initConnector, learnFromExperience, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
 import { startMemoryExporter, stopMemoryExporter } from './memory-system/memory-exporter.js';
-import { initApprovalQueue, openApprovalWindow, getPendingCount } from './experience-system/approval-queue.js';
+import { initApprovalQueue, openApprovalWindow, getPendingCount, setExperienceSystemRef } from './experience-system/approval-queue.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -280,6 +280,10 @@ function createMainWindow() {
     enabled: process.env['EXPERIENCE_SYSTEM_ENABLED'] === '1',
     heartbeatIntervalMinutes: 50,
   });
+  
+  // Set reference for approval queue to use
+  setExperienceSystemRef(experienceSystem);
+  
   experienceSystem.start().catch(err => {
     console.error('[Main] Experience system failed to start:', err);
   });

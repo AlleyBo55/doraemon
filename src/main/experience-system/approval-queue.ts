@@ -10,8 +10,23 @@ import { randomBytes } from 'crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LivingPost, Emotion } from './types.js';
+import type { ExperienceSystem } from './index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+let experienceSystemRef: ExperienceSystem | null = null;
+
+export function setExperienceSystemRef(system: ExperienceSystem): void {
+  experienceSystemRef = system;
+}
+
+export async function triggerManualPostFromSystem(): Promise<LivingPost | null> {
+  if (!experienceSystemRef) {
+    console.error('[ApprovalQueue] No experience system reference set');
+    return null;
+  }
+  return experienceSystemRef.manualPost();
+}
 
 export interface PendingItem {
   id: string;
@@ -113,9 +128,8 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('approval:trigger-manual', async () => {
-    const { ExperienceSystem } = await import('./index.js');
-    const system = new ExperienceSystem({ enabled: true, heartbeatIntervalMinutes: 50 });
-    const post = await system.manualPost();
+    // Use the global experience system instance instead of creating a new one
+    const post = await triggerManualPostFromSystem();
     return post ? { success: true, postId: post.id } : { success: false };
   });
 }

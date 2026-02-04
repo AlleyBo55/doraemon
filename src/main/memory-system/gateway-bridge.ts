@@ -23,6 +23,7 @@ import {
 } from './index.js';
 import { logAuditEvent } from './audit.js';
 import { sanitizeContent } from '../experience-system/sanitizer.js';
+import { ExistentialLayer } from '../experience-system/existential-layer.js';
 
 const MEMORY_CHANNEL = 'memory-system';
 const LEARNING_DEBOUNCE_MS = 5000;
@@ -30,6 +31,14 @@ const LEARNING_DEBOUNCE_MS = 5000;
 let lastLearnTime = 0;
 let pendingLearnings: Array<{ user: string; assistant: string; topics: string[] }> = [];
 let processingTimer: NodeJS.Timeout | null = null;
+let existentialLayer: ExistentialLayer | null = null;
+
+function getExistentialLayer(): ExistentialLayer {
+  if (!existentialLayer) {
+    existentialLayer = new ExistentialLayer();
+  }
+  return existentialLayer;
+}
 
 export function initGatewayBridge(mainWindow: BrowserWindow): void {
   initMemorySystem();
@@ -106,6 +115,36 @@ function registerIpcHandlers(): void {
     try {
       const entry = learnCorrection(original, corrected);
       return { success: true, entry };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  });
+  
+  // Self Model - from ExistentialLayer
+  ipcMain.handle('memory:get-self-model', async () => {
+    try {
+      const layer = getExistentialLayer();
+      const proxy = layer.getConsciousnessProxy();
+      return { 
+        success: true, 
+        selfModel: proxy.selfModel,
+        worldModel: proxy.worldModel,
+      };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  });
+  
+  // Emergent Goals - from ExistentialLayer
+  ipcMain.handle('memory:get-goals', async () => {
+    try {
+      const layer = getExistentialLayer();
+      const proxy = layer.getConsciousnessProxy();
+      return { 
+        success: true, 
+        goals: proxy.goalState,
+        temporalAwareness: proxy.temporalAwareness,
+      };
     } catch (err) {
       return { success: false, error: String(err) };
     }
