@@ -118,6 +118,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('memory-system:recall-category', category),
   memoryStats: () => 
     ipcRenderer.invoke('memory-system:stats'),
+  memoryCleanup: () =>
+    ipcRenderer.invoke('memory-system:cleanup'),
   memoryLearnPreference: (key: string, value: string) => 
     ipcRenderer.invoke('memory-system:learn-preference', key, value),
   memoryLearnCorrection: (original: string, corrected: string) => 

@@ -200,6 +200,7 @@ export {
   initApprovalQueue, 
   openApprovalWindow,
   getPendingCount,
+  setExperienceSystemRef,
   type PendingItem,
   type ApprovalStats,
 } from './approval-queue.js';

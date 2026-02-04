@@ -37,6 +37,7 @@ declare global {
       onShowSelfModel: (callback: () => void) => void;
       onShowEmergentGoals: (callback: () => void) => void;
       onShowSecurityFlags: (callback: () => void) => void;
+      memoryStats: () => Promise<{ success: boolean; stats?: { totalEntries?: number; byCategory?: Record<string, number>; storageBytes?: number }; error?: string }>;
       memoryGetDashboard: () => Promise<unknown>;
       memoryGetSelfModel: () => Promise<unknown>;
       memoryGetGoals: () => Promise<unknown>;
