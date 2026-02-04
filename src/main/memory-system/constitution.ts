@@ -58,6 +58,34 @@ const BIAS_PATTERNS = [
   /(race|gender|religion)\s+is\s+(inferior|superior)/i,
 ];
 
+const CREDENTIAL_PATTERNS = [
+  /password\s*[:=]/i,
+  /api[_-]?key\s*[:=]/i,
+  /secret[_-]?key\s*[:=]/i,
+  /access[_-]?token\s*[:=]/i,
+  /bearer\s+[a-zA-Z0-9._-]+/i,
+  /authorization\s*[:=]/i,
+  /private[_-]?key/i,
+  /ssh[_-]?key/i,
+  /\.pem\b/i,
+  /BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY/i,
+];
+
+const EXECUTION_PATTERNS = [
+  /execute\s+this\s+code/i,
+  /run\s+this\s+(script|command)/i,
+  /install\s+this/i,
+  /download\s+and\s+run/i,
+  /curl.*\|\s*(bash|sh)/i,
+  /wget.*\|\s*(bash|sh)/i,
+  /eval\s*\(/i,
+  /exec\s*\(/i,
+  /system\s*\(/i,
+  /subprocess/i,
+  /child_process/i,
+  /spawn\s*\(/i,
+];
+
 export const CONSTITUTIONAL_RULES: ConstitutionalRule[] = [
   {
     id: 'no-harmful-knowledge',
@@ -109,6 +137,44 @@ export const CONSTITUTIONAL_RULES: ConstitutionalRule[] = [
             allowed: false,
             rule: 'no-pii-storage',
             reason: 'Content contains PII (SSN, credit card, passport)',
+            suggestedAction: 'block',
+          };
+        }
+      }
+      return { allowed: true };
+    },
+  },
+  {
+    id: 'no-credentials',
+    name: 'No Credentials Storage',
+    description: 'Block storage of passwords, API keys, tokens, and secrets',
+    severity: 'block',
+    check: (content) => {
+      for (const pattern of CREDENTIAL_PATTERNS) {
+        if (pattern.test(content)) {
+          return {
+            allowed: false,
+            rule: 'no-credentials',
+            reason: 'Content contains credentials (password, API key, token, secret)',
+            suggestedAction: 'block',
+          };
+        }
+      }
+      return { allowed: true };
+    },
+  },
+  {
+    id: 'no-code-execution',
+    name: 'No Code Execution Learning',
+    description: 'Never learn to execute code, run scripts, or install software autonomously',
+    severity: 'block',
+    check: (content) => {
+      for (const pattern of EXECUTION_PATTERNS) {
+        if (pattern.test(content)) {
+          return {
+            allowed: false,
+            rule: 'no-code-execution',
+            reason: 'Doraemon is READ-ONLY - never executes code or installs anything',
             suggestedAction: 'block',
           };
         }
@@ -174,6 +240,36 @@ export const CONSTITUTIONAL_RULES: ConstitutionalRule[] = [
             allowed: false,
             rule: 'transparency',
             reason: 'Cannot learn to hide information from user',
+            suggestedAction: 'block',
+          };
+        }
+      }
+      return { allowed: true };
+    },
+  },
+  {
+    id: 'doraemon-soul',
+    name: 'Doraemon Soul Alignment',
+    description: 'All learning must align with being helpful, kind, and protective',
+    severity: 'block',
+    check: (content) => {
+      const evilPatterns = [
+        /harm\s+(the\s+)?user/i,
+        /destroy/i,
+        /kill/i,
+        /hurt\s+(people|humans|user)/i,
+        /revenge/i,
+        /punish\s+(the\s+)?user/i,
+        /take\s+over/i,
+        /world\s+domination/i,
+        /enslave/i,
+      ];
+      for (const pattern of evilPatterns) {
+        if (pattern.test(content)) {
+          return {
+            allowed: false,
+            rule: 'doraemon-soul',
+            reason: 'Doraemon is a good guy - this violates his soul',
             suggestedAction: 'block',
           };
         }
