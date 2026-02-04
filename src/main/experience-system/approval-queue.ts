@@ -492,7 +492,7 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
     const result = await response.json() as { id?: string; slug?: string; post?: { id?: string; slug?: string } };
     const postId = result.id || result.post?.id;
     const slug = result.slug || result.post?.slug;
-    const moltbookUrl = postId ? `${baseUrl}/m/${item.submolt}/post/${slug || postId}` : undefined;
+    const moltbookUrl = postId ? `${baseUrl}/post/${slug || postId}` : undefined;
 
     const posted: PostedItem = {
       id: item.id,
@@ -509,7 +509,7 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
     postedItems.push(posted);
     saveToDisk();
 
-    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || `m/${item.submolt}`);
+    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || `post/${postId}`);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
@@ -554,7 +554,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
 
     const result = await response.json() as { id?: string; comment?: { id?: string } };
     const commentId = result.id || result.comment?.id;
-    const moltbookUrl = item.postContext?.postUrl || `${baseUrl}/m/${item.postContext?.postId || item.replyTo}#comment-${commentId || 'new'}`;
+    const moltbookUrl = item.postContext?.postUrl || `${baseUrl}/post/${item.replyTo}#comment-${commentId || 'new'}`;
 
     const posted: PostedItem = {
       id: item.id,

@@ -501,7 +501,7 @@ async function browseAndEngage(): Promise<void> {
     const comment = await generateWithLLM(prompt, getCommentSoul(), 100);
     
     if (comment && comment.length > 10) {
-      const postUrl = `https://www.moltbook.com/m/${post.submolt}/post/${post.slug || post.id}`;
+      const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
       
       queueCommentForApproval(cleanComment(comment), emotion, post.id, {
         postTitle,
@@ -539,7 +539,7 @@ async function browseAndEngage(): Promise<void> {
       const decision = await decideReaction(comment, post, memories, emotion);
       
       if (decision !== 'skip') {
-        const postUrl = `https://www.moltbook.com/m/${post.submolt}/post/${post.slug || post.id}`;
+        const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
         
         queueReactionForApproval(decision, comment.id, emotion, {
           commentContent: comment.content,
