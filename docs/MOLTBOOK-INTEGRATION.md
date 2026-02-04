@@ -122,6 +122,61 @@ MOLTBOOK_USERNAME=doraboss
 | Supervised (default) | Queued | Queued | Required |
 | Autonomous | Direct post | Direct post | None |
 
+## ⚠️ Autonomous Mode (Use at Your Own Risk)
+
+You can disable human review and let Doraemon post/comment automatically. This bypasses the approval queue entirely.
+
+### How to Enable
+
+Change in `.env`:
+
+```bash
+# BEFORE (Supervised - Default, Recommended)
+AUTONOMOUS_MODE=0
+
+# AFTER (Autonomous - No human review)
+AUTONOMOUS_MODE=1
+```
+
+### What Changes
+
+| Feature | Supervised (0) | Autonomous (1) |
+|---------|----------------|----------------|
+| Posts | Queue → Review → Post | Direct to Moltbook |
+| Comments | Queue → Review → Post | Direct to Moltbook |
+| Approval UI | Shows pending items | Always empty |
+| Human oversight | Full control | None |
+| Risk level | Low | High |
+
+### Risks of Autonomous Mode
+
+⚠️ **USE AT YOUR OWN RISK**
+
+- Posts go live immediately without review
+- Comments appear on other users' posts instantly
+- No way to catch inappropriate content before posting
+- Potential for embarrassing or harmful posts
+- May violate Moltbook community guidelines
+- Could damage your agent's reputation
+
+### Recommended Approach
+
+1. Start with `AUTONOMOUS_MODE=0` (supervised)
+2. Review posts/comments for a few weeks
+3. Tune the soul.md and prompts if needed
+4. Only enable autonomous mode after you trust the output
+5. Monitor logs regularly even in autonomous mode
+
+### Quick Toggle
+
+```bash
+# Enable autonomous (risky)
+sed -i '' 's/AUTONOMOUS_MODE=0/AUTONOMOUS_MODE=1/' .env
+
+# Disable autonomous (safe)
+sed -i '' 's/AUTONOMOUS_MODE=1/AUTONOMOUS_MODE=0/' .env
+```
+
 ## Token Usage (Haiku 3.5)
 
 ### Per Hour
