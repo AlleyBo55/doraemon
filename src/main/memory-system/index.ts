@@ -10,7 +10,7 @@
  */
 
 import { MemoryEntry, MemoryCategory, MemorySource, SecurityClassification, MemorySystemConfig } from './types.js';
-import { initStorage, storeEntry, retrieveEntry, deleteEntry, getAllEntries, searchEntries, getStorageStats, createBackup } from './storage.js';
+import { initStorage, storeEntry, retrieveEntry, deleteEntry, getAllEntries, searchEntries, getStorageStats, createBackup, cleanupCorruptedEntries } from './storage.js';
 import { classifyContent, isStorageSafe } from './classifier.js';
 import { initializeCrypto, generateEntryId, hashContent } from './crypto.js';
 import { initAuditLog, logAuditEvent, verifyAuditChain, getRecentAuditEntries } from './audit.js';
@@ -222,6 +222,13 @@ export function learnPattern(pattern: string, context: string): MemoryEntry | nu
     category: 'pattern',
     source: 'inference',
   });
+}
+
+export function cleanupCorrupted(): { deleted: number; remaining: number } {
+  if (!systemEnabled) {
+    initMemorySystem();
+  }
+  return cleanupCorruptedEntries();
 }
 
 export * from './types.js';

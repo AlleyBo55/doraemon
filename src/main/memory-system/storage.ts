@@ -72,6 +72,8 @@ function ensureDirectories(): void {
 
 function loadIndex(): void {
   const entriesDir = join(STORAGE_DIR, ENTRIES_DIR);
+  let loadedCount = 0;
+  let failedCount = 0;
   
   try {
     const files = readdirSync(entriesDir).filter(f => f.endsWith('.enc'));
@@ -87,15 +89,21 @@ function loadIndex(): void {
           const entry = JSON.parse(decrypted) as MemoryEntry;
           entry.timestamp = new Date(entry.timestamp);
           memoryCache.set(entry.id, entry);
+          loadedCount++;
         }
       } catch {
-        logAuditEvent('read', `Failed to load entry: ${file}`);
+        failedCount++;
       }
     }
     
     // Update index to reflect actual loaded entries
     saveIndex();
-    logAuditEvent('read', `Loaded ${memoryCache.size} entries from disk`);
+    
+    if (failedCount > 0) {
+      console.log(`[MemoryStorage] Loaded ${loadedCount} entries, ${failedCount} failed (old encryption key)`);
+    } else {
+      console.log(`[MemoryStorage] Loaded ${loadedCount} entries`);
+    }
   } catch {
     logAuditEvent('read', 'Failed to load entries directory');
   }
@@ -310,4 +318,30 @@ export function getStorageStats(): {
     oldestEntry: timestamps.length ? new Date(Math.min(...timestamps)) : null,
     newestEntry: timestamps.length ? new Date(Math.max(...timestamps)) : null,
   };
+}
+
+export function cleanupCorruptedEntries(): { deleted: number; remaining: number } {
+  if (!initialized) initStorage();
+  
+  const entriesDir = join(STORAGE_DIR, ENTRIES_DIR);
+  const files = readdirSync(entriesDir).filter(f => f.endsWith('.enc'));
+  let deleted = 0;
+  
+  for (const file of files) {
+    const entryPath = join(entriesDir, file);
+    const id = file.replace('.enc', '');
+    
+    // If not in cache, it failed to decrypt - delete it
+    if (!memoryCache.has(id)) {
+      try {
+        unlinkSync(entryPath);
+        deleted++;
+      } catch {
+        // Ignore deletion errors
+      }
+    }
+  }
+  
+  logAuditEvent('purge', `Cleaned up ${deleted} corrupted entries`);
+  return { deleted, remaining: memoryCache.size };
 }

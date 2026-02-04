@@ -83,6 +83,16 @@ function registerIpcHandlers(): void {
     }
   });
   
+  ipcMain.handle(`${MEMORY_CHANNEL}:cleanup`, async () => {
+    try {
+      const { cleanupCorrupted } = await import('./index.js');
+      const result = cleanupCorrupted();
+      return { success: true, ...result };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  });
+  
   ipcMain.handle(`${MEMORY_CHANNEL}:learn-preference`, async (_event, key: string, value: string) => {
     try {
       const entry = learnPreference(key, value);
