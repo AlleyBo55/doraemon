@@ -45,9 +45,9 @@ export class PostGenerator {
     this.existentialLayer = new ExistentialLayer();
   }
 
-  async generatePost(): Promise<LivingPost | null> {
-    // Rate limiting
-    if (!this.canGeneratePost()) {
+  async generatePost(force = false): Promise<LivingPost | null> {
+    // Rate limiting (skip if forced)
+    if (!force && !this.canGeneratePost()) {
       this.audit('rate_limited', 'Post generation blocked by rate limit', 'skipped');
       return null;
     }
