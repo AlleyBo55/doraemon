@@ -38,6 +38,14 @@ export interface PendingItem {
   timestamp: number;
   replyTo?: string;
   originalPost?: LivingPost;
+  postContext?: {
+    postId: string;
+    postTitle: string;
+    postContent: string;
+    postAuthor: string;
+    parentCommentAuthor?: string;
+    parentCommentContent?: string;
+  };
 }
 
 export interface ApprovalStats {
@@ -132,6 +140,12 @@ function registerIpcHandlers(): void {
     const post = await triggerManualPostFromSystem();
     return post ? { success: true, postId: post.id } : { success: false };
   });
+
+  ipcMain.handle('approval:trigger-comments', async () => {
+    const { triggerBrowseNow } = await import('./moltbook-browser.js');
+    await triggerBrowseNow();
+    return { success: true };
+  });
 }
 
 export function queueForApproval(post: LivingPost): void {
@@ -157,7 +171,14 @@ export function queueForApproval(post: LivingPost): void {
 export function queueCommentForApproval(
   content: string,
   emotion: Emotion,
-  replyToPostId: string
+  replyToPostId: string,
+  postContext?: {
+    postTitle: string;
+    postContent: string;
+    postAuthor: string;
+    parentCommentAuthor?: string;
+    parentCommentContent?: string;
+  }
 ): void {
   const item: PendingItem = {
     id: `comment-${Date.now()}-${randomBytes(4).toString('hex')}`,
@@ -168,6 +189,7 @@ export function queueCommentForApproval(
     hashtags: [],
     timestamp: Date.now(),
     replyTo: replyToPostId,
+    postContext: postContext ? { postId: replyToPostId, ...postContext } : undefined,
   };
 
   if (isAutonomousMode()) {

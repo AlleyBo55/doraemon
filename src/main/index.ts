@@ -32,7 +32,7 @@ import {
   stopWebNotificationServer,
   type WebNotification,
 } from './watchers/web-notification-server.js';
-import { ExperienceSystem, experienceBridge } from './experience-system/index.js';
+import { ExperienceSystem, experienceBridge, startMoltbookBrowser } from './experience-system/index.js';
 import { initGatewayBridge } from './memory-system/gateway-bridge.js';
 import { initConnector, learnFromExperience, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
 import { startMemoryExporter, stopMemoryExporter } from './memory-system/memory-exporter.js';
@@ -290,6 +290,9 @@ function createMainWindow() {
 
   // Initialize approval queue for supervised posting
   initApprovalQueue(mainWindow);
+  
+  // Start Moltbook browser for autonomous social engagement
+  startMoltbookBrowser();
 
   // Initialize secure memory system with gateway bridge
   if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
@@ -780,6 +783,27 @@ ipcMain.handle('autonomous:get-sessions', async () => {
 ipcMain.handle('autonomous:reset-stats', async () => {
   const { resetDailyStats } = await import('./experience-system/autonomous-learning.js');
   resetDailyStats();
+  return { success: true };
+});
+
+// ============================================
+// Moltbook Browser IPC Handlers
+// ============================================
+
+ipcMain.handle('moltbook:get-stats', async () => {
+  const { getMoltbookBrowserStats } = await import('./experience-system/moltbook-browser.js');
+  return getMoltbookBrowserStats();
+});
+
+ipcMain.handle('moltbook:trigger-browse', async () => {
+  const { triggerBrowseNow } = await import('./experience-system/moltbook-browser.js');
+  await triggerBrowseNow();
+  return { success: true };
+});
+
+ipcMain.handle('moltbook:reset-stats', async () => {
+  const { resetMoltbookBrowserStats } = await import('./experience-system/moltbook-browser.js');
+  resetMoltbookBrowserStats();
   return { success: true };
 });
 
