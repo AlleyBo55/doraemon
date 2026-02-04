@@ -108,6 +108,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('experience-heartbeat', handler);
     return () => ipcRenderer.removeListener('experience-heartbeat', handler);
   },
+  
+  // Memory System API (secure self-learning)
+  memoryLearn: (input: { content: string; category: string; source?: string; ttlDays?: number }) => 
+    ipcRenderer.invoke('memory-system:learn', input),
+  memoryRecall: (query: string, limit?: number) => 
+    ipcRenderer.invoke('memory-system:recall', query, limit),
+  memoryRecallCategory: (category: string) => 
+    ipcRenderer.invoke('memory-system:recall-category', category),
+  memoryStats: () => 
+    ipcRenderer.invoke('memory-system:stats'),
+  memoryLearnPreference: (key: string, value: string) => 
+    ipcRenderer.invoke('memory-system:learn-preference', key, value),
+  memoryLearnCorrection: (original: string, corrected: string) => 
+    ipcRenderer.invoke('memory-system:learn-correction', original, corrected),
 });
 
 // Setup API (for setup window)

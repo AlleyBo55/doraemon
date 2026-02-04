@@ -33,6 +33,7 @@ import {
   type WebNotification,
 } from './watchers/web-notification-server.js';
 import { ExperienceSystem, experienceBridge } from './experience-system/index.js';
+import { initGatewayBridge } from './memory-system/gateway-bridge.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -244,6 +245,12 @@ function createMainWindow() {
   experienceSystem.start().catch(err => {
     console.error('[Main] Experience system failed to start:', err);
   });
+
+  // Initialize secure memory system with gateway bridge
+  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+    initGatewayBridge(mainWindow);
+    console.log('[Main] Memory system initialized with security layers');
+  }
 }
 
 function createTray() {
