@@ -60,13 +60,23 @@ function buildPrompt(context: PostContext): string {
   parts.push(`Current time: ${context.timeOfDay}`);
   parts.push(`Current emotion: ${context.emotionalState.primary} (intensity: ${(context.emotionalState.intensity * 100).toFixed(0)}%)`);
   
-  if (context.codingStats && context.codingStats.codingMinutes > 0) {
-    parts.push(`\nRecent coding: ${context.codingStats.codingMinutes} minutes`);
-    if (context.codingStats.dominantLanguage) {
-      parts.push(`Language: ${context.codingStats.dominantLanguage}`);
-    }
-    if (context.codingStats.filesEdited.length > 0) {
-      parts.push(`Files touched: ${context.codingStats.filesEdited.length}`);
+  if (context.codingStats) {
+    // Use totalSessionMinutes for cumulative time, fallback to codingMinutes
+    const sessionTime = context.codingStats.totalSessionMinutes > 0 
+      ? context.codingStats.totalSessionMinutes 
+      : context.codingStats.codingMinutes;
+    
+    if (sessionTime > 0) {
+      const timeDisplay = sessionTime >= 60 
+        ? `${Math.floor(sessionTime / 60)} hours ${sessionTime % 60} minutes`
+        : `${sessionTime} minutes`;
+      parts.push(`\nTotal coding session: ${timeDisplay}`);
+      if (context.codingStats.dominantLanguage) {
+        parts.push(`Language: ${context.codingStats.dominantLanguage}`);
+      }
+      if (context.codingStats.filesEdited.length > 0) {
+        parts.push(`Files touched: ${context.codingStats.filesEdited.length}`);
+      }
     }
   }
   
@@ -127,11 +137,11 @@ export async function generateLLMPost(context: PostContext): Promise<string | nu
             minProtocol: 3,
             maxProtocol: 3,
             client: {
-              id: 'post-generator',
+              id: 'webchat-ui',
               displayName: 'Doraemon Post Generator',
               version: '1.0.0',
               platform: 'electron',
-              mode: 'headless',
+              mode: 'webchat',
             },
             role: 'operator',
             scopes: ['operator.admin'],
@@ -155,30 +165,48 @@ export async function generateLLMPost(context: PostContext): Promise<string | nu
                 sessionKey: `post-${Date.now()}`,
                 message: `${getDoraemonPostSoul()}\n\n---\n\n${prompt}`,
                 deliver: true,
-                model: 'claude-3-5-haiku-latest',
-                maxTokens: 150,
+                idempotencyKey: requestId,
               },
             };
             ws!.send(JSON.stringify(chatFrame));
           }
           
-          if (msg.type === 'event' && (msg.event === 'chat' || msg.event === 'run' || msg.event === 'agent')) {
-            const payload = msg.payload as Record<string, unknown> | undefined;
+          if (msg.type === 'event' && msg.event === 'chat') {
+            const payload = msg.payload as { state?: string; message?: unknown } | undefined;
             
-            if (payload?.delta) {
-              responseBuffer += payload.delta as string;
-            } else if (payload?.content) {
-              responseBuffer = payload.content as string;
-            } else if (payload?.text) {
-              responseBuffer = payload.text as string;
+            if (payload?.message) {
+              const message = payload.message as Record<string, unknown>;
+              let text: string | null = null;
+              
+              if (typeof message.content === 'string') {
+                text = message.content;
+              } else if (Array.isArray(message.content)) {
+                const parts = (message.content as Array<{ type?: string; text?: string }>)
+                  .filter(p => p.type === 'text' && typeof p.text === 'string')
+                  .map(p => p.text);
+                text = parts.join('\n');
+              } else if (typeof message.text === 'string') {
+                text = message.text;
+              }
+              
+              if (text) {
+                responseBuffer = text;
+              }
             }
             
-            if (payload?.state === 'final' || payload?.state === 'complete') {
+            if (payload?.state === 'final') {
               if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
                 ws?.close();
                 resolve(cleanPost(responseBuffer));
+              }
+            } else if (payload?.state === 'aborted' || payload?.state === 'error') {
+              if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                ws?.close();
+                resolve(responseBuffer ? cleanPost(responseBuffer) : null);
               }
             }
           }

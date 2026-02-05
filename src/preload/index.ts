@@ -244,6 +244,7 @@ contextBridge.exposeInMainWorld('approvalAPI', {
   getPendingItems: () => ipcRenderer.invoke('approval:get-pending'),
   getPostedItems: () => ipcRenderer.invoke('approval:get-posted'),
   approveItem: (id: string) => ipcRenderer.invoke('approval:approve', id),
+  approveReaction: (id: string) => ipcRenderer.invoke('approval:approve-reaction', id),
   rejectItem: (id: string) => ipcRenderer.invoke('approval:reject', id),
   approveAll: () => ipcRenderer.invoke('approval:approve-all'),
   rejectAll: () => ipcRenderer.invoke('approval:reject-all'),
@@ -255,5 +256,8 @@ contextBridge.exposeInMainWorld('approvalAPI', {
   getSubmolts: () => ipcRenderer.invoke('approval:get-submolts'),
   onNewItem: (callback: (item: unknown) => void) => {
     ipcRenderer.on('approval:new-item', (_event: IpcRendererEvent, item: unknown) => callback(item));
+  },
+  onPostedUpdated: (callback: (items: unknown[]) => void) => {
+    ipcRenderer.on('approval:posted-updated', (_event: IpcRendererEvent, items: unknown[]) => callback(items));
   },
 });

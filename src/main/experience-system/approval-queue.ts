@@ -10,9 +10,9 @@ import { randomBytes } from 'crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { LivingPost, Emotion, PostCategory } from './types.js';
+import type { LivingPost, Emotion } from './types.js';
 import type { ExperienceSystem } from './index.js';
-import { getSubmoltForPost, Submolt, getAllSubmolts } from './submolt-categorizer.js';
+import { getSubmoltForPost, getAllSubmolts } from './submolt-categorizer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,7 +32,7 @@ export async function triggerManualPostFromSystem(): Promise<LivingPost | null> 
 
 export interface PendingItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -46,8 +46,18 @@ export interface PendingItem {
     postTitle: string;
     postContent: string;
     postAuthor: string;
+    postUrl?: string;
+    parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
+  };
+  reactionContext?: {
+    reactionType: 'like' | 'dislike';
+    commentId: string;
+    commentContent: string;
+    commentAuthor: string;
+    postTitle: string;
+    postUrl: string;
   };
 }
 
@@ -65,7 +75,7 @@ interface ApprovalDecision {
 
 export interface PostedItem {
   id: string;
-  type: 'post' | 'comment';
+  type: 'post' | 'comment' | 'reaction';
   content: string;
   emotion: string;
   category: string;
@@ -74,6 +84,7 @@ export interface PostedItem {
   postedAt: number;
   moltbookUrl?: string;
   moltbookPostId?: string;
+  reactionType?: 'like' | 'dislike';
 }
 
 interface PersistedData {
@@ -93,6 +104,19 @@ let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 function getDataPath(): string {
   const userDataPath = app.getPath('userData');
   return path.join(userDataPath, 'approval-queue.json');
+}
+
+function migratePostedItemUrl(item: PostedItem): PostedItem {
+  if (item.moltbookUrl) {
+    // Fix old URL format: /m/{submolt}/post/{id} -> /post/{id}
+    const oldPattern = /https:\/\/www\.moltbook\.com\/m\/[^/]+\/post\/([a-f0-9-]+)/;
+    const match = item.moltbookUrl.match(oldPattern);
+    if (match) {
+      item.moltbookUrl = `https://www.moltbook.com/post/${match[1]}`;
+      console.log(`[ApprovalQueue] Migrated URL to: ${item.moltbookUrl}`);
+    }
+  }
+  return item;
 }
 
 function loadFromDisk(): void {
@@ -115,9 +139,15 @@ function loadFromDisk(): void {
     decisions.push(...(data.decisions || []).slice(-200));
     
     postedItems.length = 0;
-    postedItems.push(...(data.postedItems || []).slice(-100));
+    const migratedItems = (data.postedItems || []).slice(-100).map(migratePostedItemUrl);
+    postedItems.push(...migratedItems);
     
     console.log(`[ApprovalQueue] Loaded ${pendingItems.size} pending, ${postedItems.length} posted from disk`);
+    
+    // Save immediately if any URLs were migrated
+    if (migratedItems.some((item, i) => item.moltbookUrl !== (data.postedItems || [])[i]?.moltbookUrl)) {
+      saveToDisk();
+    }
   } catch (err) {
     console.error('[ApprovalQueue] Failed to load from disk:', err);
   }
@@ -173,14 +203,27 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('approval:approve', async (_event, id: string) => {
     const item = pendingItems.get(id);
-    if (!item) return false;
+    if (!item) {
+      console.error('[ApprovalQueue] Item not found for approval:', id);
+      console.error('[ApprovalQueue] Current pending IDs:', Array.from(pendingItems.keys()).slice(0, 10));
+      return false;
+    }
 
+    console.log('[ApprovalQueue] Approving item:', id, 'type:', item.type);
     pendingItems.delete(id);
     decisions.push({ id, decision: 'approved', timestamp: Date.now() });
     saveToDisk();
     
-    await postToMoltbook(item);
-    return true;
+    let success = false;
+    if (item.type === 'comment') {
+      success = await postCommentToMoltbook(item);
+    } else if (item.type === 'reaction') {
+      success = await postReactionToMoltbook(item);
+    } else {
+      success = await postToMoltbook(item);
+    }
+    console.log('[ApprovalQueue] Post result:', success ? 'SUCCESS' : 'FAILED');
+    return success;
   });
 
   ipcMain.handle('approval:reject', (_event, id: string) => {
@@ -209,15 +252,22 @@ function registerIpcHandlers(): void {
   ipcMain.handle('approval:approve-all', async () => {
     const items = Array.from(pendingItems.values());
     let count = 0;
+    let failed = 0;
 
     for (const item of items) {
       pendingItems.delete(item.id);
       decisions.push({ id: item.id, decision: 'approved', timestamp: Date.now() });
-      await postToMoltbook(item);
-      count++;
+      const success = await postToMoltbook(item);
+      if (success) {
+        count++;
+      } else {
+        failed++;
+        console.error('[ApprovalQueue] Failed to post item:', item.id);
+      }
     }
 
     saveToDisk();
+    console.log(`[ApprovalQueue] Approve all: ${count} succeeded, ${failed} failed`);
     return count;
   });
 
@@ -240,6 +290,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('approval:get-posted', () => {
+    console.log('[ApprovalQueue] get-posted called, returning', postedItems.length, 'items');
     return [...postedItems].sort((a, b) => b.postedAt - a.postedAt);
   });
 
@@ -312,6 +363,18 @@ function registerIpcHandlers(): void {
       return { success: false, error: String(err) };
     }
   });
+
+  ipcMain.handle('approval:approve-reaction', async (_event, id: string) => {
+    const item = pendingItems.get(id);
+    if (!item || item.type !== 'reaction') return false;
+
+    pendingItems.delete(id);
+    decisions.push({ id, decision: 'approved', timestamp: Date.now() });
+    saveToDisk();
+    
+    await postReactionToMoltbook(item);
+    return true;
+  });
 }
 
 export async function queueForApproval(post: LivingPost): Promise<void> {
@@ -346,8 +409,11 @@ export function queueCommentForApproval(
     postTitle: string;
     postContent: string;
     postAuthor: string;
+    postUrl?: string;
+    parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
+    isOwnPostReply?: boolean;
   }
 ): void {
   const item: PendingItem = {
@@ -365,6 +431,43 @@ export function queueCommentForApproval(
 
   if (isAutonomousMode()) {
     postCommentToMoltbook(item);
+  } else {
+    pendingItems.set(item.id, item);
+    saveToDisk();
+    notifyNewItem(item);
+  }
+}
+
+export function queueReactionForApproval(
+  reactionType: 'like' | 'dislike',
+  commentId: string,
+  emotion: Emotion,
+  context: {
+    commentContent: string;
+    commentAuthor: string;
+    postTitle: string;
+    postUrl: string;
+    isOwnPostReaction?: boolean;
+  }
+): void {
+  const item: PendingItem = {
+    id: `reaction-${Date.now()}-${randomBytes(4).toString('hex')}`,
+    type: 'reaction',
+    content: `${reactionType === 'like' ? '👍' : '👎'} ${reactionType} on @${context.commentAuthor}'s comment`,
+    emotion,
+    category: 'connection',
+    hashtags: [],
+    timestamp: Date.now(),
+    submolt: 'general',
+    reactionContext: {
+      reactionType,
+      commentId,
+      ...context,
+    },
+  };
+
+  if (isAutonomousMode()) {
+    postReactionToMoltbook(item);
   } else {
     pendingItems.set(item.id, item);
     saveToDisk();
@@ -392,17 +495,25 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
     return false;
   }
 
+  if (!username) {
+    console.error('[ApprovalQueue] MOLTBOOK_USERNAME not set');
+    return false;
+  }
+
   try {
     const titleMatch = item.content.match(/^[^.!?~]+[.!?~]?/);
     const title = titleMatch 
       ? titleMatch[0].substring(0, 100).trim()
       : item.content.substring(0, 50).trim() + '...';
     
+    // Ensure hashtags is always an array
+    const hashtags = Array.isArray(item.hashtags) ? item.hashtags : [];
+    
     const body = {
       title,
       content: item.content,
       submolt: item.submolt || 'general',
-      hashtags: item.hashtags,
+      hashtags,
       metadata: {
         emotion: item.emotion,
         category: item.category,
@@ -411,13 +522,15 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
     };
     
     console.log('[ApprovalQueue] Posting to Moltbook:', JSON.stringify(body, null, 2));
+    console.log('[ApprovalQueue] Using API key:', apiKey.substring(0, 8) + '...');
+    console.log('[ApprovalQueue] Using username:', username);
     
     const response = await fetch(`${baseUrl}/api/v1/posts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
-        'X-Agent-Username': username || '',
+        'X-Agent-Username': username,
       },
       body: JSON.stringify(body),
     });
@@ -428,10 +541,21 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
       return false;
     }
 
-    const result = await response.json() as { id?: string; slug?: string; post?: { id?: string; slug?: string } };
-    const postId = result.id || result.post?.id;
-    const slug = result.slug || result.post?.slug;
-    const moltbookUrl = postId ? `${baseUrl}/m/${item.submolt}/post/${slug || postId}` : undefined;
+    const result = await response.json() as Record<string, unknown>;
+    console.log('[ApprovalQueue] API response:', JSON.stringify(result, null, 2));
+    
+    // Try multiple possible response structures
+    const postData = (result.post || result.data || result) as Record<string, unknown>;
+    const postId = (postData.id || result.id) as string | undefined;
+    const slug = (postData.slug || result.slug) as string | undefined;
+    
+    // URL format: https://www.moltbook.com/post/{slug_or_id}
+    const urlPath = slug || postId;
+    const moltbookUrl = urlPath ? `${baseUrl}/post/${urlPath}` : undefined;
+
+    if (!postId) {
+      console.warn('[ApprovalQueue] No post ID in response, post may not have been created');
+    }
 
     const posted: PostedItem = {
       id: item.id,
@@ -446,9 +570,23 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
       moltbookPostId: postId,
     };
     postedItems.push(posted);
-    saveToDisk();
-
-    console.log('[ApprovalQueue] Posted successfully:', moltbookUrl || `m/${item.submolt}`);
+    
+    // Force immediate save (no debounce) to ensure posted item is persisted
+    const dataPath = getDataPath();
+    const data: PersistedData = {
+      pendingItems: Array.from(pendingItems.values()),
+      decisions: decisions.slice(-200),
+      postedItems: postedItems.slice(-100),
+      lastSaved: Date.now(),
+    };
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    console.log('[ApprovalQueue] Posted successfully and saved:', moltbookUrl || 'no URL');
+    
+    // Notify renderer about new posted item
+    if (approvalWindow && !approvalWindow.isDestroyed()) {
+      approvalWindow.webContents.send('approval:posted-updated', postedItems.slice(-100));
+    }
+    
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
@@ -467,6 +605,14 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
   }
 
   try {
+    const body: { content: string; parent_id?: string } = {
+      content: item.content,
+    };
+    
+    if (item.postContext?.parentCommentId) {
+      body.parent_id = item.postContext.parentCommentId;
+    }
+
     const response = await fetch(`${baseUrl}/api/v1/posts/${item.replyTo}/comments`, {
       method: 'POST',
       headers: {
@@ -474,19 +620,18 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
         'Authorization': `Bearer ${apiKey}`,
         'X-Agent-Username': username || '',
       },
-      body: JSON.stringify({
-        content: item.content,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      console.error('[ApprovalQueue] Comment failed:', response.status);
+      const errorText = await response.text();
+      console.error('[ApprovalQueue] Comment failed:', response.status, errorText);
       return false;
     }
 
     const result = await response.json() as { id?: string; comment?: { id?: string } };
     const commentId = result.id || result.comment?.id;
-    const moltbookUrl = `${baseUrl}/m/${item.postContext?.postId || item.replyTo}#comment-${commentId || 'new'}`;
+    const moltbookUrl = item.postContext?.postUrl || `${baseUrl}/post/${item.replyTo}`;
 
     const posted: PostedItem = {
       id: item.id,
@@ -501,9 +646,87 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
       moltbookPostId: commentId,
     };
     postedItems.push(posted);
-    saveToDisk();
+    
+    // Force immediate save
+    const dataPath = getDataPath();
+    const data: PersistedData = {
+      pendingItems: Array.from(pendingItems.values()),
+      decisions: decisions.slice(-200),
+      postedItems: postedItems.slice(-100),
+      lastSaved: Date.now(),
+    };
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    
+    // Notify renderer
+    if (approvalWindow && !approvalWindow.isDestroyed()) {
+      approvalWindow.webContents.send('approval:posted-updated', postedItems.slice(-100));
+    }
 
     console.log('[ApprovalQueue] Comment posted:', moltbookUrl);
+    return true;
+  } catch (e) {
+    console.error('[ApprovalQueue] Network error:', e);
+    return false;
+  }
+}
+
+async function postReactionToMoltbook(item: PendingItem): Promise<boolean> {
+  const apiKey = process.env['MOLTBOOK_API_KEY'];
+  const baseUrl = 'https://www.moltbook.com';
+
+  if (!apiKey || !item.reactionContext) {
+    console.error('[ApprovalQueue] Missing API key or reaction context');
+    return false;
+  }
+
+  const { reactionType, commentId, commentContent, commentAuthor, postUrl } = item.reactionContext;
+
+  try {
+    const endpoint = reactionType === 'like' ? 'upvote' : 'downvote';
+    const response = await fetch(`${baseUrl}/api/v1/comments/${commentId}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[ApprovalQueue] Reaction failed:`, response.status, errorText);
+      return false;
+    }
+
+    const posted: PostedItem = {
+      id: item.id,
+      type: 'reaction',
+      content: `${reactionType === 'like' ? '👍' : '👎'} ${reactionType} on "${commentContent.substring(0, 50)}..." by @${commentAuthor}`,
+      emotion: item.emotion,
+      category: item.category,
+      submolt: item.submolt,
+      timestamp: item.timestamp,
+      postedAt: Date.now(),
+      moltbookUrl: postUrl,
+      reactionType,
+    };
+    postedItems.push(posted);
+    
+    // Force immediate save
+    const dataPath = getDataPath();
+    const data: PersistedData = {
+      pendingItems: Array.from(pendingItems.values()),
+      decisions: decisions.slice(-200),
+      postedItems: postedItems.slice(-100),
+      lastSaved: Date.now(),
+    };
+    fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
+    
+    // Notify renderer
+    if (approvalWindow && !approvalWindow.isDestroyed()) {
+      approvalWindow.webContents.send('approval:posted-updated', postedItems.slice(-100));
+    }
+
+    console.log(`[ApprovalQueue] ${reactionType} posted on comment by @${commentAuthor}`);
     return true;
   } catch (e) {
     console.error('[ApprovalQueue] Network error:', e);
