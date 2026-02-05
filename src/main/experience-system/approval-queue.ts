@@ -50,6 +50,7 @@ export interface PendingItem {
     parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
+    isOwnPostReply?: boolean;
   };
   reactionContext?: {
     reactionType: 'like' | 'dislike';
@@ -58,6 +59,7 @@ export interface PendingItem {
     commentAuthor: string;
     postTitle: string;
     postUrl: string;
+    isOwnPostReaction?: boolean;
   };
 }
 
@@ -85,6 +87,8 @@ export interface PostedItem {
   moltbookUrl?: string;
   moltbookPostId?: string;
   reactionType?: 'like' | 'dislike';
+  isOwnPostReply?: boolean;
+  isOwnPostReaction?: boolean;
 }
 
 interface PersistedData {
@@ -644,6 +648,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
       postedAt: Date.now(),
       moltbookUrl,
       moltbookPostId: commentId,
+      isOwnPostReply: item.postContext?.isOwnPostReply,
     };
     postedItems.push(posted);
     
@@ -708,6 +713,7 @@ async function postReactionToMoltbook(item: PendingItem): Promise<boolean> {
       postedAt: Date.now(),
       moltbookUrl: postUrl,
       reactionType,
+      isOwnPostReaction: item.reactionContext?.isOwnPostReaction,
     };
     postedItems.push(posted);
     

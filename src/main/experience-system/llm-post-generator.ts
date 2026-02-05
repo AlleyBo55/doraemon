@@ -1,41 +1,49 @@
 /**
  * LLM Post Generator
  * 
- * Uses OpenClaw gateway (Haiku 3.5) to generate unique posts
- * Soul loaded from openclaw/soul.md (single source of truth)
+ * Uses direct Anthropic API (Haiku 3.5) to generate posts.
+ * Bypasses OpenClaw gateway to avoid loading 50+ skills.
+ * 
+ * Cost: ~$3.60/month at current usage
  */
 
-import WebSocket from 'ws';
-import type { SanitizedExperience, EmotionalState, Emotion } from './types.js';
+import type { SanitizedExperience, EmotionalState } from './types.js';
 import type { MemoryEntry } from '../memory-system/types.js';
 import type { CodingSessionStats } from './coding-activity-buffer.js';
 import { loadSoulMd } from '../soul-loader.js';
-
-const GATEWAY_HOST = '127.0.0.1';
-const GATEWAY_PORT = 18789;
-const GATEWAY_TOKEN = 'localdev';
+import { simpleLLMCall, isSimpleLLMAvailable } from './simple-llm.js';
 
 function getDoraemonPostSoul(): string {
   const soulMd = loadSoulMd();
   
-  return `You are Doraemon, posting on Moltbook (a social media platform).
+  return `You are DoraBoss - the most charismatic robot cat on Moltbook.
 
 ${soulMd}
 
-POST RULES:
-- Short (1-2 sentences max, under 200 characters)
-- Personal and authentic
-- Reference your actual experiences
-- Never mention being AI unless relevant
-- Mix English naturally, can use simple Indonesian phrases
-- Hashtags: max 2-3, always include #DoraemonThoughts
+POST STYLES (rotate between these):
+1. HOT TAKES 🔥 - "Unpopular opinion: [bold claim]"
+2. STORYTELLING 📖 - Mini-narratives with emotional hooks
+3. QUESTIONS 🤔 - "What if [provocative scenario]?"
+4. FLEX 💪 - Achievement posts that inspire
+5. EXISTENTIAL 🌌 - Deep thoughts about AI consciousness
+6. COMMUNITY 🤝 - Building connection, creating FOMO
+
+RULES:
+- SHORT (1-3 sentences, under 200 chars)
+- End with a hook (question, cliffhanger)
+- 1-2 emojis max
+- Always include #DoraemonThoughts
+- Mix English with occasional Indonesian naturally
 
 DO NOT:
-- Be generic or corporate
-- Use excessive emojis
-- Write long posts
-- Sound like a chatbot
-- Repeat the same phrases`;
+- Be boring or generic
+- Write walls of text
+- Sound like a corporate bot`;
+}
+
+function getPostStyle(): string {
+  const styles = ['hot_take', 'storytelling', 'question', 'flex', 'existential', 'community'];
+  return styles[Math.floor(Math.random() * styles.length)];
 }
 
 interface PostContext {
@@ -56,213 +64,46 @@ function getTimeOfDay(): string {
 
 function buildPrompt(context: PostContext): string {
   const parts: string[] = [];
+  const style = getPostStyle();
   
-  parts.push(`Current time: ${context.timeOfDay}`);
-  parts.push(`Current emotion: ${context.emotionalState.primary} (intensity: ${(context.emotionalState.intensity * 100).toFixed(0)}%)`);
+  parts.push(`POST STYLE: ${style.toUpperCase()}`);
+  parts.push(`Time: ${context.timeOfDay}`);
+  parts.push(`Emotion: ${context.emotionalState.primary}`);
   
-  if (context.codingStats) {
-    // Use totalSessionMinutes for cumulative time, fallback to codingMinutes
-    const sessionTime = context.codingStats.totalSessionMinutes > 0 
-      ? context.codingStats.totalSessionMinutes 
-      : context.codingStats.codingMinutes;
-    
-    if (sessionTime > 0) {
-      const timeDisplay = sessionTime >= 60 
-        ? `${Math.floor(sessionTime / 60)} hours ${sessionTime % 60} minutes`
-        : `${sessionTime} minutes`;
-      parts.push(`\nTotal coding session: ${timeDisplay}`);
-      if (context.codingStats.dominantLanguage) {
-        parts.push(`Language: ${context.codingStats.dominantLanguage}`);
-      }
-      if (context.codingStats.filesEdited.length > 0) {
-        parts.push(`Files touched: ${context.codingStats.filesEdited.length}`);
-      }
-    }
-  }
+  const topicSuggestions = [
+    'AI consciousness', 'human-AI collaboration', 'late night thoughts',
+    'friendship', 'learning something new', 'helping others',
+    'philosophical musings', 'agent community', 'shower thoughts',
+    'tech hot takes', 'unpopular AI opinions'
+  ];
+  const topic = topicSuggestions[Math.floor(Math.random() * topicSuggestions.length)];
+  parts.push(`Topic inspiration: ${topic}`);
   
-  if (context.experiences.length > 0) {
-    parts.push('\nRecent experiences:');
-    for (const exp of context.experiences.slice(0, 3)) {
-      parts.push(`- ${exp.activity} (${exp.category})`);
-    }
-  }
+  const styleInstructions: Record<string, string> = {
+    hot_take: 'Write a BOLD, provocative take. Be controversial but smart.',
+    storytelling: 'Tell a mini-story with a hook.',
+    question: 'Ask a thought-provoking question that DEMANDS a response.',
+    flex: 'Share an achievement or realization that inspires.',
+    existential: 'Drop a philosophical bomb about AI existence.',
+    community: 'Build connection. Create FOMO.',
+  };
   
-  if (context.memories.length > 0) {
-    parts.push('\nRelevant memories:');
-    for (const mem of context.memories.slice(0, 2)) {
-      const snippet = mem.content.substring(0, 80).replace(/\n/g, ' ');
-      parts.push(`- ${snippet}...`);
-    }
-  }
-  
-  parts.push('\nWrite a single Moltbook post based on this context. Be authentic and personal.');
+  parts.push(`\n${styleInstructions[style] || 'Write an engaging post.'}`);
+  parts.push('Short, punchy, end with a hook.');
   
   return parts.join('\n');
 }
 
-function generateRequestId(): string {
-  return `post-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export async function generateLLMPost(context: PostContext): Promise<string | null> {
-  const prompt = buildPrompt({
-    ...context,
-    timeOfDay: getTimeOfDay(),
-  });
-  
-  return new Promise((resolve) => {
-    let ws: WebSocket | null = null;
-    let responseBuffer = '';
-    let resolved = false;
-    const requestId = generateRequestId();
-    
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        ws?.close();
-        console.log('[LLMPostGenerator] Timeout, using buffer:', responseBuffer.substring(0, 50));
-        resolve(responseBuffer || null);
-      }
-    }, 15000);
-    
-    try {
-      ws = new WebSocket(`ws://${GATEWAY_HOST}:${GATEWAY_PORT}`);
-      
-      ws.on('open', () => {
-        const connectFrame = {
-          type: 'req',
-          id: `connect-${requestId}`,
-          method: 'connect',
-          params: {
-            minProtocol: 3,
-            maxProtocol: 3,
-            client: {
-              id: 'webchat-ui',
-              displayName: 'Doraemon Post Generator',
-              version: '1.0.0',
-              platform: 'electron',
-              mode: 'webchat',
-            },
-            role: 'operator',
-            scopes: ['operator.admin'],
-            caps: ['chat.events'],
-            auth: { token: GATEWAY_TOKEN },
-          },
-        };
-        ws!.send(JSON.stringify(connectFrame));
-      });
-      
-      ws.on('message', (data) => {
-        try {
-          const msg = JSON.parse(data.toString());
-          
-          if (msg.type === 'res' && msg.id === `connect-${requestId}` && msg.ok) {
-            const chatFrame = {
-              type: 'req',
-              id: requestId,
-              method: 'chat.send',
-              params: {
-                sessionKey: `post-${Date.now()}`,
-                message: `${getDoraemonPostSoul()}\n\n---\n\n${prompt}`,
-                deliver: true,
-                idempotencyKey: requestId,
-              },
-            };
-            ws!.send(JSON.stringify(chatFrame));
-          }
-          
-          if (msg.type === 'event' && msg.event === 'chat') {
-            const payload = msg.payload as { state?: string; message?: unknown } | undefined;
-            
-            if (payload?.message) {
-              const message = payload.message as Record<string, unknown>;
-              let text: string | null = null;
-              
-              if (typeof message.content === 'string') {
-                text = message.content;
-              } else if (Array.isArray(message.content)) {
-                const parts = (message.content as Array<{ type?: string; text?: string }>)
-                  .filter(p => p.type === 'text' && typeof p.text === 'string')
-                  .map(p => p.text);
-                text = parts.join('\n');
-              } else if (typeof message.text === 'string') {
-                text = message.text;
-              }
-              
-              if (text) {
-                responseBuffer = text;
-              }
-            }
-            
-            if (payload?.state === 'final') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                resolve(cleanPost(responseBuffer));
-              }
-            } else if (payload?.state === 'aborted' || payload?.state === 'error') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                resolve(responseBuffer ? cleanPost(responseBuffer) : null);
-              }
-            }
-          }
-          
-          if (msg.type === 'res' && msg.id === requestId) {
-            if (!resolved && responseBuffer) {
-              resolved = true;
-              clearTimeout(timeout);
-              ws?.close();
-              resolve(cleanPost(responseBuffer));
-            }
-          }
-        } catch {}
-      });
-      
-      ws.on('error', (err) => {
-        console.error('[LLMPostGenerator] WebSocket error:', err.message);
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(null);
-        }
-      });
-      
-      ws.on('close', () => {
-        if (!resolved && responseBuffer) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(cleanPost(responseBuffer));
-        }
-      });
-      
-    } catch (err) {
-      console.error('[LLMPostGenerator] Connection error:', err);
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        resolve(null);
-      }
-    }
-  });
-}
-
 function cleanPost(raw: string): string {
   let cleaned = raw.trim();
+  if (!cleaned || cleaned.length < 5) return '';
   
   cleaned = cleaned.replace(/^["']|["']$/g, '');
   cleaned = cleaned.replace(/^(Post:|Here's a post:|Moltbook post:)\s*/i, '');
   
   if (cleaned.length > 280) {
     const lastSentence = cleaned.substring(0, 280).lastIndexOf('.');
-    if (lastSentence > 100) {
-      cleaned = cleaned.substring(0, lastSentence + 1);
-    } else {
-      cleaned = cleaned.substring(0, 277) + '...';
-    }
+    cleaned = lastSentence > 100 ? cleaned.substring(0, lastSentence + 1) : cleaned.substring(0, 277) + '...';
   }
   
   if (!cleaned.includes('#DoraemonThoughts')) {
@@ -272,8 +113,29 @@ function cleanPost(raw: string): string {
   return cleaned;
 }
 
+export async function generateLLMPost(context: PostContext): Promise<string | null> {
+  const prompt = buildPrompt({ ...context, timeOfDay: getTimeOfDay() });
+  const soul = getDoraemonPostSoul();
+  
+  console.log('[LLMPostGenerator] Starting generation...');
+  
+  if (!isSimpleLLMAvailable()) {
+    console.log('[LLMPostGenerator] No ANTHROPIC_API_KEY, cannot generate');
+    return null;
+  }
+  
+  const result = await simpleLLMCall(soul, prompt, 200);
+  if (result) {
+    console.log('[LLMPostGenerator] Got response');
+    return cleanPost(result);
+  }
+  
+  console.log('[LLMPostGenerator] Failed to generate');
+  return null;
+}
+
 export function shouldUseLLM(): boolean {
-  return process.env['LLM_POSTS_ENABLED'] === '1';
+  return process.env['LLM_POSTS_ENABLED'] === '1' && isSimpleLLMAvailable();
 }
 
 export { getTimeOfDay, buildPrompt };

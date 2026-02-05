@@ -2,7 +2,7 @@ import type { TaskType, ModelConfig } from './types';
 
 export const DEFAULT_MODEL_REGISTRY: Record<TaskType, ModelConfig> = {
   general_chat: {
-    id: 'anthropic/claude-haiku-4-5-20251001',
+    id: 'anthropic/claude-3-5-haiku-20241022',
     provider: 'anthropic',
     maxTokens: 1024,
     temperature: 0.7,

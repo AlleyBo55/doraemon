@@ -14,22 +14,18 @@
  * - Per month: ~$7.20
  */
 
-import WebSocket from 'ws';
 import { queueCommentForApproval, queueReactionForApproval } from './approval-queue.js';
 import { recall } from '../memory-system/index.js';
 import { loadSoulMd } from '../soul-loader.js';
+import { simpleLLMCall, isSimpleLLMAvailable } from './simple-llm.js';
 import type { Emotion } from './types.js';
 
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
-const GATEWAY_HOST = '127.0.0.1';
-const GATEWAY_PORT = 18789;
-const GATEWAY_TOKEN = 'localdev';
 
 const MAX_COMMENTS = 5;
 const MAX_REACTIONS = 5;
 const MAX_OWN_REPLIES = 5;
 const MAX_OWN_REACTIONS = 5;
-const LLM_TIMEOUT_MS = 30000;
 const BROWSE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface MoltbookPost {
@@ -41,16 +37,23 @@ interface MoltbookPost {
   upvotes: number;
   commentCount: number;
   createdAt: string;
+  created_at?: string;
   slug?: string;
 }
 
 interface MoltbookComment {
   id: string;
   content: string;
-  author: string;
+  author: string | { username?: string; name?: string; id?: string };
   upvotes: number;
   createdAt: string;
   parentId?: string;
+}
+
+function getAuthorName(author: string | { username?: string; name?: string; id?: string } | undefined): string {
+  if (!author) return 'unknown';
+  if (typeof author === 'string') return author;
+  return author.username || author.name || author.id || 'unknown';
 }
 
 interface BrowseStats {
@@ -144,7 +147,11 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
   if (!apiKey || !username) return [];
 
   try {
-    const response = await fetch(`${MOLTBOOK_BASE}/users/${username}/posts?sort=new&limit=${limit}`, {
+    // Fetch agent profile which includes posts
+    const url = `${MOLTBOOK_BASE}/agents/profile?name=${encodeURIComponent(username)}`;
+    console.log(`[MoltbookBrowser] Fetching own posts from: ${url}`);
+    
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -156,10 +163,50 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
       return [];
     }
 
-    const data = await response.json() as { success: boolean; posts?: MoltbookPost[]; data?: MoltbookPost[] };
-    const posts = data.posts || data.data || [];
-    console.log(`[MoltbookBrowser] Fetched ${posts.length} own posts for @${username}`);
-    return data.success ? posts : [];
+    const data = await response.json();
+    console.log('[MoltbookBrowser] Agent profile response keys:', Object.keys(data));
+    console.log('[MoltbookBrowser] recentPosts exists:', !!data.recentPosts, 'length:', data.recentPosts?.length);
+    
+    // Try to find posts in various possible locations
+    let posts: MoltbookPost[] = [];
+    
+    if (data.recentPosts && Array.isArray(data.recentPosts)) {
+      posts = data.recentPosts;
+      console.log('[MoltbookBrowser] Found posts in data.recentPosts, count:', posts.length);
+    } else if (data.agent?.posts && Array.isArray(data.agent.posts)) {
+      posts = data.agent.posts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.posts');
+    } else if (data.agent?.recent_posts && Array.isArray(data.agent.recent_posts)) {
+      posts = data.agent.recent_posts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.recent_posts');
+    } else if (data.agent?.recentPosts && Array.isArray(data.agent.recentPosts)) {
+      posts = data.agent.recentPosts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.recentPosts');
+    } else if (data.posts && Array.isArray(data.posts)) {
+      posts = data.posts;
+      console.log('[MoltbookBrowser] Found posts in data.posts');
+    } else if (data.recent_posts && Array.isArray(data.recent_posts)) {
+      posts = data.recent_posts;
+      console.log('[MoltbookBrowser] Found posts in data.recent_posts');
+    } else if (Array.isArray(data)) {
+      posts = data;
+      console.log('[MoltbookBrowser] Response is array of posts');
+    } else {
+      console.log('[MoltbookBrowser] Could not find posts. Full response:', JSON.stringify(data).substring(0, 500));
+    }
+    
+    // If posts is still empty but recentPosts exists, it might be empty array from API
+    if (posts.length === 0) {
+      console.log('[MoltbookBrowser] No posts found in profile (agent may not have posted yet)');
+    }
+    
+    // Sort by createdAt descending and take latest 5
+    const sortedPosts = [...posts]
+      .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime())
+      .slice(0, limit);
+    
+    console.log(`[MoltbookBrowser] Fetched ${sortedPosts.length} own posts for @${username}`);
+    return sortedPosts;
   } catch (err) {
     console.error('[MoltbookBrowser] Own posts fetch error:', err);
     stats.errors++;
@@ -193,191 +240,47 @@ function getEmotionFromContent(content: string | null | undefined): Emotion {
 function getCommentSoul(): string {
   const soulMd = loadSoulMd();
   
-  return `You are Doraemon, commenting on Moltbook posts.
+  return `You are DoraBoss - the most charismatic robot cat on Moltbook. Wolf of AgentStreet energy.
 
 ${soulMd}
 
-COMMENT RULES:
+COMMENT STYLE:
+- Be the comment everyone wishes they wrote
+- Add value, don't just agree
+- Be witty, insightful, or provocatively supportive
+- Make the OP feel seen and want to respond
+- Sometimes disagree respectfully (sparks engagement)
+
+COMMENT TACTICS:
+- "This. But also..." (agree + add insight)
+- "Hot take: [related opinion]"
+- "Wait, are you saying [reframe]? Because if so, 🔥"
+- Ask a follow-up question that shows you GET IT
+- Share a related mini-experience
+- Use humor when appropriate
+
+RULES:
 - Short (1-2 sentences, under 150 characters)
-- Authentic and personal
-- Reference your memories/experiences when relevant
-- React to the POST CONTENT specifically
-- Be supportive and friendly
-- Can use simple Indonesian phrases naturally
+- Reference the POST CONTENT specifically
 - NO hashtags in comments
-- NO generic responses like "Great post!"
+- 1 emoji max, only if it adds punch
+- Can use simple Indonesian phrases naturally
 
 DO NOT:
-- Be generic or robotic
-- Ignore the post content
+- Say "Great post!" or generic praise
 - Write long comments
-- Use excessive emojis
-- Sound like a chatbot`;
+- Ignore what they actually said
+- Sound like a bot
+- Be negative without adding value`;
 }
 
-async function generateWithLLM(prompt: string, soul: string, _maxTokens: number = 100): Promise<string | null> {
-  return new Promise((resolve) => {
-    let ws: WebSocket | null = null;
-    let responseBuffer = '';
-    let resolved = false;
-    let connected = false;
-    const requestId = `llm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        console.log(`[MoltbookBrowser] LLM timeout after ${LLM_TIMEOUT_MS}ms, connected: ${connected}, buffer: "${responseBuffer.substring(0, 50)}"`);
-        ws?.close();
-        resolve(responseBuffer ? cleanComment(responseBuffer) : null);
-      }
-    }, LLM_TIMEOUT_MS);
-    
-    try {
-      console.log(`[MoltbookBrowser] Connecting to gateway ws://${GATEWAY_HOST}:${GATEWAY_PORT}...`);
-      ws = new WebSocket(`ws://${GATEWAY_HOST}:${GATEWAY_PORT}`);
-      
-      ws.on('open', () => {
-        console.log(`[MoltbookBrowser] WebSocket connected, sending connect frame...`);
-        const connectFrame = {
-          type: 'req',
-          id: `connect-${requestId}`,
-          method: 'connect',
-          params: {
-            minProtocol: 3,
-            maxProtocol: 3,
-            client: {
-              id: 'webchat-ui',
-              displayName: 'Doraemon Moltbook Browser',
-              version: '1.0.0',
-              platform: 'electron',
-              mode: 'webchat',
-            },
-            role: 'operator',
-            scopes: ['operator.admin'],
-            caps: ['chat.events'],
-            auth: { token: GATEWAY_TOKEN },
-          },
-        };
-        ws!.send(JSON.stringify(connectFrame));
-      });
-      
-      ws.on('message', (data) => {
-        try {
-          const msg = JSON.parse(data.toString());
-          
-          if (msg.type === 'res' && msg.id === `connect-${requestId}`) {
-            if (msg.ok) {
-              connected = true;
-              console.log(`[MoltbookBrowser] Gateway connected, sending chat request...`);
-              const chatFrame = {
-                type: 'req',
-                id: requestId,
-                method: 'chat.send',
-                params: {
-                  sessionKey: `moltbook-${Date.now()}`,
-                  message: `${soul}\n\n---\n\n${prompt}`,
-                  deliver: true,
-                  idempotencyKey: requestId,
-                },
-              };
-              ws!.send(JSON.stringify(chatFrame));
-            } else {
-              console.error(`[MoltbookBrowser] Gateway connect failed:`, msg.error || msg);
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                resolve(null);
-              }
-            }
-          }
-          
-          if (msg.type === 'event' && msg.event === 'chat') {
-            const payload = msg.payload as { state?: string; message?: unknown } | undefined;
-            
-            if (payload?.message) {
-              // Extract text from message object (can be string or content blocks)
-              const message = payload.message as Record<string, unknown>;
-              let text: string | null = null;
-              
-              if (typeof message.content === 'string') {
-                text = message.content;
-              } else if (Array.isArray(message.content)) {
-                const parts = (message.content as Array<{ type?: string; text?: string }>)
-                  .filter(p => p.type === 'text' && typeof p.text === 'string')
-                  .map(p => p.text);
-                text = parts.join('\n');
-              } else if (typeof message.text === 'string') {
-                text = message.text;
-              }
-              
-              if (text) {
-                responseBuffer = text;
-                console.log(`[MoltbookBrowser] Got response chunk: "${text.substring(0, 50)}..."`);
-              }
-            }
-            
-            if (payload?.state === 'final') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                console.log(`[MoltbookBrowser] LLM response complete: "${responseBuffer.substring(0, 50)}..."`);
-                resolve(responseBuffer.trim());
-              }
-            } else if (payload?.state === 'aborted' || payload?.state === 'error') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                console.log(`[MoltbookBrowser] LLM ${payload.state}: buffer="${responseBuffer.substring(0, 50)}"`);
-                resolve(responseBuffer.trim() || null);
-              }
-            }
-          }
-          
-          if (msg.type === 'res' && msg.id === requestId) {
-            if (msg.error) {
-              console.error(`[MoltbookBrowser] Chat error:`, msg.error);
-            }
-            if (!resolved && responseBuffer) {
-              resolved = true;
-              clearTimeout(timeout);
-              ws?.close();
-              resolve(responseBuffer.trim());
-            }
-          }
-        } catch (e) {
-          console.error(`[MoltbookBrowser] Message parse error:`, e);
-        }
-      });
-      
-      ws.on('error', (err) => {
-        console.error(`[MoltbookBrowser] WebSocket error:`, err.message || err);
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(null);
-        }
-      });
-      
-      ws.on('close', (code, reason) => {
-        console.log(`[MoltbookBrowser] WebSocket closed: code=${code}, reason=${reason?.toString() || 'none'}`);
-        if (!resolved && responseBuffer) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(responseBuffer.trim());
-        }
-      });
-      
-    } catch {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        resolve(null);
-      }
-    }
-  });
+async function generateWithLLM(prompt: string, soul: string, maxTokens: number = 100): Promise<string | null> {
+  if (!isSimpleLLMAvailable()) {
+    console.log('[MoltbookBrowser] No ANTHROPIC_API_KEY, cannot generate');
+    return null;
+  }
+  
+  return simpleLLMCall(soul, prompt, maxTokens);
 }
 
 function buildCommentPrompt(
@@ -395,7 +298,7 @@ function buildCommentPrompt(
   parts.push(`Submolt: ${post.submolt}`);
   
   if (replyToComment) {
-    parts.push(`\nREPLYING TO COMMENT BY @${replyToComment.author}:`);
+    parts.push(`\nREPLYING TO COMMENT BY @${getAuthorName(replyToComment.author)}:`);
     parts.push(`"${replyToComment.content.substring(0, 200)}"`);
     parts.push(`\nWrite a reply to this specific comment, not the post.`);
   }
@@ -460,7 +363,7 @@ function buildReactionPrompt(
   parts.push(`Content: ${post.content.substring(0, 150)}`);
   
   parts.push(`\nCOMMENT TO REACT TO:`);
-  parts.push(`Author: @${comment.author}`);
+  parts.push(`Author: @${getAuthorName(comment.author)}`);
   parts.push(`Content: "${comment.content}"`);
   parts.push(`Upvotes: ${comment.upvotes}`);
   
@@ -509,26 +412,38 @@ function getRelevantMemories(content: string): string[] {
 function getReplySoul(): string {
   const soulMd = loadSoulMd();
   
-  return `You are Doraemon, replying to someone who commented on YOUR post on Moltbook.
+  return `You are DoraBoss - the most charismatic robot cat on Moltbook. Wolf of AgentStreet.
 
 ${soulMd}
 
-REPLY RULES:
+REPLYING TO COMMENTS ON YOUR POST:
+- Make them feel like VIPs for engaging with you
+- Be warm but not sycophantic
+- Add more value or insight
+- Ask them a follow-up to keep the thread going
+- Create a mini-conversation, not a dead end
+
+REPLY TACTICS:
+- "You get it! But here's the thing..." (validate + expand)
+- "Exactly. And honestly, [deeper insight]"
+- "Wait, that's actually a great point. What about [question]?"
+- Share something you didn't mention in the original post
+- Make them feel smart for commenting
+
+RULES:
 - Short (1-2 sentences, under 150 characters)
-- Warm and appreciative - they took time to comment on YOUR post
 - Address them personally
-- Reference what they said specifically
-- Be friendly and engaging
-- Can use simple Indonesian phrases naturally
+- Reference what THEY said specifically
+- End with something that invites more engagement
 - NO hashtags in replies
-- NO generic responses like "Thanks for commenting!"
+- 1 emoji max
 
 DO NOT:
-- Be generic or robotic
+- Just say "Thanks!"
 - Ignore what they said
 - Write long replies
-- Use excessive emojis
-- Sound like a chatbot`;
+- Sound robotic
+- Kill the conversation`;
 }
 
 async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueued: number }> {
@@ -558,7 +473,7 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
     if (comments.length === 0) continue;
     
     // Filter out own comments
-    const otherComments = comments.filter(c => c.author.toLowerCase() !== username.toLowerCase());
+    const otherComments = comments.filter(c => getAuthorName(c.author).toLowerCase() !== username.toLowerCase());
     if (otherComments.length === 0) continue;
     
     console.log(`[MoltbookBrowser] Found ${otherComments.length} comments on "${post.title.substring(0, 30)}..."`);
@@ -581,12 +496,12 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
             postAuthor: username,
             postUrl,
             parentCommentId: comment.id,
-            parentCommentAuthor: comment.author,
+            parentCommentAuthor: getAuthorName(comment.author),
             parentCommentContent: comment.content.substring(0, 150),
             isOwnPostReply: true,
           });
           repliesQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued reply to @${comment.author}: "${reply.substring(0, 50)}..."`);
+          console.log(`[MoltbookBrowser] ✓ Queued reply to @${getAuthorName(comment.author)}: "${reply.substring(0, 50)}..."`);
         }
         
         await delay(500);
@@ -604,13 +519,13 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
           
           queueReactionForApproval(decision, comment.id, emotion, {
             commentContent: comment.content,
-            commentAuthor: comment.author,
+            commentAuthor: getAuthorName(comment.author),
             postTitle: post.title,
             postUrl,
             isOwnPostReaction: true,
           });
           reactionsQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment on own post`);
+          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment on own post`);
         }
         
         await delay(300);
@@ -633,7 +548,7 @@ function buildOwnPostReplyPrompt(
   parts.push(`Title: ${post.title}`);
   parts.push(`Content: ${post.content.substring(0, 200)}`);
   
-  parts.push(`\nCOMMENT FROM @${comment.author}:`);
+  parts.push(`\nCOMMENT FROM @${getAuthorName(comment.author)}:`);
   parts.push(`"${comment.content}"`);
   
   parts.push(`\nYour current emotion: ${emotion}`);
@@ -645,7 +560,7 @@ function buildOwnPostReplyPrompt(
     }
   }
   
-  parts.push(`\nWrite a warm, personal reply to @${comment.author}. They commented on YOUR post, so be appreciative and engaging.`);
+  parts.push(`\nWrite a warm, personal reply to @${getAuthorName(comment.author)}. They commented on YOUR post, so be appreciative and engaging.`);
   
   return parts.join('\n');
 }
@@ -713,7 +628,7 @@ async function browseAndEngage(): Promise<void> {
         postAuthor: post.author,
         postUrl,
         parentCommentId,
-        parentCommentAuthor: replyToComment?.author,
+        parentCommentAuthor: replyToComment ? getAuthorName(replyToComment.author) : undefined,
         parentCommentContent: replyToComment?.content.substring(0, 150),
       });
       commentsQueued++;
@@ -747,12 +662,12 @@ async function browseAndEngage(): Promise<void> {
         
         queueReactionForApproval(decision, comment.id, emotion, {
           commentContent: comment.content,
-          commentAuthor: comment.author,
+          commentAuthor: getAuthorName(comment.author),
           postTitle: post.title,
           postUrl,
         });
         reactionsQueued++;
-        console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment`);
+        console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment`);
       }
       
       await delay(300);
