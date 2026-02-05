@@ -257,4 +257,7 @@ contextBridge.exposeInMainWorld('approvalAPI', {
   onNewItem: (callback: (item: unknown) => void) => {
     ipcRenderer.on('approval:new-item', (_event: IpcRendererEvent, item: unknown) => callback(item));
   },
+  onPostedUpdated: (callback: (items: unknown[]) => void) => {
+    ipcRenderer.on('approval:posted-updated', (_event: IpcRendererEvent, items: unknown[]) => callback(items));
+  },
 });

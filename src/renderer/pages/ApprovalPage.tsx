@@ -78,6 +78,7 @@ declare global {
       rejectAll: () => Promise<number>;
       getStats: () => Promise<ApprovalStats>;
       onNewItem: (callback: (item: PendingItem) => void) => void;
+      onPostedUpdated: (callback: (items: PostedItem[]) => void) => void;
       closeWindow: () => void;
       triggerManualPost: () => Promise<{ success: boolean; postId?: string; error?: string }>;
       triggerComments: () => Promise<{ success: boolean; error?: string }>;
@@ -303,23 +304,46 @@ function CommentCard({
 function PostedCard({ item }: { item: PostedItem }) {
   const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
   const timeAgo = getTimeAgo(item.postedAt);
-  const typeLabel = item.type === 'post' ? 'Posted' : item.type === 'comment' ? 'Commented' : `${item.reactionType === 'like' ? '👍' : '👎'} Reacted`;
-  const typeColor = item.type === 'reaction' 
-    ? (item.reactionType === 'like' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')
-    : 'bg-green-100 text-green-700';
+  
+  // Type label with icon
+  const getTypeInfo = () => {
+    if (item.type === 'post') {
+      return { label: '📝 Post', color: 'bg-blue-100 text-blue-700' };
+    } else if (item.type === 'comment') {
+      return { label: '💬 Comment', color: 'bg-amber-100 text-amber-700' };
+    } else if (item.type === 'reaction') {
+      if (item.reactionType === 'like') {
+        return { label: '👍 Like', color: 'bg-emerald-100 text-emerald-700' };
+      } else {
+        return { label: '👎 Dislike', color: 'bg-red-100 text-red-700' };
+      }
+    }
+    return { label: 'Unknown', color: 'bg-slate-100 text-slate-700' };
+  };
+  
+  const typeInfo = getTypeInfo();
+  
+  // Background color based on type
+  const bgColor = item.type === 'post' 
+    ? 'bg-blue-50/80 border-blue-200/50' 
+    : item.type === 'comment'
+    ? 'bg-amber-50/80 border-amber-200/50'
+    : item.reactionType === 'like'
+    ? 'bg-emerald-50/80 border-emerald-200/50'
+    : 'bg-red-50/80 border-red-200/50';
 
   return (
-    <div className="group relative bg-green-50/80 backdrop-blur-xl rounded-2xl border border-green-200/50 shadow-sm">
+    <div className={`group relative backdrop-blur-xl rounded-2xl border shadow-sm ${bgColor}`}>
       <div className="p-4">
         <div className="flex items-start gap-3">
           <div className="text-2xl flex-shrink-0 mt-0.5">{emoji}</div>
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColor}`}>
-                ✓ {typeLabel}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeInfo.color}`}>
+                ✓ {typeInfo.label}
               </span>
-              {item.type !== 'reaction' && (
+              {item.type === 'post' && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
                   m/{item.submolt}
                 </span>
@@ -336,7 +360,7 @@ function PostedCard({ item }: { item: PostedItem }) {
                 href={item.moltbookUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline break-all"
               >
                 🔗 {item.moltbookUrl}
               </a>
@@ -455,7 +479,7 @@ function EmptyState({
     return (
       <div className="flex flex-col items-center justify-center py-16 px-8">
         <div className="text-6xl mb-4">📭</div>
-        <h3 className="text-lg font-semibold text-slate-700 mb-2">No posted items yet</h3>
+        <h3 className="text-lg font-semibold text-slate-700 mb-2">No history yet</h3>
         <p className="text-sm text-slate-500 text-center max-w-xs">
           Approved posts, comments, and reactions will appear here with their Moltbook URLs.
         </p>
@@ -516,16 +540,18 @@ export function ApprovalPage() {
     try {
       console.log('[ApprovalPage] Loading items...');
       const [pending, posted, newStats, submoltList] = await Promise.all([
-        window.approvalAPI?.getPendingItems() || [],
-        window.approvalAPI?.getPostedItems() || [],
-        window.approvalAPI?.getStats() || { approved: 0, rejected: 0, pending: 0 },
-        window.approvalAPI?.getSubmolts() || [],
+        window.approvalAPI?.getPendingItems(),
+        window.approvalAPI?.getPostedItems(),
+        window.approvalAPI?.getStats(),
+        window.approvalAPI?.getSubmolts(),
       ]);
-      console.log('[ApprovalPage] Loaded:', { pending: pending.length, posted: posted.length });
-      setItems(pending);
-      setPostedItems(posted);
-      setStats(newStats);
-      setSubmolts(submoltList);
+      console.log('[ApprovalPage] Loaded:', { pending: pending?.length, posted: posted?.length });
+      
+      // Only update state if we got valid data
+      if (Array.isArray(pending)) setItems(pending);
+      if (Array.isArray(posted)) setPostedItems(posted);
+      if (newStats) setStats(newStats);
+      if (Array.isArray(submoltList)) setSubmolts(submoltList);
     } catch (e) {
       console.error('Failed to load items:', e);
     } finally {
@@ -606,6 +632,10 @@ export function ApprovalPage() {
       setItems(prev => [item, ...prev]);
       setStats(prev => ({ ...prev, pending: prev.pending + 1 }));
     });
+    window.approvalAPI?.onPostedUpdated?.((items) => {
+      console.log('[ApprovalPage] Posted items updated via IPC:', items.length);
+      setPostedItems(items as PostedItem[]);
+    });
   }, [loadItems]);
 
   const handleApprove = async (id: string) => {
@@ -618,11 +648,7 @@ export function ApprovalPage() {
     if (success) {
       setItems(prev => prev.filter(i => i.id !== id));
       setStats(prev => ({ ...prev, approved: prev.approved + 1, pending: prev.pending - 1 }));
-      // Small delay to ensure backend has saved, then reload posted items
-      setTimeout(async () => {
-        const posted = await window.approvalAPI?.getPostedItems() || [];
-        setPostedItems(posted);
-      }, 300);
+      // Posted items will be updated via onPostedUpdated IPC event
     }
   };
 
@@ -654,11 +680,7 @@ export function ApprovalPage() {
       approved: prev.approved + toApprove.length, 
       pending: prev.pending - toApprove.length 
     }));
-    // Small delay to ensure backend has saved, then reload posted items
-    setTimeout(async () => {
-      const posted = await window.approvalAPI?.getPostedItems() || [];
-      setPostedItems(posted);
-    }, 500);
+    // Posted items will be updated via onPostedUpdated IPC event
   };
 
   const handleRejectFiltered = async () => {
@@ -680,8 +702,8 @@ export function ApprovalPage() {
   const reactionCount = items.filter(i => i.type === 'reaction').length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-      <div className="drag-region sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50">
+    <div className="h-screen flex flex-col bg-gradient-to-b from-slate-50 to-slate-100">
+      <div className="drag-region flex-shrink-0 sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-slate-200/50">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="w-[70px]" />
@@ -709,58 +731,59 @@ export function ApprovalPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-1 p-1 bg-slate-200/50 rounded-xl">
-            {(['all', 'post', 'comment', 'reaction', 'posted'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  filter === f ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                {f === 'all' ? `All (${items.length})` 
-                  : f === 'post' ? `Posts (${postCount})` 
-                  : f === 'comment' ? `Comments (${commentCount})`
-                  : f === 'reaction' ? `Reactions (${reactionCount})`
-                  : `Posted (${postedItems.length})`}
-              </button>
-            ))}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-1 p-1 bg-slate-200/50 rounded-xl">
+              {(['all', 'post', 'comment', 'reaction', 'posted'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    filter === f ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {f === 'all' ? `All (${items.length})` 
+                    : f === 'post' ? `Posts (${postCount})` 
+                    : f === 'comment' ? `Comments (${commentCount})`
+                    : f === 'reaction' ? `Reactions (${reactionCount})`
+                    : `History (${postedItems.length})`}
+                </button>
+              ))}
+            </div>
+
+            {filter !== 'posted' && filteredItems.length > 0 && (
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleRejectFiltered} 
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  Reject {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
+                </button>
+                <button 
+                  onClick={handleApproveFiltered} 
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white shadow-sm transition-all ${
+                    filter === 'comment' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'
+                  }`}
+                >
+                  Approve {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
+                </button>
+              </div>
+            )}
           </div>
 
-          {filter !== 'posted' && filteredItems.length > 0 && (
-            <div className="flex gap-2">
-              <button 
-                onClick={handleRejectFiltered} 
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+          {filter !== 'posted' && (
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={handleTriggerPost}
+                disabled={isTriggering}
+                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-all border border-blue-200"
               >
-                Reject {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
+                {isTriggering ? '...' : '📝 Generate Post'}
               </button>
-              <button 
-                onClick={handleApproveFiltered} 
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white shadow-sm transition-all ${
-                  filter === 'comment' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'
-                }`}
-              >
-                Approve {filter === 'all' ? 'All' : filter === 'post' ? 'Posts' : 'Comments'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {filter !== 'posted' && (
-          <div className="flex gap-2 mb-6">
-            <button
-              onClick={handleTriggerPost}
-              disabled={isTriggering}
-              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-50 transition-all border border-blue-200"
-            >
-              {isTriggering ? '...' : '📝 Generate Post'}
-            </button>
-            <button
-              onClick={handleTriggerComments}
-              disabled={isTriggering}
+              <button
+                onClick={handleTriggerComments}
+                disabled={isTriggering}
               className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-amber-50 text-amber-600 hover:bg-amber-100 disabled:opacity-50 transition-all border border-amber-200"
             >
               {isTriggering ? '...' : '💬 Browse & Comment'}
@@ -830,6 +853,7 @@ export function ApprovalPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

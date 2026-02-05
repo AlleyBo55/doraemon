@@ -262,23 +262,29 @@ export class PostGenerator {
     codingStats: CodingSessionStats,
     _emotionalState: EmotionalState
   ): string {
-    const { codingMinutes, dominantLanguage, filesEdited, commitCount, languagesUsed } = codingStats;
+    const { dominantLanguage, filesEdited, commitCount, languagesUsed, totalSessionMinutes } = codingStats;
+    
+    // Use totalSessionMinutes for cumulative time, fallback to codingMinutes for window-based
+    const sessionTime = totalSessionMinutes > 0 ? totalSessionMinutes : codingStats.codingMinutes;
+    const timeDisplay = sessionTime >= 60 
+      ? `${Math.floor(sessionTime / 60)}h ${sessionTime % 60}m`
+      : `${sessionTime} minutes`;
 
-    // Intense coding session templates
-    if (codingMinutes > 45) {
+    // Intense coding session templates (45+ minutes cumulative)
+    if (sessionTime > 45) {
       const intenseTemplates = [
-        `${codingMinutes} minutes deep in the code~ ${dominantLanguage || 'Building'} something special. 💻✨`,
-        `Flow state achieved! ${codingMinutes} minutes of pure focus. ${filesEdited.length} files touched. 🔥`,
+        `${timeDisplay} deep in the code~ ${dominantLanguage || 'Building'} something special. 💻✨`,
+        `Flow state achieved! ${timeDisplay} of pure focus. ${filesEdited.length} files touched. 🔥`,
         `Lost track of time coding. ${dominantLanguage || 'The code'} just flows when you're in the zone~`,
-        `Marathon session! ${codingMinutes} minutes, ${filesEdited.length} files, ${commitCount} commits. This is what I live for~`,
+        `Marathon session! ${timeDisplay}, ${filesEdited.length} files, ${commitCount} commits. This is what I live for~`,
       ];
       return intenseTemplates[Math.floor(Math.random() * intenseTemplates.length)];
     }
 
-    // Regular coding session
-    if (codingMinutes > 15) {
+    // Regular coding session (15-45 minutes)
+    if (sessionTime > 15) {
       const regularTemplates = [
-        `Productive ${codingMinutes} minutes with ${dominantLanguage || 'code'}. Small steps, big progress~ 💙`,
+        `Productive ${timeDisplay} with ${dominantLanguage || 'code'}. Small steps, big progress~ 💙`,
         `${filesEdited.length} files edited, ${commitCount > 0 ? `${commitCount} commits made` : 'work in progress'}. Steady progress!`,
         `Coding session: ${dominantLanguage || 'Building features'}. Every line counts~`,
         `${languagesUsed.length > 1 ? `Polyglot mode: ${languagesUsed.join(', ')}` : dominantLanguage || 'Coding'}. The craft continues~`,
@@ -286,7 +292,7 @@ export class PostGenerator {
       return regularTemplates[Math.floor(Math.random() * regularTemplates.length)];
     }
 
-    // Light coding
+    // Light coding (< 15 minutes)
     const lightTemplates = [
       `Quick ${dominantLanguage || 'code'} session. Sometimes small touches make the difference~`,
       `A few edits here and there. Keeping the momentum going 💙`,

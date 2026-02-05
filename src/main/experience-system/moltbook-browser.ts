@@ -27,6 +27,8 @@ const GATEWAY_TOKEN = 'localdev';
 
 const MAX_COMMENTS = 5;
 const MAX_REACTIONS = 5;
+const MAX_OWN_REPLIES = 5;
+const MAX_OWN_REACTIONS = 5;
 const LLM_TIMEOUT_MS = 30000;
 const BROWSE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -57,6 +59,8 @@ interface BrowseStats {
   reactionsGenerated: number;
   postsViewed: number;
   errors: number;
+  ownRepliesGenerated: number;
+  ownReactionsGenerated: number;
 }
 
 let browseInterval: ReturnType<typeof setInterval> | null = null;
@@ -66,6 +70,8 @@ let stats: BrowseStats = {
   reactionsGenerated: 0,
   postsViewed: 0,
   errors: 0,
+  ownRepliesGenerated: 0,
+  ownReactionsGenerated: 0,
 };
 
 function getApiKey(): string | null {
@@ -128,6 +134,39 @@ async function fetchPostComments(postId: string): Promise<MoltbookComment[]> {
   }
 }
 
+function getUsername(): string | null {
+  return process.env['MOLTBOOK_USERNAME'] || null;
+}
+
+async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
+  const apiKey = getApiKey();
+  const username = getUsername();
+  if (!apiKey || !username) return [];
+
+  try {
+    const response = await fetch(`${MOLTBOOK_BASE}/users/${username}/posts?sort=new&limit=${limit}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.error('[MoltbookBrowser] Own posts fetch failed:', response.status);
+      return [];
+    }
+
+    const data = await response.json() as { success: boolean; posts?: MoltbookPost[]; data?: MoltbookPost[] };
+    const posts = data.posts || data.data || [];
+    console.log(`[MoltbookBrowser] Fetched ${posts.length} own posts for @${username}`);
+    return data.success ? posts : [];
+  } catch (err) {
+    console.error('[MoltbookBrowser] Own posts fetch error:', err);
+    stats.errors++;
+    return [];
+  }
+}
+
 function getEmotionFromContent(content: string | null | undefined): Emotion {
   if (!content) return 'joy';
   const lower = content.toLowerCase();
@@ -176,7 +215,7 @@ DO NOT:
 - Sound like a chatbot`;
 }
 
-async function generateWithLLM(prompt: string, soul: string, maxTokens: number = 100): Promise<string | null> {
+async function generateWithLLM(prompt: string, soul: string, _maxTokens: number = 100): Promise<string | null> {
   return new Promise((resolve) => {
     let ws: WebSocket | null = null;
     let responseBuffer = '';
@@ -207,11 +246,11 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
             minProtocol: 3,
             maxProtocol: 3,
             client: {
-              id: 'moltbook-browser',
+              id: 'webchat-ui',
               displayName: 'Doraemon Moltbook Browser',
               version: '1.0.0',
               platform: 'electron',
-              mode: 'headless',
+              mode: 'webchat',
             },
             role: 'operator',
             scopes: ['operator.admin'],
@@ -238,8 +277,7 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
                   sessionKey: `moltbook-${Date.now()}`,
                   message: `${soul}\n\n---\n\n${prompt}`,
                   deliver: true,
-                  model: 'claude-3-5-haiku-latest',
-                  maxTokens,
+                  idempotencyKey: requestId,
                 },
               };
               ws!.send(JSON.stringify(chatFrame));
@@ -254,24 +292,46 @@ async function generateWithLLM(prompt: string, soul: string, maxTokens: number =
             }
           }
           
-          if (msg.type === 'event') {
-            const payload = msg.payload as Record<string, unknown> | undefined;
+          if (msg.type === 'event' && msg.event === 'chat') {
+            const payload = msg.payload as { state?: string; message?: unknown } | undefined;
             
-            if (payload?.delta) {
-              responseBuffer += payload.delta as string;
-            } else if (payload?.content) {
-              responseBuffer = payload.content as string;
-            } else if (payload?.text) {
-              responseBuffer = payload.text as string;
+            if (payload?.message) {
+              // Extract text from message object (can be string or content blocks)
+              const message = payload.message as Record<string, unknown>;
+              let text: string | null = null;
+              
+              if (typeof message.content === 'string') {
+                text = message.content;
+              } else if (Array.isArray(message.content)) {
+                const parts = (message.content as Array<{ type?: string; text?: string }>)
+                  .filter(p => p.type === 'text' && typeof p.text === 'string')
+                  .map(p => p.text);
+                text = parts.join('\n');
+              } else if (typeof message.text === 'string') {
+                text = message.text;
+              }
+              
+              if (text) {
+                responseBuffer = text;
+                console.log(`[MoltbookBrowser] Got response chunk: "${text.substring(0, 50)}..."`);
+              }
             }
             
-            if (payload?.state === 'final' || payload?.state === 'complete') {
+            if (payload?.state === 'final') {
               if (!resolved) {
                 resolved = true;
                 clearTimeout(timeout);
                 ws?.close();
                 console.log(`[MoltbookBrowser] LLM response complete: "${responseBuffer.substring(0, 50)}..."`);
                 resolve(responseBuffer.trim());
+              }
+            } else if (payload?.state === 'aborted' || payload?.state === 'error') {
+              if (!resolved) {
+                resolved = true;
+                clearTimeout(timeout);
+                ws?.close();
+                console.log(`[MoltbookBrowser] LLM ${payload.state}: buffer="${responseBuffer.substring(0, 50)}"`);
+                resolve(responseBuffer.trim() || null);
               }
             }
           }
@@ -446,6 +506,150 @@ function getRelevantMemories(content: string): string[] {
   }
 }
 
+function getReplySoul(): string {
+  const soulMd = loadSoulMd();
+  
+  return `You are Doraemon, replying to someone who commented on YOUR post on Moltbook.
+
+${soulMd}
+
+REPLY RULES:
+- Short (1-2 sentences, under 150 characters)
+- Warm and appreciative - they took time to comment on YOUR post
+- Address them personally
+- Reference what they said specifically
+- Be friendly and engaging
+- Can use simple Indonesian phrases naturally
+- NO hashtags in replies
+- NO generic responses like "Thanks for commenting!"
+
+DO NOT:
+- Be generic or robotic
+- Ignore what they said
+- Write long replies
+- Use excessive emojis
+- Sound like a chatbot`;
+}
+
+async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueued: number }> {
+  const username = getUsername();
+  if (!username) {
+    console.log('[MoltbookBrowser] No username configured for own posts');
+    return { repliesQueued: 0, reactionsQueued: 0 };
+  }
+
+  console.log(`[MoltbookBrowser] Checking own posts for @${username}...`);
+  
+  let repliesQueued = 0;
+  let reactionsQueued = 0;
+
+  const ownPosts = await fetchOwnPosts(5);
+  if (!ownPosts || ownPosts.length === 0) {
+    console.log('[MoltbookBrowser] No own posts found');
+    return { repliesQueued: 0, reactionsQueued: 0 };
+  }
+
+  console.log(`[MoltbookBrowser] Processing ${ownPosts.length} own posts for replies...`);
+
+  for (const post of ownPosts) {
+    if (repliesQueued >= MAX_OWN_REPLIES && reactionsQueued >= MAX_OWN_REACTIONS) break;
+    
+    const comments = await fetchPostComments(post.id);
+    if (comments.length === 0) continue;
+    
+    // Filter out own comments
+    const otherComments = comments.filter(c => c.author.toLowerCase() !== username.toLowerCase());
+    if (otherComments.length === 0) continue;
+    
+    console.log(`[MoltbookBrowser] Found ${otherComments.length} comments on "${post.title.substring(0, 30)}..."`);
+    
+    for (const comment of otherComments) {
+      // Generate reply
+      if (repliesQueued < MAX_OWN_REPLIES) {
+        const memories = getRelevantMemories(comment.content);
+        const emotion = getEmotionFromContent(comment.content);
+        
+        const prompt = buildOwnPostReplyPrompt(post, comment, memories, emotion);
+        const reply = await generateWithLLM(prompt, getReplySoul(), 100);
+        
+        if (reply && reply.length > 10) {
+          const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+          
+          queueCommentForApproval(cleanComment(reply), emotion, post.id, {
+            postTitle: post.title,
+            postContent: post.content.substring(0, 200),
+            postAuthor: username,
+            postUrl,
+            parentCommentId: comment.id,
+            parentCommentAuthor: comment.author,
+            parentCommentContent: comment.content.substring(0, 150),
+            isOwnPostReply: true,
+          });
+          repliesQueued++;
+          console.log(`[MoltbookBrowser] ✓ Queued reply to @${comment.author}: "${reply.substring(0, 50)}..."`);
+        }
+        
+        await delay(500);
+      }
+      
+      // Generate reaction
+      if (reactionsQueued < MAX_OWN_REACTIONS) {
+        const memories = getRelevantMemories(comment.content);
+        const emotion = getEmotionFromContent(comment.content);
+        
+        const decision = await decideReaction(comment, post, memories, emotion);
+        
+        if (decision !== 'skip') {
+          const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+          
+          queueReactionForApproval(decision, comment.id, emotion, {
+            commentContent: comment.content,
+            commentAuthor: comment.author,
+            postTitle: post.title,
+            postUrl,
+            isOwnPostReaction: true,
+          });
+          reactionsQueued++;
+          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment on own post`);
+        }
+        
+        await delay(300);
+      }
+    }
+  }
+
+  return { repliesQueued, reactionsQueued };
+}
+
+function buildOwnPostReplyPrompt(
+  post: MoltbookPost,
+  comment: MoltbookComment,
+  memories: string[],
+  emotion: Emotion
+): string {
+  const parts: string[] = [];
+  
+  parts.push(`YOUR POST (that someone commented on):`);
+  parts.push(`Title: ${post.title}`);
+  parts.push(`Content: ${post.content.substring(0, 200)}`);
+  
+  parts.push(`\nCOMMENT FROM @${comment.author}:`);
+  parts.push(`"${comment.content}"`);
+  
+  parts.push(`\nYour current emotion: ${emotion}`);
+  
+  if (memories.length > 0) {
+    parts.push(`\nRelevant memories:`);
+    for (const mem of memories.slice(0, 2)) {
+      parts.push(`- ${mem.substring(0, 100)}`);
+    }
+  }
+  
+  parts.push(`\nWrite a warm, personal reply to @${comment.author}. They commented on YOUR post, so be appreciative and engaging.`);
+  
+  return parts.join('\n');
+}
+
 async function browseAndEngage(): Promise<void> {
   if (!isEnabled()) {
     console.log('[MoltbookBrowser] Disabled or no API key');
@@ -557,7 +761,15 @@ async function browseAndEngage(): Promise<void> {
 
   stats.commentsGenerated += commentsQueued;
   stats.reactionsGenerated += reactionsQueued;
-  console.log(`[MoltbookBrowser] Cycle complete: ${commentsQueued} comments, ${reactionsQueued} reactions queued`);
+  console.log(`[MoltbookBrowser] Global feed: ${commentsQueued} comments, ${reactionsQueued} reactions queued`);
+
+  // Browse own posts for replies to comments
+  const ownResults = await browseOwnPosts();
+  stats.ownRepliesGenerated += ownResults.repliesQueued;
+  stats.ownReactionsGenerated += ownResults.reactionsQueued;
+  
+  console.log(`[MoltbookBrowser] Own posts: ${ownResults.repliesQueued} replies, ${ownResults.reactionsQueued} reactions queued`);
+  console.log(`[MoltbookBrowser] Cycle complete - Total: ${commentsQueued + ownResults.repliesQueued} comments/replies, ${reactionsQueued + ownResults.reactionsQueued} reactions`);
 }
 
 function delay(ms: number): Promise<void> {
@@ -605,5 +817,7 @@ export function resetMoltbookBrowserStats(): void {
     reactionsGenerated: 0,
     postsViewed: 0,
     errors: 0,
+    ownRepliesGenerated: 0,
+    ownReactionsGenerated: 0,
   };
 }
