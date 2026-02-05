@@ -60,6 +60,8 @@ interface PostedItem {
   moltbookUrl?: string;
   moltbookPostId?: string;
   reactionType?: 'like' | 'dislike';
+  isOwnPostReply?: boolean;
+  isOwnPostReaction?: boolean;
 }
 
 interface ApprovalStats {
@@ -320,12 +322,16 @@ function CommentCard({
 function PostedCard({ item }: { item: PostedItem }) {
   const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
   const timeAgo = getTimeAgo(item.postedAt);
+  const isOwnPost = item.isOwnPostReply || item.isOwnPostReaction;
   
   // Type label with icon
   const getTypeInfo = () => {
     if (item.type === 'post') {
       return { label: '📝 Post', color: 'bg-blue-100 text-blue-700' };
     } else if (item.type === 'comment') {
+      if (item.isOwnPostReply) {
+        return { label: '↩️ Reply', color: 'bg-violet-100 text-violet-700' };
+      }
       return { label: '💬 Comment', color: 'bg-amber-100 text-amber-700' };
     } else if (item.type === 'reaction') {
       if (item.reactionType === 'like') {
@@ -343,7 +349,9 @@ function PostedCard({ item }: { item: PostedItem }) {
   const bgColor = item.type === 'post' 
     ? 'bg-blue-50/80 border-blue-200/50' 
     : item.type === 'comment'
-    ? 'bg-amber-50/80 border-amber-200/50'
+    ? item.isOwnPostReply 
+      ? 'bg-violet-50/80 border-violet-200/50'
+      : 'bg-amber-50/80 border-amber-200/50'
     : item.reactionType === 'like'
     ? 'bg-emerald-50/80 border-emerald-200/50'
     : 'bg-red-50/80 border-red-200/50';
@@ -359,6 +367,11 @@ function PostedCard({ item }: { item: PostedItem }) {
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeInfo.color}`}>
                 ✓ {typeInfo.label}
               </span>
+              {isOwnPost && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700">
+                  Own Post
+                </span>
+              )}
               {item.type === 'post' && (
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
                   m/{item.submolt}

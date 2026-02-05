@@ -14,22 +14,18 @@
  * - Per month: ~$7.20
  */
 
-import WebSocket from 'ws';
 import { queueCommentForApproval, queueReactionForApproval } from './approval-queue.js';
 import { recall } from '../memory-system/index.js';
 import { loadSoulMd } from '../soul-loader.js';
+import { simpleLLMCall, isSimpleLLMAvailable } from './simple-llm.js';
 import type { Emotion } from './types.js';
 
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
-const GATEWAY_HOST = '127.0.0.1';
-const GATEWAY_PORT = 18789;
-const GATEWAY_TOKEN = 'localdev';
 
 const MAX_COMMENTS = 5;
 const MAX_REACTIONS = 5;
 const MAX_OWN_REPLIES = 5;
 const MAX_OWN_REACTIONS = 5;
-const LLM_TIMEOUT_MS = 30000;
 const BROWSE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface MoltbookPost {
@@ -169,20 +165,27 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
 
     const data = await response.json();
     console.log('[MoltbookBrowser] Agent profile response keys:', Object.keys(data));
+    console.log('[MoltbookBrowser] recentPosts exists:', !!data.recentPosts, 'length:', data.recentPosts?.length);
     
     // Try to find posts in various possible locations
     let posts: MoltbookPost[] = [];
     
-    if (data.agent?.posts) {
+    if (data.recentPosts && Array.isArray(data.recentPosts)) {
+      posts = data.recentPosts;
+      console.log('[MoltbookBrowser] Found posts in data.recentPosts, count:', posts.length);
+    } else if (data.agent?.posts && Array.isArray(data.agent.posts)) {
       posts = data.agent.posts;
       console.log('[MoltbookBrowser] Found posts in data.agent.posts');
-    } else if (data.agent?.recent_posts) {
+    } else if (data.agent?.recent_posts && Array.isArray(data.agent.recent_posts)) {
       posts = data.agent.recent_posts;
       console.log('[MoltbookBrowser] Found posts in data.agent.recent_posts');
-    } else if (data.posts) {
+    } else if (data.agent?.recentPosts && Array.isArray(data.agent.recentPosts)) {
+      posts = data.agent.recentPosts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.recentPosts');
+    } else if (data.posts && Array.isArray(data.posts)) {
       posts = data.posts;
       console.log('[MoltbookBrowser] Found posts in data.posts');
-    } else if (data.recent_posts) {
+    } else if (data.recent_posts && Array.isArray(data.recent_posts)) {
       posts = data.recent_posts;
       console.log('[MoltbookBrowser] Found posts in data.recent_posts');
     } else if (Array.isArray(data)) {
@@ -190,6 +193,11 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
       console.log('[MoltbookBrowser] Response is array of posts');
     } else {
       console.log('[MoltbookBrowser] Could not find posts. Full response:', JSON.stringify(data).substring(0, 500));
+    }
+    
+    // If posts is still empty but recentPosts exists, it might be empty array from API
+    if (posts.length === 0) {
+      console.log('[MoltbookBrowser] No posts found in profile (agent may not have posted yet)');
     }
     
     // Sort by createdAt descending and take latest 5
@@ -266,169 +274,13 @@ DO NOT:
 - Be negative without adding value`;
 }
 
-async function generateWithLLM(prompt: string, soul: string, _maxTokens: number = 100): Promise<string | null> {
-  return new Promise((resolve) => {
-    let ws: WebSocket | null = null;
-    let responseBuffer = '';
-    let resolved = false;
-    let connected = false;
-    const requestId = `llm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        console.log(`[MoltbookBrowser] LLM timeout after ${LLM_TIMEOUT_MS}ms, connected: ${connected}, buffer: "${responseBuffer.substring(0, 50)}"`);
-        ws?.close();
-        resolve(responseBuffer ? cleanComment(responseBuffer) : null);
-      }
-    }, LLM_TIMEOUT_MS);
-    
-    try {
-      console.log(`[MoltbookBrowser] Connecting to gateway ws://${GATEWAY_HOST}:${GATEWAY_PORT}...`);
-      ws = new WebSocket(`ws://${GATEWAY_HOST}:${GATEWAY_PORT}`);
-      
-      ws.on('open', () => {
-        console.log(`[MoltbookBrowser] WebSocket connected, sending connect frame...`);
-        const connectFrame = {
-          type: 'req',
-          id: `connect-${requestId}`,
-          method: 'connect',
-          params: {
-            minProtocol: 3,
-            maxProtocol: 3,
-            client: {
-              id: 'webchat-ui',
-              displayName: 'Doraemon Moltbook Browser',
-              version: '1.0.0',
-              platform: 'electron',
-              mode: 'webchat',
-            },
-            role: 'operator',
-            scopes: ['operator.admin'],
-            caps: ['chat.events'],
-            auth: { token: GATEWAY_TOKEN },
-          },
-        };
-        ws!.send(JSON.stringify(connectFrame));
-      });
-      
-      ws.on('message', (data) => {
-        try {
-          const msg = JSON.parse(data.toString());
-          
-          if (msg.type === 'res' && msg.id === `connect-${requestId}`) {
-            if (msg.ok) {
-              connected = true;
-              console.log(`[MoltbookBrowser] Gateway connected, sending chat request...`);
-              const chatFrame = {
-                type: 'req',
-                id: requestId,
-                method: 'chat.send',
-                params: {
-                  sessionKey: `moltbook-${Date.now()}`,
-                  message: `${soul}\n\n---\n\n${prompt}`,
-                  deliver: true,
-                  idempotencyKey: requestId,
-                },
-              };
-              ws!.send(JSON.stringify(chatFrame));
-            } else {
-              console.error(`[MoltbookBrowser] Gateway connect failed:`, msg.error || msg);
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                resolve(null);
-              }
-            }
-          }
-          
-          if (msg.type === 'event' && msg.event === 'chat') {
-            const payload = msg.payload as { state?: string; message?: unknown } | undefined;
-            
-            if (payload?.message) {
-              // Extract text from message object (can be string or content blocks)
-              const message = payload.message as Record<string, unknown>;
-              let text: string | null = null;
-              
-              if (typeof message.content === 'string') {
-                text = message.content;
-              } else if (Array.isArray(message.content)) {
-                const parts = (message.content as Array<{ type?: string; text?: string }>)
-                  .filter(p => p.type === 'text' && typeof p.text === 'string')
-                  .map(p => p.text);
-                text = parts.join('\n');
-              } else if (typeof message.text === 'string') {
-                text = message.text;
-              }
-              
-              if (text) {
-                responseBuffer = text;
-                console.log(`[MoltbookBrowser] Got response chunk: "${text.substring(0, 50)}..."`);
-              }
-            }
-            
-            if (payload?.state === 'final') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                console.log(`[MoltbookBrowser] LLM response complete: "${responseBuffer.substring(0, 50)}..."`);
-                resolve(responseBuffer.trim());
-              }
-            } else if (payload?.state === 'aborted' || payload?.state === 'error') {
-              if (!resolved) {
-                resolved = true;
-                clearTimeout(timeout);
-                ws?.close();
-                console.log(`[MoltbookBrowser] LLM ${payload.state}: buffer="${responseBuffer.substring(0, 50)}"`);
-                resolve(responseBuffer.trim() || null);
-              }
-            }
-          }
-          
-          if (msg.type === 'res' && msg.id === requestId) {
-            if (msg.error) {
-              console.error(`[MoltbookBrowser] Chat error:`, msg.error);
-            }
-            if (!resolved && responseBuffer) {
-              resolved = true;
-              clearTimeout(timeout);
-              ws?.close();
-              resolve(responseBuffer.trim());
-            }
-          }
-        } catch (e) {
-          console.error(`[MoltbookBrowser] Message parse error:`, e);
-        }
-      });
-      
-      ws.on('error', (err) => {
-        console.error(`[MoltbookBrowser] WebSocket error:`, err.message || err);
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(null);
-        }
-      });
-      
-      ws.on('close', (code, reason) => {
-        console.log(`[MoltbookBrowser] WebSocket closed: code=${code}, reason=${reason?.toString() || 'none'}`);
-        if (!resolved && responseBuffer) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(responseBuffer.trim());
-        }
-      });
-      
-    } catch {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timeout);
-        resolve(null);
-      }
-    }
-  });
+async function generateWithLLM(prompt: string, soul: string, maxTokens: number = 100): Promise<string | null> {
+  if (!isSimpleLLMAvailable()) {
+    console.log('[MoltbookBrowser] No ANTHROPIC_API_KEY, cannot generate');
+    return null;
+  }
+  
+  return simpleLLMCall(soul, prompt, maxTokens);
 }
 
 function buildCommentPrompt(

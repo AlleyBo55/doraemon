@@ -3,6 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import { config as dotenvConfig } from 'dotenv';
+import { patchConsole } from './utils/sanitize-log.js';
+
+// Sanitize all console output (removes paths, API keys, etc.)
+patchConsole();
+
 import {
   checkNode,
   checkOpenClawInstalled,

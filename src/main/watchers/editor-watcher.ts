@@ -4,6 +4,7 @@ import { join, basename, extname, resolve } from 'path';
 import { homedir } from 'os';
 import { BrowserWindow } from 'electron';
 import { codingActivityBuffer } from '../experience-system/coding-activity-buffer.js';
+import { sanitizePath } from '../utils/sanitize-log.js';
 
 export type EditorActivity = {
   editor: 'vscode' | 'kiro' | 'antigravity' | 'unknown';

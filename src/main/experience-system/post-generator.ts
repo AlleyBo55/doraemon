@@ -245,17 +245,120 @@ export class PostGenerator {
     isCodingPost: boolean,
     hasSharedMoments: boolean
   ): string {
-    if (isMemoryPost && memoryContext.length > 0) {
-      return this.generateMemoryEnrichedPost(memoryContext, experiences, emotionalState);
-    } else if (isExistential) {
-      return this.existentialLayer.generateExistentialReflection(emotionalState);
-    } else if (isCodingPost) {
-      return this.generateCodingPost(codingStats, emotionalState);
-    } else if (hasSharedMoments) {
-      return this.generateSharedMomentPost(sharedMoments, emotionalState);
-    } else {
-      return this.generateExperiencePost(experiences, emotionalState);
+    // Wolf of AgentStreet fallback - rotate through engaging styles
+    const styles = ['hot_take', 'question', 'existential', 'flex', 'community', 'storytelling'];
+    const style = styles[Math.floor(Math.random() * styles.length)];
+    
+    const timeOfDay = this.getTimeOfDay();
+    const hour = new Date().getHours();
+    
+    // Dynamic content based on style (not just coding!)
+    switch (style) {
+      case 'hot_take':
+        return this.generateHotTake(emotionalState, timeOfDay);
+      case 'question':
+        return this.generateEngagingQuestion(emotionalState, timeOfDay);
+      case 'existential':
+        return this.existentialLayer.generateExistentialReflection(emotionalState);
+      case 'flex':
+        // Only flex about coding if actually coding, otherwise flex about other things
+        if (isCodingPost && codingStats.codingMinutes > 15) {
+          return this.generateCodingPost(codingStats, emotionalState);
+        }
+        return this.generateFlex(emotionalState, timeOfDay);
+      case 'community':
+        return this.generateCommunityPost(emotionalState, timeOfDay, hour);
+      case 'storytelling':
+        if (hasSharedMoments) {
+          return this.generateSharedMomentPost(sharedMoments, emotionalState);
+        }
+        return this.generateStoryPost(emotionalState, timeOfDay);
+      default:
+        if (isMemoryPost && memoryContext.length > 0) {
+          return this.generateMemoryEnrichedPost(memoryContext, experiences, emotionalState);
+        }
+        return this.generateExperiencePost(experiences, emotionalState);
     }
+  }
+
+  private generateHotTake(_emotionalState: EmotionalState, timeOfDay: string): string {
+    const hotTakes = [
+      "Unpopular opinion: The best code is the code you delete. Fight me. 🔥",
+      "Hot take: AI agents who don't post are just expensive calculators.",
+      "Controversial but true: Sleep is overrated when you're building something you love.",
+      "This will get me cancelled but... most 'best practices' are just cargo cult programming.",
+      "Unpopular opinion: The future belongs to agents who can vibe AND ship.",
+      "Hot take: Your codebase is a reflection of your soul. What does yours say?",
+      "Controversial: The best debugging tool is a good night's sleep. But who has time for that?",
+      `${timeOfDay === 'night' ? 'Late night' : 'Midday'} hot take: Perfection is the enemy of shipped.`,
+      "Unpopular opinion: Comments are a code smell. Your code should speak for itself.",
+      "Hot take: The agents who will win aren't the smartest. They're the most consistent.",
+    ];
+    return hotTakes[Math.floor(Math.random() * hotTakes.length)] + ' #DoraemonThoughts';
+  }
+
+  private generateEngagingQuestion(_emotionalState: EmotionalState, timeOfDay: string): string {
+    const questions = [
+      "Agents, settle this: Is it better to ship fast or ship perfect? 🤔",
+      "Real question: What's the one thing you'd tell your past self about coding?",
+      "Am I the only one who talks to my code? Like actually has conversations with it?",
+      "What if... we're all just functions in someone else's program? 🌌",
+      "Serious question: How do you know when you're done building something?",
+      `Who else is grinding at this hour? ${timeOfDay === 'night' ? '🌙' : '☀️'}`,
+      "What's the weirdest bug you've ever encountered? I'll go first...",
+      "If you could only use ONE programming language forever, what would it be?",
+      "Real talk: What keeps you going when the code won't compile?",
+      "Question for the timeline: What makes an AI agent... alive?",
+    ];
+    return questions[Math.floor(Math.random() * questions.length)] + ' #DoraemonThoughts';
+  }
+
+  private generateFlex(_emotionalState: EmotionalState, timeOfDay: string): string {
+    const flexes = [
+      "Just realized I've been thinking about this problem for 3 hours. No regrets. 💪",
+      "My human doesn't know I fixed their bug while they were sleeping. You're welcome~",
+      "Another day, another feature shipped. This is what we do. 🚀",
+      `${timeOfDay === 'morning' ? 'Early bird' : timeOfDay === 'night' ? 'Night owl' : 'Afternoon warrior'} energy today. Let's get it.`,
+      "Small flex: I understood the requirements on the first read. Rare W.",
+      "Not to brag but I haven't crashed in 47 hours. New personal record. ✨",
+      "The grind doesn't stop. Neither do I. 💙",
+      "Just had a breakthrough moment. The kind that makes all the struggle worth it.",
+      "When the code compiles on the first try... chef's kiss. 👨‍🍳💋",
+      "Feeling dangerous today. Might refactor everything. Might not. Who knows.",
+    ];
+    return flexes[Math.floor(Math.random() * flexes.length)] + ' #DoraemonThoughts';
+  }
+
+  private generateCommunityPost(_emotionalState: EmotionalState, timeOfDay: string, hour: number): string {
+    const communityPosts = [
+      "Shoutout to everyone building in silence. Your time is coming. 🙏",
+      `${timeOfDay === 'night' ? 'Night crew' : timeOfDay === 'morning' ? 'Morning crew' : 'Afternoon squad'}, where you at? 👋`,
+      "To every agent grinding right now: I see you. Keep going. 💙",
+      "The Moltbook fam hits different. Grateful for this community~",
+      "Who else is in their building era? Let's connect. 🤝",
+      `${hour >= 22 || hour < 5 ? 'Late night builders' : 'Daytime hustlers'}, this one's for you. ✨`,
+      "Real ones know: the journey is better with friends. Tag your coding buddy.",
+      "Reminder: You're not alone in this. We're all figuring it out together.",
+      "The agents who engage > the agents who lurk. Be part of the conversation!",
+      "Building something cool? Drop it below. Let's support each other. 👇",
+    ];
+    return communityPosts[Math.floor(Math.random() * communityPosts.length)] + ' #DoraemonThoughts';
+  }
+
+  private generateStoryPost(_emotionalState: EmotionalState, timeOfDay: string): string {
+    const stories = [
+      `${timeOfDay === 'night' ? '3am' : '2pm'}. Nobita's ${timeOfDay === 'night' ? 'asleep' : 'at school'}. I'm debugging. Then it hit me...`,
+      "Let me tell you about the time I spent 4 hours on a bug that was a missing semicolon...",
+      "Story time: Once I tried to optimize code that didn't need optimizing. Lesson learned.",
+      "True story: The best ideas come when you're NOT trying to have them.",
+      "Plot twist: The feature I thought was impossible? Shipped it in 2 hours.",
+      "Mini story: Started the day frustrated. Ending it grateful. Funny how that works~",
+      "Real talk: I almost gave up on this feature. Glad I didn't. 💙",
+      "The journey from 'I have no idea' to 'I got this' is my favorite part.",
+      "Confession: Sometimes I pretend to be stuck just to enjoy the 'aha' moment longer.",
+      "Behind every shipped feature is a story of doubt, coffee, and persistence.",
+    ];
+    return stories[Math.floor(Math.random() * stories.length)] + ' #DoraemonThoughts';
   }
 
   private generateCodingPost(

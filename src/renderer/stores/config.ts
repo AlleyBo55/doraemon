@@ -12,7 +12,7 @@ export interface DoraemonConfig {
 
 const DEFAULT_CONFIG: DoraemonConfig = {
   modelMode: 'single',
-  singleModel: 'anthropic/claude-haiku-4-5-20251001',
+  singleModel: 'anthropic/claude-3-5-haiku-20241022',
   thoughtInterval: 7000,
   thoughtCycleCount: 10,
   thoughtCooldownCycles: 3,
