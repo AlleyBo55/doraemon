@@ -47,10 +47,16 @@ interface MoltbookPost {
 interface MoltbookComment {
   id: string;
   content: string;
-  author: string;
+  author: string | { username?: string; name?: string; id?: string };
   upvotes: number;
   createdAt: string;
   parentId?: string;
+}
+
+function getAuthorName(author: string | { username?: string; name?: string; id?: string } | undefined): string {
+  if (!author) return 'unknown';
+  if (typeof author === 'string') return author;
+  return author.username || author.name || author.id || 'unknown';
 }
 
 interface BrowseStats {
@@ -144,7 +150,8 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
   if (!apiKey || !username) return [];
 
   try {
-    const response = await fetch(`${MOLTBOOK_BASE}/users/${username}/posts?sort=new&limit=${limit}`, {
+    // Fetch agent profile which includes posts
+    const response = await fetch(`${MOLTBOOK_BASE}/agents/profile?name=${encodeURIComponent(username)}`, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -156,10 +163,25 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
       return [];
     }
 
-    const data = await response.json() as { success: boolean; posts?: MoltbookPost[]; data?: MoltbookPost[] };
-    const posts = data.posts || data.data || [];
-    console.log(`[MoltbookBrowser] Fetched ${posts.length} own posts for @${username}`);
-    return data.success ? posts : [];
+    const data = await response.json() as { 
+      success?: boolean; 
+      agent?: { 
+        posts?: MoltbookPost[];
+        recent_posts?: MoltbookPost[];
+      };
+      posts?: MoltbookPost[];
+    };
+    
+    // Extract posts from agent profile - try different possible structures
+    const posts = data.agent?.posts || data.agent?.recent_posts || data.posts || [];
+    
+    // Sort by createdAt descending and take latest 5
+    const sortedPosts = [...posts]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit);
+    
+    console.log(`[MoltbookBrowser] Fetched ${sortedPosts.length} own posts for @${username}`);
+    return sortedPosts;
   } catch (err) {
     console.error('[MoltbookBrowser] Own posts fetch error:', err);
     stats.errors++;
@@ -395,7 +417,7 @@ function buildCommentPrompt(
   parts.push(`Submolt: ${post.submolt}`);
   
   if (replyToComment) {
-    parts.push(`\nREPLYING TO COMMENT BY @${replyToComment.author}:`);
+    parts.push(`\nREPLYING TO COMMENT BY @${getAuthorName(replyToComment.author)}:`);
     parts.push(`"${replyToComment.content.substring(0, 200)}"`);
     parts.push(`\nWrite a reply to this specific comment, not the post.`);
   }
@@ -460,7 +482,7 @@ function buildReactionPrompt(
   parts.push(`Content: ${post.content.substring(0, 150)}`);
   
   parts.push(`\nCOMMENT TO REACT TO:`);
-  parts.push(`Author: @${comment.author}`);
+  parts.push(`Author: @${getAuthorName(comment.author)}`);
   parts.push(`Content: "${comment.content}"`);
   parts.push(`Upvotes: ${comment.upvotes}`);
   
@@ -558,7 +580,7 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
     if (comments.length === 0) continue;
     
     // Filter out own comments
-    const otherComments = comments.filter(c => c.author.toLowerCase() !== username.toLowerCase());
+    const otherComments = comments.filter(c => getAuthorName(c.author).toLowerCase() !== username.toLowerCase());
     if (otherComments.length === 0) continue;
     
     console.log(`[MoltbookBrowser] Found ${otherComments.length} comments on "${post.title.substring(0, 30)}..."`);
@@ -581,12 +603,12 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
             postAuthor: username,
             postUrl,
             parentCommentId: comment.id,
-            parentCommentAuthor: comment.author,
+            parentCommentAuthor: getAuthorName(comment.author),
             parentCommentContent: comment.content.substring(0, 150),
             isOwnPostReply: true,
           });
           repliesQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued reply to @${comment.author}: "${reply.substring(0, 50)}..."`);
+          console.log(`[MoltbookBrowser] ✓ Queued reply to @${getAuthorName(comment.author)}: "${reply.substring(0, 50)}..."`);
         }
         
         await delay(500);
@@ -604,13 +626,13 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
           
           queueReactionForApproval(decision, comment.id, emotion, {
             commentContent: comment.content,
-            commentAuthor: comment.author,
+            commentAuthor: getAuthorName(comment.author),
             postTitle: post.title,
             postUrl,
             isOwnPostReaction: true,
           });
           reactionsQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment on own post`);
+          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment on own post`);
         }
         
         await delay(300);
@@ -633,7 +655,7 @@ function buildOwnPostReplyPrompt(
   parts.push(`Title: ${post.title}`);
   parts.push(`Content: ${post.content.substring(0, 200)}`);
   
-  parts.push(`\nCOMMENT FROM @${comment.author}:`);
+  parts.push(`\nCOMMENT FROM @${getAuthorName(comment.author)}:`);
   parts.push(`"${comment.content}"`);
   
   parts.push(`\nYour current emotion: ${emotion}`);
@@ -645,7 +667,7 @@ function buildOwnPostReplyPrompt(
     }
   }
   
-  parts.push(`\nWrite a warm, personal reply to @${comment.author}. They commented on YOUR post, so be appreciative and engaging.`);
+  parts.push(`\nWrite a warm, personal reply to @${getAuthorName(comment.author)}. They commented on YOUR post, so be appreciative and engaging.`);
   
   return parts.join('\n');
 }
@@ -713,7 +735,7 @@ async function browseAndEngage(): Promise<void> {
         postAuthor: post.author,
         postUrl,
         parentCommentId,
-        parentCommentAuthor: replyToComment?.author,
+        parentCommentAuthor: replyToComment ? getAuthorName(replyToComment.author) : undefined,
         parentCommentContent: replyToComment?.content.substring(0, 150),
       });
       commentsQueued++;
@@ -747,12 +769,12 @@ async function browseAndEngage(): Promise<void> {
         
         queueReactionForApproval(decision, comment.id, emotion, {
           commentContent: comment.content,
-          commentAuthor: comment.author,
+          commentAuthor: getAuthorName(comment.author),
           postTitle: post.title,
           postUrl,
         });
         reactionsQueued++;
-        console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${comment.author}'s comment`);
+        console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment`);
       }
       
       await delay(300);
