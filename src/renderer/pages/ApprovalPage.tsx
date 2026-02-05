@@ -16,6 +16,7 @@ interface PostContext {
   parentCommentId?: string;
   parentCommentAuthor?: string;
   parentCommentContent?: string;
+  isOwnPostReply?: boolean;
 }
 
 interface ReactionContext {
@@ -25,6 +26,7 @@ interface ReactionContext {
   commentAuthor: string;
   postTitle: string;
   postUrl: string;
+  isOwnPostReaction?: boolean;
 }
 
 interface PendingItem {
@@ -229,6 +231,7 @@ function CommentCard({
   const emoji = emotionEmoji[item.emotion] || emotionEmoji.default;
   const timeAgo = getTimeAgo(item.timestamp);
   const ctx = item.postContext;
+  const isOwnPost = ctx?.isOwnPostReply;
 
   return (
     <div className={`
@@ -241,8 +244,17 @@ function CommentCard({
         {ctx && (
           <div className="mb-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium text-slate-500">Replying to post by</span>
-              <span className="text-xs font-semibold text-slate-700">@{ctx.postAuthor}</span>
+              <span className="text-xs font-medium text-slate-500">
+                {isOwnPost ? 'Your post' : 'Replying to post by'}
+              </span>
+              {!isOwnPost && (
+                <span className="text-xs font-semibold text-slate-700">@{ctx.postAuthor}</span>
+              )}
+              {isOwnPost && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700">
+                  Own Post
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-600 font-medium mb-1">{ctx.postTitle}</p>
             <p className={`text-xs text-slate-500 ${isExpanded ? '' : 'line-clamp-2'}`}>
@@ -265,8 +277,10 @@ function CommentCard({
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                {ctx?.parentCommentAuthor ? 'Reply' : 'Comment'}
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                isOwnPost ? 'bg-violet-100 text-violet-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {isOwnPost ? '↩️ Reply' : ctx?.parentCommentAuthor ? 'Reply' : 'Comment'}
               </span>
               <span className="text-xs text-slate-400">{timeAgo}</span>
             </div>
@@ -291,7 +305,9 @@ function CommentCard({
           </button>
           <button
             onClick={onApprove}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 shadow-sm hover:shadow transition-all duration-150"
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium text-white shadow-sm hover:shadow transition-all duration-150 ${
+              isOwnPost ? 'bg-violet-500 hover:bg-violet-600' : 'bg-amber-500 hover:bg-amber-600'
+            }`}
           >
             Approve
           </button>
@@ -389,6 +405,7 @@ function ReactionCard({
   const timeAgo = getTimeAgo(item.timestamp);
   const ctx = item.reactionContext;
   const isLike = ctx?.reactionType === 'like';
+  const isOwnPost = ctx?.isOwnPostReaction;
 
   return (
     <div className={`
@@ -403,6 +420,11 @@ function ReactionCard({
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-medium text-slate-500">Comment by</span>
               <span className="text-xs font-semibold text-slate-700">@{ctx.commentAuthor}</span>
+              {isOwnPost && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700">
+                  On Your Post
+                </span>
+              )}
             </div>
             <p className={`text-xs text-slate-600 ${isExpanded ? '' : 'line-clamp-2'}`} onClick={onToggle}>
               "{ctx.commentContent}"
