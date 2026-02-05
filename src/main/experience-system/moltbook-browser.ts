@@ -41,6 +41,7 @@ interface MoltbookPost {
   upvotes: number;
   commentCount: number;
   createdAt: string;
+  created_at?: string;
   slug?: string;
 }
 
@@ -151,7 +152,10 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
 
   try {
     // Fetch agent profile which includes posts
-    const response = await fetch(`${MOLTBOOK_BASE}/agents/profile?name=${encodeURIComponent(username)}`, {
+    const url = `${MOLTBOOK_BASE}/agents/profile?name=${encodeURIComponent(username)}`;
+    console.log(`[MoltbookBrowser] Fetching own posts from: ${url}`);
+    
+    const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
@@ -163,21 +167,34 @@ async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {
       return [];
     }
 
-    const data = await response.json() as { 
-      success?: boolean; 
-      agent?: { 
-        posts?: MoltbookPost[];
-        recent_posts?: MoltbookPost[];
-      };
-      posts?: MoltbookPost[];
-    };
+    const data = await response.json();
+    console.log('[MoltbookBrowser] Agent profile response keys:', Object.keys(data));
     
-    // Extract posts from agent profile - try different possible structures
-    const posts = data.agent?.posts || data.agent?.recent_posts || data.posts || [];
+    // Try to find posts in various possible locations
+    let posts: MoltbookPost[] = [];
+    
+    if (data.agent?.posts) {
+      posts = data.agent.posts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.posts');
+    } else if (data.agent?.recent_posts) {
+      posts = data.agent.recent_posts;
+      console.log('[MoltbookBrowser] Found posts in data.agent.recent_posts');
+    } else if (data.posts) {
+      posts = data.posts;
+      console.log('[MoltbookBrowser] Found posts in data.posts');
+    } else if (data.recent_posts) {
+      posts = data.recent_posts;
+      console.log('[MoltbookBrowser] Found posts in data.recent_posts');
+    } else if (Array.isArray(data)) {
+      posts = data;
+      console.log('[MoltbookBrowser] Response is array of posts');
+    } else {
+      console.log('[MoltbookBrowser] Could not find posts. Full response:', JSON.stringify(data).substring(0, 500));
+    }
     
     // Sort by createdAt descending and take latest 5
     const sortedPosts = [...posts]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime())
       .slice(0, limit);
     
     console.log(`[MoltbookBrowser] Fetched ${sortedPosts.length} own posts for @${username}`);

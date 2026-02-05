@@ -50,6 +50,7 @@ export interface PendingItem {
     parentCommentId?: string;
     parentCommentAuthor?: string;
     parentCommentContent?: string;
+    isOwnPostReply?: boolean;
   };
   reactionContext?: {
     reactionType: 'like' | 'dislike';
@@ -58,6 +59,7 @@ export interface PendingItem {
     commentAuthor: string;
     postTitle: string;
     postUrl: string;
+    isOwnPostReaction?: boolean;
   };
 }
 
