@@ -244,6 +244,13 @@ export {
   resetMoltbookBrowserStats,
 } from './moltbook-browser.js';
 export {
+  loadInteractionTracker,
+  shouldCommentOnPost,
+  hasReactedToComment,
+  shouldReplyToComment,
+  getInteractionStats,
+} from './interaction-tracker.js';
+export {
   categorizeToSubmolt,
   getSubmoltForPost,
   getAllSubmolts,

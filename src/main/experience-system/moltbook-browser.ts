@@ -19,6 +19,17 @@ import { recall } from '../memory-system/index.js';
 import { loadSoulMd } from '../soul-loader.js';
 import { simpleLLMCall, isSimpleLLMAvailable } from './simple-llm.js';
 import type { Emotion } from './types.js';
+import {
+  loadInteractionTracker,
+  shouldCommentOnPost,
+  hasReactedToComment,
+  shouldReplyToComment,
+  getLastSeenCommentId,
+  recordComment,
+  recordReaction,
+  recordReply,
+  getInteractionStats,
+} from './interaction-tracker.js';
 
 const MOLTBOOK_BASE = 'https://www.moltbook.com/api/v1';
 
@@ -64,6 +75,7 @@ interface BrowseStats {
   errors: number;
   ownRepliesGenerated: number;
   ownReactionsGenerated: number;
+  skippedAlreadyInteracted: number;
 }
 
 let browseInterval: ReturnType<typeof setInterval> | null = null;
@@ -75,6 +87,7 @@ let stats: BrowseStats = {
   errors: 0,
   ownRepliesGenerated: 0,
   ownReactionsGenerated: 0,
+  skippedAlreadyInteracted: 0,
 };
 
 function getApiKey(): string | null {
@@ -479,56 +492,73 @@ async function browseOwnPosts(): Promise<{ repliesQueued: number; reactionsQueue
     console.log(`[MoltbookBrowser] Found ${otherComments.length} comments on "${post.title.substring(0, 30)}..."`);
     
     for (const comment of otherComments) {
+      // Check if this is a new comment we haven't seen before
+      const lastSeenId = getLastSeenCommentId(post.id);
+      const isNewComment = !lastSeenId || comment.id !== lastSeenId;
+      
       // Generate reply
       if (repliesQueued < MAX_OWN_REPLIES) {
-        const memories = getRelevantMemories(comment.content);
-        const emotion = getEmotionFromContent(comment.content);
-        
-        const prompt = buildOwnPostReplyPrompt(post, comment, memories, emotion);
-        const reply = await generateWithLLM(prompt, getReplySoul(), 100);
-        
-        if (reply && reply.length > 10) {
-          const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+        // Only reply if it's a new comment or we haven't replied to this one
+        if (!shouldReplyToComment(post.id, comment.id, isNewComment)) {
+          console.log(`[MoltbookBrowser] Skipping reply to @${getAuthorName(comment.author)} - already replied, no new activity`);
+          stats.skippedAlreadyInteracted++;
+        } else {
+          const memories = getRelevantMemories(comment.content);
+          const emotion = getEmotionFromContent(comment.content);
           
-          queueCommentForApproval(cleanComment(reply), emotion, post.id, {
-            postTitle: post.title,
-            postContent: post.content.substring(0, 200),
-            postAuthor: username,
-            postUrl,
-            parentCommentId: comment.id,
-            parentCommentAuthor: getAuthorName(comment.author),
-            parentCommentContent: comment.content.substring(0, 150),
-            isOwnPostReply: true,
-          });
-          repliesQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued reply to @${getAuthorName(comment.author)}: "${reply.substring(0, 50)}..."`);
+          const prompt = buildOwnPostReplyPrompt(post, comment, memories, emotion);
+          const reply = await generateWithLLM(prompt, getReplySoul(), 100);
+          
+          if (reply && reply.length > 10) {
+            const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+            
+            queueCommentForApproval(cleanComment(reply), emotion, post.id, {
+              postTitle: post.title,
+              postContent: post.content.substring(0, 200),
+              postAuthor: username,
+              postUrl,
+              parentCommentId: comment.id,
+              parentCommentAuthor: getAuthorName(comment.author),
+              parentCommentContent: comment.content.substring(0, 150),
+              isOwnPostReply: true,
+            });
+            recordReply(post.id, comment.id);
+            repliesQueued++;
+            console.log(`[MoltbookBrowser] ✓ Queued reply to @${getAuthorName(comment.author)}: "${reply.substring(0, 50)}..."`);
+          }
+          
+          await delay(500);
         }
-        
-        await delay(500);
       }
       
-      // Generate reaction
+      // Generate reaction - reactions are one-time only
       if (reactionsQueued < MAX_OWN_REACTIONS) {
-        const memories = getRelevantMemories(comment.content);
-        const emotion = getEmotionFromContent(comment.content);
-        
-        const decision = await decideReaction(comment, post, memories, emotion);
-        
-        if (decision !== 'skip') {
-          const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+        if (hasReactedToComment(comment.id)) {
+          console.log(`[MoltbookBrowser] Skipping reaction to @${getAuthorName(comment.author)} - already reacted`);
+          stats.skippedAlreadyInteracted++;
+        } else {
+          const memories = getRelevantMemories(comment.content);
+          const emotion = getEmotionFromContent(comment.content);
           
-          queueReactionForApproval(decision, comment.id, emotion, {
-            commentContent: comment.content,
-            commentAuthor: getAuthorName(comment.author),
-            postTitle: post.title,
-            postUrl,
-            isOwnPostReaction: true,
-          });
-          reactionsQueued++;
-          console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment on own post`);
+          const decision = await decideReaction(comment, post, memories, emotion);
+          
+          if (decision !== 'skip') {
+            const postUrl = `https://www.moltbook.com/post/${post.slug || post.id}`;
+            
+            queueReactionForApproval(decision, comment.id, emotion, {
+              commentContent: comment.content,
+              commentAuthor: getAuthorName(comment.author),
+              postTitle: post.title,
+              postUrl,
+              isOwnPostReaction: true,
+            });
+            recordReaction(post.id, comment.id);
+            reactionsQueued++;
+            console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment on own post`);
+          }
+          
+          await delay(300);
         }
-        
-        await delay(300);
       }
     }
   }
@@ -595,6 +625,13 @@ async function browseAndEngage(): Promise<void> {
   for (const post of latestPosts) {
     if (commentsQueued >= MAX_COMMENTS) break;
     
+    // Check if we should engage - allows re-engagement if new comments appeared
+    if (!shouldCommentOnPost(post.id, post.commentCount)) {
+      console.log(`[MoltbookBrowser] Skipping post "${post.title.substring(0, 30)}..." - no new activity`);
+      stats.skippedAlreadyInteracted++;
+      continue;
+    }
+    
     const postContent = post.content || '';
     const postTitle = post.title || '';
     
@@ -606,13 +643,23 @@ async function browseAndEngage(): Promise<void> {
     // Try to get existing comments to reply to
     let replyToComment: MoltbookComment | undefined;
     let parentCommentId: string | undefined;
+    let latestCommentId: string | undefined;
     
     if (post.commentCount > 0) {
       const comments = await fetchPostComments(post.id);
       if (comments.length > 0) {
-        // Pick a random recent comment to reply to
-        replyToComment = comments[Math.floor(Math.random() * Math.min(comments.length, 3))];
-        parentCommentId = replyToComment.id;
+        latestCommentId = comments[0]?.id;
+        
+        // Find a comment we haven't replied to yet
+        const lastSeenId = getLastSeenCommentId(post.id);
+        const newComments = lastSeenId 
+          ? comments.filter(c => c.id !== lastSeenId)
+          : comments;
+        
+        if (newComments.length > 0) {
+          replyToComment = newComments[Math.floor(Math.random() * Math.min(newComments.length, 3))];
+          parentCommentId = replyToComment.id;
+        }
       }
     }
     
@@ -631,6 +678,7 @@ async function browseAndEngage(): Promise<void> {
         parentCommentAuthor: replyToComment ? getAuthorName(replyToComment.author) : undefined,
         parentCommentContent: replyToComment?.content.substring(0, 150),
       });
+      recordComment(post.id, post.commentCount, latestCommentId);
       commentsQueued++;
       console.log(`[MoltbookBrowser] ✓ Queued ${replyToComment ? 'reply' : 'comment'}: "${comment.substring(0, 50)}..."`);
     } else {
@@ -652,6 +700,13 @@ async function browseAndEngage(): Promise<void> {
     for (const comment of comments.slice(0, 3)) {
       if (reactionsQueued >= MAX_REACTIONS) break;
       
+      // Skip if we've already reacted to this comment
+      if (hasReactedToComment(comment.id)) {
+        console.log(`[MoltbookBrowser] Skipping comment by @${getAuthorName(comment.author)} - already reacted`);
+        stats.skippedAlreadyInteracted++;
+        continue;
+      }
+      
       const memories = getRelevantMemories(comment.content);
       const emotion = getEmotionFromContent(comment.content);
       
@@ -666,6 +721,7 @@ async function browseAndEngage(): Promise<void> {
           postTitle: post.title,
           postUrl,
         });
+        recordReaction(post.id, comment.id);
         reactionsQueued++;
         console.log(`[MoltbookBrowser] ✓ Queued ${decision} for @${getAuthorName(comment.author)}'s comment`);
       }
@@ -702,6 +758,7 @@ export function startMoltbookBrowser(): void {
     return;
   }
 
+  loadInteractionTracker();
   console.log('[MoltbookBrowser] Starting with 1-hour interval');
   
   browseAndEngage();
@@ -734,5 +791,6 @@ export function resetMoltbookBrowserStats(): void {
     errors: 0,
     ownRepliesGenerated: 0,
     ownReactionsGenerated: 0,
+    skippedAlreadyInteracted: 0,
   };
 }
