@@ -10,15 +10,9 @@
 import { BrowserWindow } from 'electron';
 import { logAuditEvent } from './audit.js';
 
-// Import browsing thoughts
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-let BROWSING_THOUGHTS: Record<string, Record<string, string[]> | string[]>;
-try {
-  BROWSING_THOUGHTS = require('../../../renderer/core/constants/browsing-thoughts.json');
-} catch {
-  BROWSING_THOUGHTS = { general: ['Browsing the web~'] };
-}
+import BROWSING_THOUGHTS_DATA from '../../renderer/core/constants/browsing-thoughts.json';
+
+const BROWSING_THOUGHTS: Record<string, Record<string, string[]> | string[]> = BROWSING_THOUGHTS_DATA;
 
 export interface BrowsingEvent {
   type: 'page_visit' | 'search' | 'tab_switch' | 'bookmark' | 'video_watch' | 'post_view';

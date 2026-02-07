@@ -58,7 +58,9 @@ async function getProcessInfo(port: number): Promise<{ pid: number | null; proce
       try {
         const { stdout: psOutput } = await execAsync(`ps -p ${pid} -o comm= 2>/dev/null || true`);
         processName = psOutput.trim();
-      } catch {}
+      } catch (err) {
+        console.error('[PortChecker] Failed to get process name:', err);
+      }
     }
   } else if (process.platform === 'win32') {
     const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
@@ -75,7 +77,9 @@ async function getProcessInfo(port: number): Promise<{ pid: number | null; proce
         const { stdout: taskOutput } = await execAsync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`);
         const match = taskOutput.match(/"([^"]+)"/);
         if (match) processName = match[1];
-      } catch {}
+      } catch (err) {
+        console.error('[PortChecker] Failed to get Windows process name:', err);
+      }
     }
   }
 

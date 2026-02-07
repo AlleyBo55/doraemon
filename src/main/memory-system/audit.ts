@@ -104,7 +104,9 @@ function rotateIfNeeded(): void {
       require('fs').renameSync(logPath, join(AUDIT_DIR, archiveName));
       lastHash = '0'.repeat(64);
     }
-  } catch {}
+  } catch (err) {
+    console.error('[Audit] Failed to rotate log:', err);
+  }
 }
 
 export function verifyAuditChain(): { valid: boolean; brokenAt?: number; error?: string } {
@@ -197,7 +199,9 @@ export function purgeOldAuditLogs(): number {
         purged++;
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error('[Audit] Failed to purge old logs:', err);
+  }
   
   return purged;
 }

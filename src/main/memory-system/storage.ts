@@ -91,8 +91,9 @@ function loadIndex(): void {
           memoryCache.set(entry.id, entry);
           loadedCount++;
         }
-      } catch {
-        failedCount++;
+  } catch (err) {
+    console.error('[MemoryStorage] Failed to decrypt entry:', err);
+    failedCount++;
       }
     }
     
@@ -104,7 +105,8 @@ function loadIndex(): void {
     } else {
       console.log(`[MemoryStorage] Loaded ${loadedCount} entries`);
     }
-  } catch {
+  } catch (err) {
+    console.error('[MemoryStorage] Failed to load entries directory:', err);
     logAuditEvent('read', 'Failed to load entries directory');
   }
 }
@@ -227,7 +229,8 @@ export function deleteEntry(id: string): boolean {
     saveIndex();
     logAuditEvent('delete', 'Entry deleted', id);
     return true;
-  } catch {
+  } catch (err) {
+    console.error('[MemoryStorage] Failed to delete entry:', err);
     logAuditEvent('delete', 'Failed to delete entry', id);
     return false;
   }
@@ -336,8 +339,8 @@ export function cleanupCorruptedEntries(): { deleted: number; remaining: number 
       try {
         unlinkSync(entryPath);
         deleted++;
-      } catch {
-        // Ignore deletion errors
+      } catch (err) {
+        console.error('[MemoryStorage] Failed to delete corrupted entry:', err);
       }
     }
   }

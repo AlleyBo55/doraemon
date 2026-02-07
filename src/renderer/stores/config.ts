@@ -8,6 +8,7 @@ export interface DoraemonConfig {
   thoughtInterval: number;
   thoughtCycleCount: number;
   thoughtCooldownCycles: number;
+  proxyUrl: string;
 }
 
 const DEFAULT_CONFIG: DoraemonConfig = {
@@ -16,6 +17,7 @@ const DEFAULT_CONFIG: DoraemonConfig = {
   thoughtInterval: 7000,
   thoughtCycleCount: 10,
   thoughtCooldownCycles: 3,
+  proxyUrl: '',
 };
 
 const config = signal<DoraemonConfig>(loadConfig());
@@ -59,6 +61,7 @@ if (typeof window !== 'undefined') {
 export const configState = {
   config: computed(() => config.value),
   modelMode: computed(() => config.value.modelMode),
+  proxyUrl: computed(() => config.value.proxyUrl),
   isMultiModel: computed(() => config.value.modelMode === 'multi'),
   isSingleModel: computed(() => config.value.modelMode === 'single'),
 };

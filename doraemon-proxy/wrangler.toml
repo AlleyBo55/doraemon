@@ -1,0 +1,20 @@
+name = "doraemon-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+MAX_REACTIONS_PER_DAY = "100"
+MAX_CHATS_PER_DAY = "20"
+MAX_REQUESTS_PER_IP_PER_HOUR = "60"
+# DEVICE_SALT — set via `wrangler secret put DEVICE_SALT`
+# ANTHROPIC_API_KEY — set via `wrangler secret put ANTHROPIC_API_KEY`
+# ADMIN_KEY — set via `wrangler secret put ADMIN_KEY`
+# ALLOWED_ORIGINS — optional, comma-separated (e.g. "app://doraemon,file://")
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "fe117f0eee9e4b32a8d9b7d774e1a804"
+
+[[kv_namespaces]]
+binding = "REQUEST_LOGS"
+id = "67bb03d3ceee43b58e68ee8cb66588dc"

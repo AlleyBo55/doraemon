@@ -54,8 +54,8 @@ function loadKeyStore(): KeyStore {
       const content = readFileSync(metadataPath, 'utf-8');
       keyStore = JSON.parse(content);
       return keyStore!;
-    } catch {
-      // Corrupted, create new
+    } catch (err) {
+      console.error('[KeyRotation] Corrupted key metadata, creating new:', err);
     }
   }
   

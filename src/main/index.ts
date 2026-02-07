@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, IpcMainEvent, protocol } from 'electron';
+import { app, BrowserWindow, screen, ipcMain, Tray, Menu, nativeImage, IpcMainEvent, protocol, net } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -19,9 +19,7 @@ import {
 } from './daemon/index.js';
 import {
   startNotificationWatcher,
-  stopNotificationWatcher,
   startEditorWatcher,
-  stopEditorWatcher,
   getEditorThought,
   getStreakMessage,
   getBreakMessage,
@@ -34,14 +32,15 @@ import {
 } from './watchers/index.js';
 import {
   startWebNotificationServer,
-  stopWebNotificationServer,
   type WebNotification,
 } from './watchers/web-notification-server.js';
 import { ExperienceSystem, experienceBridge, startMoltbookBrowser } from './experience-system/index.js';
 import { initGatewayBridge } from './memory-system/gateway-bridge.js';
-import { initConnector, learnFromExperience, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
-import { startMemoryExporter, stopMemoryExporter } from './memory-system/memory-exporter.js';
+import { initConnector, learnFromEditor, learnFromNotification } from './memory-system/connector.js';
 import { initApprovalQueue, openApprovalWindow, getPendingCount, setExperienceSystemRef } from './experience-system/approval-queue.js';
+import { startProactiveEngine, stopProactiveEngine, onCodingActivity, onChatMessage, surfaceDreamInsight } from './experience-system/proactive-engine.js';
+import { loadBond, recordInteraction } from './experience-system/bond-tracker.js';
+import { flushHabits } from './experience-system/habit-tracker.js';
 
 // Load .env file
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -215,6 +214,9 @@ function createMainWindow() {
       animation,
     });
     
+    // Feed to proactive engine + habit tracker
+    onCodingActivity(activity.language, activity.action === 'git_commit');
+    
     // Learn from editor activity (aggressive learning)
     if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
       learnFromEditor({
@@ -292,6 +294,10 @@ function createMainWindow() {
   experienceSystem.start().catch(err => {
     console.error('[Main] Experience system failed to start:', err);
   });
+
+  // Start proactive decision engine
+  loadBond();
+  startProactiveEngine();
 
   // Initialize approval queue for supervised posting
   initApprovalQueue(mainWindow);
@@ -704,6 +710,11 @@ ipcMain.handle('get-daily-summary', () => {
   return getDailySummary();
 });
 
+// Proactive engine: receive chat messages for mood/bond tracking
+ipcMain.on('proactive:chat-message', (_event: IpcMainEvent, userMessage: string) => {
+  onChatMessage(userMessage);
+});
+
 // ============================================
 // Media Feed IPC Handlers (Supervised Learning)
 // ============================================
@@ -813,15 +824,83 @@ ipcMain.handle('moltbook:reset-stats', async () => {
 });
 
 // ============================================
+// Kiro Bridge IPC Handlers
+// ============================================
+
+ipcMain.handle('kiro:init', async (_event, workspacePath?: string) => {
+  const { initKiroBridge } = await import('./ide-bridge/kiro-bridge.js');
+  return initKiroBridge(workspacePath);
+});
+
+ipcMain.handle('kiro:ask', async (_event, message: string, workspacePath?: string) => {
+  const { askKiro } = await import('./ide-bridge/kiro-bridge.js');
+  return askKiro(message, workspacePath);
+});
+
+ipcMain.handle('kiro:fix-error', async (_event, error: string, file?: string, workspacePath?: string) => {
+  const { askKiroToFix } = await import('./ide-bridge/kiro-bridge.js');
+  return askKiroToFix(error, file, workspacePath);
+});
+
+ipcMain.handle('kiro:explain', async (_event, code: string, file?: string, workspacePath?: string) => {
+  const { askKiroToExplain } = await import('./ide-bridge/kiro-bridge.js');
+  return askKiroToExplain(code, file, workspacePath);
+});
+
+ipcMain.handle('kiro:review', async (_event, file: string, workspacePath?: string) => {
+  const { askKiroToReview } = await import('./ide-bridge/kiro-bridge.js');
+  return askKiroToReview(file, workspacePath);
+});
+
+ipcMain.handle('kiro:send', async (_event, message: string, type: string, context?: object, workspacePath?: string) => {
+  const { sendToKiro } = await import('./ide-bridge/kiro-bridge.js');
+  return sendToKiro(message, type as any, context as any, workspacePath);
+});
+
+// ============================================
+// Unified IDE Bridge IPC Handlers
+// ============================================
+
+ipcMain.handle('ide:detect', async () => {
+  const { detectRunningIDE } = await import('./ide-bridge/unified-bridge.js');
+  return detectRunningIDE();
+});
+
+ipcMain.handle('ide:send', async (_event, message: string, preferredIDE?: string, workspacePath?: string) => {
+  const { sendToIDE } = await import('./ide-bridge/unified-bridge.js');
+  return sendToIDE(message, { preferredIDE: preferredIDE as any, workspacePath });
+});
+
+ipcMain.handle('ide:ask', async (_event, message: string, preferredIDE?: string, workspacePath?: string) => {
+  const { askIDE } = await import('./ide-bridge/unified-bridge.js');
+  return askIDE(message, { preferredIDE: preferredIDE as any, workspacePath });
+});
+
+ipcMain.handle('ide:fix-error', async (_event, error: string, file?: string, preferredIDE?: string, workspacePath?: string) => {
+  const { askIDEToFix } = await import('./ide-bridge/unified-bridge.js');
+  return askIDEToFix(error, file, { preferredIDE: preferredIDE as any, workspacePath });
+});
+
+ipcMain.handle('ide:explain', async (_event, code: string, preferredIDE?: string, workspacePath?: string) => {
+  const { askIDEToExplain } = await import('./ide-bridge/unified-bridge.js');
+  return askIDEToExplain(code, { preferredIDE: preferredIDE as any, workspacePath });
+});
+
+ipcMain.handle('ide:review', async (_event, file: string, preferredIDE?: string, workspacePath?: string) => {
+  const { askIDEToReview } = await import('./ide-bridge/unified-bridge.js');
+  return askIDEToReview(file, { preferredIDE: preferredIDE as any, workspacePath });
+});
+
+// ============================================
 // App Lifecycle
 // ============================================
 
 app.whenReady().then(() => {
   // Register protocol for loading local assets
-  protocol.registerFileProtocol('asset', (request, callback) => {
+  protocol.handle('asset', (request) => {
     const url = request.url.replace('asset://', '');
     const filePath = path.join(__dirname, '../../assets', url);
-    callback({ path: filePath });
+    return net.fetch(`file://${filePath}`);
   });
 
   // Check if we should skip setup (e.g., --skip-setup flag or env var)
@@ -853,6 +932,83 @@ app.whenReady().then(() => {
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
   });
+});
+
+app.on('before-quit', async () => {
+  console.log('[Main] Graceful shutdown starting...');
+
+  try {
+    const { stopNotificationWatcher } = await import('./watchers/index.js');
+    stopNotificationWatcher();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop notification watcher:', err);
+  }
+
+  try {
+    const { stopEditorWatcher } = await import('./watchers/index.js');
+    stopEditorWatcher();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop editor watcher:', err);
+  }
+
+  try {
+    const { stopWebNotificationServer } = await import('./watchers/web-notification-server.js');
+    stopWebNotificationServer();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop web notification server:', err);
+  }
+
+  try {
+    const { stopMCPServer } = await import('./mcp-server/index.js');
+    stopMCPServer();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop MCP server:', err);
+  }
+
+  try {
+    const { stopCommandWatcher } = await import('./mcp-server/command-watcher.js');
+    await stopCommandWatcher();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop command watcher:', err);
+  }
+
+  try {
+    const { closeKiroBridge } = await import('./ide-bridge/kiro-bridge.js');
+    closeKiroBridge();
+  } catch (err) {
+    console.error('[Shutdown] Failed to close Kiro bridge:', err);
+  }
+
+  try {
+    const { stopMoltbookBrowser } = await import('./experience-system/moltbook-browser.js');
+    stopMoltbookBrowser();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop Moltbook browser:', err);
+  }
+
+  if (experienceSystem) {
+    try {
+      experienceSystem.stop();
+    } catch (err) {
+      console.error('[Shutdown] Failed to stop experience system:', err);
+    }
+  }
+
+  try {
+    stopProactiveEngine();
+    flushHabits();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop proactive engine:', err);
+  }
+
+  try {
+    const { cleanup } = await import('./memory-system/connector.js');
+    cleanup();
+  } catch (err) {
+    console.error('[Shutdown] Failed to cleanup memory connector:', err);
+  }
+
+  console.log('[Main] Graceful shutdown complete');
 });
 
 app.on('window-all-closed', () => {

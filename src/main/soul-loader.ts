@@ -66,8 +66,8 @@ export function loadSoulMd(): string {
   try {
     rawSoulMd = readFileSync(soulPath, 'utf-8');
     return rawSoulMd;
-  } catch {
-    console.warn('[SoulLoader] Could not load soul.md, using defaults');
+  } catch (err) {
+    console.warn('[SoulLoader] Could not load soul.md, using defaults:', err);
     return getDefaultSoulMd();
   }
 }

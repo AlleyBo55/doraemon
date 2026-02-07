@@ -3,6 +3,7 @@ export {
   stopNotificationWatcher, 
   checkFullDiskAccess,
   requestFullDiskAccess,
+  getActiveStrategy,
   type NotificationInfo 
 } from './notification-watcher.js';
 export { 
