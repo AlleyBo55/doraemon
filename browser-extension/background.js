@@ -1,13 +1,29 @@
+/**
+ * Doraemon Browser Extension - Background Script
+ * 
+ * Handles WebSocket connection to Doraemon and routes messages.
+ * All data is sent to Doraemon's memory system for filtering.
+ */
+
 const DORAEMON_WS_URL = 'ws://localhost:18790';
-const HEARTBEAT_INTERVAL = 20000; // 20 seconds
+const HEARTBEAT_INTERVAL = 20000;
+
 const MONITORED_PATTERNS = [
   { pattern: /twitter\.com|x\.com/i, name: 'twitter' },
+  { pattern: /reddit\.com/i, name: 'reddit' },
+  { pattern: /youtube\.com|youtu\.be/i, name: 'youtube' },
+  { pattern: /github\.com/i, name: 'github' },
+  { pattern: /news\.ycombinator\.com/i, name: 'hackernews' },
+  { pattern: /techcrunch\.com|theverge\.com|wired\.com|arstechnica\.com/i, name: 'news' },
+  { pattern: /dev\.to|medium\.com/i, name: 'dev' },
+  { pattern: /manhwaz|shinigami/i, name: 'manga' },
+  { pattern: /stackoverflow\.com/i, name: 'stackoverflow' },
   { pattern: /outlook\.(office|live)\.com/i, name: 'outlook' },
   { pattern: /teams\.microsoft\.com/i, name: 'teams' },
-  { pattern: /github\.com/i, name: 'github' },
   { pattern: /web\.whatsapp\.com/i, name: 'whatsapp' },
   { pattern: /slack\.com/i, name: 'slack' },
   { pattern: /discord\.com/i, name: 'discord' },
+  { pattern: /moltbook\.com/i, name: 'moltbook' },
 ];
 
 let ws = null;
@@ -37,7 +53,7 @@ function connect() {
       ws = new WebSocket(DORAEMON_WS_URL);
       
       ws.onopen = () => {
-        console.log('[Doraemon Extension] Connected to Doraemon');
+        console.log('[Doraemon] Connected');
         isConnected = true;
         if (reconnectTimer) {
           clearInterval(reconnectTimer);
@@ -48,19 +64,17 @@ function connect() {
       };
       
       ws.onclose = () => {
-        console.log('[Doraemon Extension] Disconnected from Doraemon');
+        console.log('[Doraemon] Disconnected');
         isConnected = false;
         stopHeartbeat();
         scheduleReconnect();
       };
       
       ws.onerror = () => {
-        console.error('[Doraemon Extension] WebSocket error');
         isConnected = false;
         resolve(false);
       };
     } catch (err) {
-      console.error('[Doraemon Extension] Connection failed:', err);
       scheduleReconnect();
       resolve(false);
     }
@@ -69,21 +83,13 @@ function connect() {
 
 function startHeartbeat() {
   stopHeartbeat();
-  
-  heartbeatInterval = setInterval(async () => {
-    // Keep WebSocket alive
+  heartbeatInterval = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('[Doraemon Extension] Heartbeat ping');
+      ws.send(JSON.stringify({ type: 'ping' }));
     } else {
-      await connect();
+      connect();
     }
-    
-    // Proactively poll all monitored tabs
-    pollMonitoredTabs();
   }, HEARTBEAT_INTERVAL);
-  
-  // Initial poll
-  pollMonitoredTabs();
 }
 
 function stopHeartbeat() {
@@ -93,76 +99,68 @@ function stopHeartbeat() {
   }
 }
 
-async function pollMonitoredTabs() {
-  try {
-    const tabs = await chrome.tabs.query({});
-    
-    for (const tab of tabs) {
-      if (!tab.url) continue;
-      
-      const source = detectSource(tab.url);
-      if (source === 'unknown') continue;
-      
-      // Send a ping to the content script to check for notifications
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'HEARTBEAT_CHECK' });
-      } catch {
-        // Content script not loaded or tab not ready - ignore
-      }
-    }
-  } catch (err) {
-    console.log('[Doraemon Extension] Poll error:', err.message);
-  }
-}
-
 function scheduleReconnect() {
   if (reconnectTimer) return;
   reconnectTimer = setInterval(() => {
-    console.log('[Doraemon Extension] Attempting reconnect...');
+    console.log('[Doraemon] Reconnecting...');
     connect();
   }, 5000);
 }
 
-function sendNotification(notification) {
+function sendToDoraemon(data) {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(notification));
-    console.log('[Doraemon Extension] Sent:', notification.source, notification.title);
-  } else {
-    console.log('[Doraemon Extension] Not connected, notification dropped');
+    ws.send(JSON.stringify(data));
+    return true;
   }
+  return false;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Doraemon Extension BG] Received message:', message.type, message.title, message.body);
+  const url = sender.tab?.url || message.url;
+  const source = detectSource(url);
   
   if (message.type === 'NOTIFICATION') {
-    // Ensure we're connected before sending
     connect().then((connected) => {
       if (connected) {
-        const source = detectSource(sender.tab?.url || message.url);
-        const notification = {
+        sendToDoraemon({
+          type: 'notification',
           source,
           title: message.title || 'Notification',
           body: message.body || '',
-          icon: message.icon,
-          url: sender.tab?.url || message.url,
-        };
-        console.log('[Doraemon Extension BG] Sending to WS:', notification);
-        sendNotification(notification);
-      } else {
-        console.log('[Doraemon Extension BG] Not connected, notification dropped');
+          url,
+          timestamp: Date.now(),
+        });
       }
       sendResponse({ success: connected });
     });
-    return true; // Keep channel open for async response
-  } else if (message.type === 'GET_STATUS') {
+    return true;
+  }
+  
+  if (message.type === 'CONTENT') {
     connect().then((connected) => {
-      sendResponse({ connected });
+      if (connected) {
+        sendToDoraemon({
+          type: 'content',
+          source,
+          contentType: message.contentType,
+          content: message.content,
+          title: message.title,
+          url,
+          timestamp: Date.now(),
+        });
+      }
+      sendResponse({ success: connected });
     });
     return true;
   }
+  
+  if (message.type === 'GET_STATUS') {
+    sendResponse({ connected: isConnected });
+    return true;
+  }
+  
   return true;
 });
 
 connect();
-console.log('[Doraemon Extension] Background script loaded');
+console.log('[Doraemon] Background script loaded');

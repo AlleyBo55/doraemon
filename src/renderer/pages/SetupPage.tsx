@@ -1,28 +1,20 @@
 /**
- * Setup Page
- * 
- * Pre-flight checks for Node.js, OpenClaw, port, daemon, and permissions.
+ * Setup Page — Simplified
+ *
+ * No Node.js, no OpenClaw, no port checks.
+ * Just: proxy health check → optional browser extension → launch.
  */
 
 import { useState, useEffect, useCallback } from 'preact/hooks';
 
-type StepStatus = 'pending' | 'running' | 'success' | 'error';
+type StepStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped';
 
 type Step = {
   id: string;
   label: string;
   status: StepStatus;
   detail?: string;
-  help?: { title: string; command?: string; description: string };
 };
-
-const INITIAL_STEPS: Step[] = [
-  { id: 'node', label: 'Node.js Runtime', status: 'pending' },
-  { id: 'openclaw', label: 'OpenClaw CLI', status: 'pending' },
-  { id: 'port', label: 'Network Port', status: 'pending' },
-  { id: 'daemon', label: 'Background Service', status: 'pending' },
-  { id: 'fulldisk', label: 'Native Notifications', status: 'pending' },
-];
 
 const CheckIcon = () => (
   <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
@@ -43,10 +35,9 @@ const Spinner = () => (
   </svg>
 );
 
-const CopyIcon = () => (
+const SkipIcon = () => (
   <svg class="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none">
-    <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5" />
-    <path d="M10 4V3a1.5 1.5 0 0 0-1.5-1.5H3A1.5 1.5 0 0 0 1.5 3v5.5A1.5 1.5 0 0 0 3 10h1" stroke="currentColor" stroke-width="1.5" />
+    <path d="M7 3v8M3 7h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4" />
   </svg>
 );
 
@@ -54,168 +45,113 @@ const StatusIcon = ({ status }: { status: StepStatus }) => {
   if (status === 'running') return <Spinner />;
   if (status === 'success') return <CheckIcon />;
   if (status === 'error') return <XIcon />;
+  if (status === 'skipped') return <SkipIcon />;
   return <div class="w-3.5 h-3.5 rounded-full border-[1.5px] border-current opacity-40" />;
 };
 
-const CopyButton = ({ text }: { text: string }) => {
-  const [copied, setCopied] = useState(false);
-  
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <button onClick={handleCopy} class="flex items-center gap-1.5 text-[11px] text-[#0099FF] hover:text-[#0077CC] transition-colors">
-      <CopyIcon />
-      {copied ? 'Copied!' : 'Copy'}
-    </button>
-  );
-};
+const PROXY_URL = (import.meta as any).env?.VITE_PROXY_URL
+  || 'https://doraemon-proxy.doraboss.workers.dev';
 
 declare global {
   interface Window {
     setupAPI?: {
-      checkNode: () => Promise<{ success: boolean; version?: string }>;
-      checkOpenClaw: () => Promise<{ success: boolean }>;
-      checkPort: () => Promise<{ success: boolean }>;
-      killPort: () => Promise<void>;
-      startDaemon: () => Promise<{ success: boolean }>;
-      checkFullDiskAccess: () => Promise<boolean>;
-      requestFullDiskAccess: () => Promise<void>;
       setupComplete: () => void;
     };
   }
 }
 
+async function checkProxyHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(`${PROXY_URL}/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return false;
+    const data = await res.json() as { status?: string };
+    return data.status === 'ok';
+  } catch {
+    return false;
+  }
+}
+
 export function SetupPage() {
-  const [steps, setSteps] = useState<Step[]>(INITIAL_STEPS);
-  const [failedStep, setFailedStep] = useState<Step | null>(null);
-  const [phase, setPhase] = useState<'checking' | 'complete' | 'failed'>('checking');
+  const [steps, setSteps] = useState<Step[]>([
+    { id: 'proxy', label: 'AI Connection', status: 'pending' },
+    { id: 'extension', label: 'Browser Extension', status: 'pending' },
+  ]);
+  const [phase, setPhase] = useState<'checking' | 'extension' | 'complete' | 'failed'>('checking');
+  const [retryCount, setRetryCount] = useState(0);
 
   const updateStep = useCallback((id: string, update: Partial<Step>) => {
     setSteps(prev => prev.map(s => s.id === id ? { ...s, ...update } : s));
   }, []);
 
   const runSetup = useCallback(async () => {
-    setFailedStep(null);
     setPhase('checking');
-    setSteps(INITIAL_STEPS);
-    
-    const api = window.setupAPI;
-    if (!api) {
-      const errorStep: Step = {
-        id: 'api',
-        label: 'Setup API',
-        status: 'error',
-        help: { title: 'Preload Script Error', description: 'The app failed to initialize. Try restarting or rebuilding the app.' },
-      };
-      setFailedStep(errorStep);
+    setSteps([
+      { id: 'proxy', label: 'AI Connection', status: 'pending' },
+      { id: 'extension', label: 'Browser Extension', status: 'pending' },
+    ]);
+
+    updateStep('proxy', { status: 'running', detail: 'Checking...' });
+    const proxyOk = await checkProxyHealth();
+
+    if (!proxyOk) {
+      updateStep('proxy', { status: 'error', detail: 'Unreachable' });
       setPhase('failed');
       return;
     }
 
-    // Node.js check
-    updateStep('node', { status: 'running' });
-    const node = await api.checkNode();
-    if (!node.success) {
-      const step: Step = {
-        id: 'node', label: 'Node.js Runtime', status: 'error', detail: 'v22+ required',
-        help: { title: 'Install Node.js', description: 'Doraemon needs Node.js 22 or newer. Visit nodejs.org to download and install it, then restart this app.' },
-      };
-      updateStep('node', step);
-      setFailedStep(step);
-      setPhase('failed');
-      return;
-    }
-    updateStep('node', { status: 'success', detail: `v${node.version}` });
-
-    // OpenClaw check
-    updateStep('openclaw', { status: 'running' });
-    const claw = await api.checkOpenClaw();
-    if (!claw.success) {
-      const step: Step = {
-        id: 'openclaw', label: 'OpenClaw CLI', status: 'error', detail: 'Not installed',
-        help: { title: 'Install OpenClaw', command: 'npm install -g openclaw', description: 'OpenClaw powers Doraemon\'s AI features. Open Terminal, paste the command above, press Enter, then click Try Again.' },
-      };
-      updateStep('openclaw', step);
-      setFailedStep(step);
-      setPhase('failed');
-      return;
-    }
-    updateStep('openclaw', { status: 'success', detail: 'Ready' });
-
-    // Port check
-    updateStep('port', { status: 'running' });
-    const port = await api.checkPort();
-    if (!port.success) {
-      updateStep('port', { detail: 'Freeing port...' });
-      await api.killPort();
-    }
-    updateStep('port', { status: 'success', detail: '3000' });
-
-    // Daemon check
-    updateStep('daemon', { status: 'running' });
-    const daemon = await api.startDaemon();
-    if (!daemon.success) {
-      const step: Step = {
-        id: 'daemon', label: 'Background Service', status: 'error', detail: 'Failed to start',
-        help: { title: 'Service Error', command: 'openclaw daemon', description: 'The background service couldn\'t start. Try running the command above in Terminal to see what went wrong, then click Try Again.' },
-      };
-      updateStep('daemon', step);
-      setFailedStep(step);
-      setPhase('failed');
-      return;
-    }
-    updateStep('daemon', { status: 'success', detail: 'Running' });
-
-    // Full Disk Access check
-    updateStep('fulldisk', { status: 'running' });
-    const hasFullDisk = await api.checkFullDiskAccess();
-    if (!hasFullDisk) {
-      const step: Step = {
-        id: 'fulldisk', label: 'Native Notifications', status: 'error', detail: 'Permission needed',
-        help: { title: 'Grant Full Disk Access', description: 'Doraemon needs Full Disk Access to read notifications from apps like WhatsApp, Slack, and Discord. Click "Open Settings" below, add Doraemon to the list, then click "Try Again".' },
-      };
-      updateStep('fulldisk', step);
-      setFailedStep(step);
-      setPhase('failed');
-      return;
-    }
-    updateStep('fulldisk', { status: 'success', detail: 'Enabled' });
-
-    setPhase('complete');
-    setTimeout(() => api.setupComplete(), 600);
+    updateStep('proxy', { status: 'success', detail: 'Connected' });
+    setPhase('extension');
   }, [updateStep]);
 
-  const handleOpenFullDiskSettings = async () => {
-    await window.setupAPI?.requestFullDiskAccess?.();
-  };
+  const handleSkipExtension = useCallback(() => {
+    updateStep('extension', { status: 'skipped', detail: 'Later' });
+    setPhase('complete');
+    setTimeout(() => window.setupAPI?.setupComplete(), 500);
+  }, [updateStep]);
+
+  const handleExtensionInstalled = useCallback(() => {
+    updateStep('extension', { status: 'success', detail: 'Installed' });
+    setPhase('complete');
+    setTimeout(() => window.setupAPI?.setupComplete(), 500);
+  }, [updateStep]);
+
+  const handleRetry = useCallback(() => {
+    setRetryCount(c => c + 1);
+    runSetup();
+  }, [runSetup]);
 
   useEffect(() => { runSetup(); }, [runSetup]);
 
-  const progress = steps.filter(s => s.status === 'success').length / steps.length;
+  const progress = steps.filter(s => s.status === 'success' || s.status === 'skipped').length / steps.length;
 
   return (
     <div class="h-screen w-screen flex flex-col select-none bg-[#F5F5F7]">
       <div class="h-[52px] drag-region flex-shrink-0" />
-      
+
       <div class="flex-1 flex flex-col items-center px-10 pb-6">
         <div class="w-[64px] h-[64px] rounded-[16px] bg-white flex items-center justify-center mb-4 shadow-lg overflow-hidden">
           <img src="/dora-sprites/shime1a.png" alt="Doraemon" class="w-14 h-14 object-contain" />
         </div>
 
         <h1 class="text-[18px] font-semibold text-[#1D1D1F] tracking-tight text-center">
-          {phase === 'complete' ? 'Ready to Go' : phase === 'failed' ? 'Setup Paused' : 'Setting Up'}
+          {phase === 'complete' ? 'Ready to Go~!' :
+           phase === 'failed' ? 'Connection Issue' :
+           phase === 'extension' ? 'One More Thing' :
+           'Setting Up'}
         </h1>
         <p class="text-[12px] text-[#86868B] mt-1 text-center">
-          {phase === 'complete' ? 'Launching Doraemon...' : phase === 'failed' ? 'Action required' : 'Checking requirements'}
+          {phase === 'complete' ? 'Launching Doraemon...' :
+           phase === 'failed' ? 'Could not reach the AI server' :
+           phase === 'extension' ? 'Get notifications from your browser' :
+           'Checking connection'}
         </p>
 
         <div class="w-full max-w-[300px] mt-5 mb-3">
           <div class="h-[3px] bg-[#E8E8ED] rounded-full overflow-hidden">
-            <div class="h-full bg-[#0099FF] rounded-full transition-all duration-500 ease-out" style={{ width: `${progress * 100}%` }} />
+            <div
+              class="h-full bg-[#0099FF] rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${progress * 100}%` }}
+            />
           </div>
         </div>
 
@@ -224,16 +160,20 @@ export function SetupPage() {
             <div key={step.id} class="flex items-center justify-between py-1.5 px-1">
               <div class="flex items-center gap-2.5">
                 <span class={
-                  step.status === 'success' ? 'text-[#34C759]' : 
-                  step.status === 'error' ? 'text-[#FF3B30]' : 
-                  step.status === 'running' ? 'text-[#0099FF]' : 'text-[#86868B]'
+                  step.status === 'success' ? 'text-[#34C759]' :
+                  step.status === 'error' ? 'text-[#FF3B30]' :
+                  step.status === 'running' ? 'text-[#0099FF]' :
+                  step.status === 'skipped' ? 'text-[#86868B]' :
+                  'text-[#86868B]'
                 }>
                   <StatusIcon status={step.status} />
                 </span>
                 <span class="text-[12px] text-[#1D1D1F]">{step.label}</span>
               </div>
               {step.detail && (
-                <span class={`text-[10px] font-medium tabular-nums ${step.status === 'error' ? 'text-[#FF3B30]' : 'text-[#86868B]'}`}>
+                <span class={`text-[10px] font-medium ${
+                  step.status === 'error' ? 'text-[#FF3B30]' : 'text-[#86868B]'
+                }`}>
                   {step.detail}
                 </span>
               )}
@@ -241,33 +181,105 @@ export function SetupPage() {
           ))}
         </div>
 
-        {failedStep?.help && (
-          <div class="w-full max-w-[300px] mt-4 p-3 bg-white rounded-xl border border-[#E8E8ED]">
-            <h3 class="text-[12px] font-semibold text-[#1D1D1F] mb-1.5">{failedStep.help.title}</h3>
-            
-            {failedStep.help.command && (
-              <div class="flex items-center justify-between bg-[#F5F5F7] rounded-lg px-2.5 py-1.5 mb-2">
-                <code class="text-[11px] text-[#1D1D1F] font-mono">{failedStep.help.command}</code>
-                <CopyButton text={failedStep.help.command} />
-              </div>
-            )}
-            
-            <p class="text-[11px] text-[#86868B] leading-relaxed">{failedStep.help.description}</p>
-            
-            {failedStep.id === 'fulldisk' && (
-              <button onClick={handleOpenFullDiskSettings} class="mt-2 text-[11px] font-medium text-[#0099FF] hover:text-[#0077CC] transition-colors">
-                Open Settings →
-              </button>
-            )}
-          </div>
+        {phase === 'extension' && (
+          <ExtensionInstallCard
+            onInstalled={handleExtensionInstalled}
+            onSkip={handleSkipExtension}
+          />
         )}
 
         {phase === 'failed' && (
-          <button onClick={runSetup} class="mt-4 h-[30px] px-4 text-[12px] font-medium text-white bg-[#0099FF] rounded-lg hover:bg-[#0088E6] active:bg-[#0077CC] transition-colors">
-            Try Again
-          </button>
+          <div class="w-full max-w-[300px] mt-4 p-3 bg-white rounded-xl border border-[#E8E8ED]">
+            <p class="text-[11px] text-[#86868B] leading-relaxed">
+              Make sure you have internet access. The AI server might be deploying or temporarily down.
+            </p>
+            <button
+              onClick={handleRetry}
+              class="mt-3 h-[30px] px-4 text-[12px] font-medium text-white bg-[#0099FF] rounded-lg hover:bg-[#0088E6] active:bg-[#0077CC] transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function ExtensionInstallCard({
+  onInstalled,
+  onSkip,
+}: {
+  onInstalled: () => void;
+  onSkip: () => void;
+}) {
+  const [showSteps, setShowSteps] = useState(false);
+
+  return (
+    <div class="w-full max-w-[300px] mt-4 p-3 bg-white rounded-xl border border-[#E8E8ED]">
+      <h3 class="text-[12px] font-semibold text-[#1D1D1F] mb-1">
+        🔔 Browser Notifications
+      </h3>
+      <p class="text-[11px] text-[#86868B] leading-relaxed mb-2">
+        Install the browser extension so Doraemon can react to your WhatsApp, Slack, Discord, and other web notifications.
+      </p>
+
+      {!showSteps ? (
+        <div class="flex gap-2">
+          <button
+            onClick={() => setShowSteps(true)}
+            class="flex-1 h-[30px] text-[12px] font-medium text-white bg-[#0099FF] rounded-lg hover:bg-[#0088E6] transition-colors"
+          >
+            Install Extension
+          </button>
+          <button
+            onClick={onSkip}
+            class="h-[30px] px-3 text-[12px] font-medium text-[#86868B] hover:text-[#1D1D1F] transition-colors"
+          >
+            Skip
+          </button>
+        </div>
+      ) : (
+        <div class="space-y-2">
+          <div class="text-[11px] text-[#1D1D1F] space-y-1.5">
+            <p class="flex gap-2">
+              <span class="text-[#0099FF] font-semibold shrink-0">1.</span>
+              Open Chrome → <code class="bg-[#F5F5F7] px-1 rounded text-[10px]">chrome://extensions</code>
+            </p>
+            <p class="flex gap-2">
+              <span class="text-[#0099FF] font-semibold shrink-0">2.</span>
+              Enable "Developer mode" (top right toggle)
+            </p>
+            <p class="flex gap-2">
+              <span class="text-[#0099FF] font-semibold shrink-0">3.</span>
+              Click "Load unpacked"
+            </p>
+            <p class="flex gap-2">
+              <span class="text-[#0099FF] font-semibold shrink-0">4.</span>
+              Select the <code class="bg-[#F5F5F7] px-1 rounded text-[10px]">browser-extension</code> folder inside Doraemon's app directory
+            </p>
+          </div>
+
+          <p class="text-[10px] text-[#86868B] italic">
+            Firefox: about:debugging → Load Temporary Add-on → select manifest.json
+          </p>
+
+          <div class="flex gap-2 pt-1">
+            <button
+              onClick={onInstalled}
+              class="flex-1 h-[28px] text-[11px] font-medium text-white bg-[#34C759] rounded-lg hover:bg-[#2DB84E] transition-colors"
+            >
+              Done, I installed it
+            </button>
+            <button
+              onClick={onSkip}
+              class="h-[28px] px-3 text-[11px] font-medium text-[#86868B] hover:text-[#1D1D1F] transition-colors"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

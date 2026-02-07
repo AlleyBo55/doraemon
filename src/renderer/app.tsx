@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
 import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
-import { useEmotion, useIdleDetection, useOpenClaw, useRandomThoughts, useExperienceSystem } from './hooks';
+import { useEmotion, useIdleDetection, useChat, useRandomThoughts, useExperienceSystem } from './hooks';
 import { emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
@@ -87,7 +87,7 @@ const App = () => {
     sendMessage,
     triggerEmotion,
     clearHistory,
-  } = useOpenClaw();
+  } = useChat();
 
   // Check if activity is currently protected (within 15s window)
   const isActivityProtected = useCallback(() => {

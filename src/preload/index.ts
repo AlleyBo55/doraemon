@@ -168,6 +168,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('browser-activity', (_event: IpcRendererEvent, data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => callback(data));
   },
   
+  // Proactive engine: notify main process of chat messages for mood/bond tracking
+  notifyChatMessage: (userMessage: string) => {
+    ipcRenderer.send('proactive:chat-message', userMessage);
+  },
+  
   // Media Feed API (Supervised Learning)
   mediaFeed: (input: { type: string; title: string; chapter?: number; episode?: number; summary: string; highlights?: string[]; url?: string }) =>
     ipcRenderer.invoke('media:feed', input),
@@ -205,38 +210,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('moltbook:trigger-browse'),
   moltbookResetStats: () =>
     ipcRenderer.invoke('moltbook:reset-stats'),
+  
+  // Kiro Bridge API (IDE Integration)
+  kiroInit: (workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:init', workspacePath),
+  kiroAsk: (message: string, workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:ask', message, workspacePath),
+  kiroFixError: (error: string, file?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:fix-error', error, file, workspacePath),
+  kiroExplain: (code: string, file?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:explain', code, file, workspacePath),
+  kiroReview: (file: string, workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:review', file, workspacePath),
+  kiroSend: (message: string, type: string, context?: object, workspacePath?: string) =>
+    ipcRenderer.invoke('kiro:send', message, type, context, workspacePath),
+  
+  // Unified IDE Bridge API (Kiro, Antigravity, Cursor, VS Code)
+  ideDetect: () =>
+    ipcRenderer.invoke('ide:detect'),
+  ideSend: (message: string, preferredIDE?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ide:send', message, preferredIDE, workspacePath),
+  ideAsk: (message: string, preferredIDE?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ide:ask', message, preferredIDE, workspacePath),
+  ideFixError: (error: string, file?: string, preferredIDE?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ide:fix-error', error, file, preferredIDE, workspacePath),
+  ideExplain: (code: string, preferredIDE?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ide:explain', code, preferredIDE, workspacePath),
+  ideReview: (file: string, preferredIDE?: string, workspacePath?: string) =>
+    ipcRenderer.invoke('ide:review', file, preferredIDE, workspacePath),
 });
 
 // Setup API (for setup window)
 contextBridge.exposeInMainWorld('setupAPI', {
-  // System checks
-  checkNode: () => ipcRenderer.invoke('setup:check-node'),
-  checkOpenClaw: () => ipcRenderer.invoke('setup:check-openclaw'),
-  checkPort: () => ipcRenderer.invoke('setup:check-port', 18789),
-  
-  // Permissions
-  checkFullDiskAccess: () => ipcRenderer.invoke('check-full-disk-access'),
-  requestFullDiskAccess: () => ipcRenderer.invoke('request-full-disk-access'),
-  
-  // Actions
-  killPort: () => ipcRenderer.invoke('setup:kill-port'),
-  installOpenClaw: () => ipcRenderer.invoke('setup:install-openclaw'),
-  startDaemon: () => ipcRenderer.invoke('setup:start-daemon', 18789),
-  getInstallInstructions: () => ipcRenderer.invoke('setup:get-instructions'),
-  
-  // Setup complete - launch main window
   setupComplete: () => ipcRenderer.send('setup:launch-doraemon'),
-  
-  // Progress callback
-  onProgress: (callback: (message: string) => void) => {
-    ipcRenderer.on('setup:progress', (_event: IpcRendererEvent, message: string) => callback(message));
-  },
-  
-  // Window actions
   continueOffline: () => ipcRenderer.send('setup:continue-offline'),
   closeWindow: () => ipcRenderer.send('setup:close-window'),
   minimizeWindow: () => ipcRenderer.send('setup:minimize-window'),
-  resizeWindow: (height: number) => ipcRenderer.send('setup:resize-window', { height }),
 });
 
 // Approval API (for approval window)

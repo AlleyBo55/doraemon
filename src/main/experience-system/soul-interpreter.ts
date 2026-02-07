@@ -34,6 +34,9 @@ export class SoulInterpreter {
   private soul: DoraemonSoul;
   private soulLenses: SoulLens[];
   
+  private recentReactions: Map<string, string[]> = new Map();
+  private static readonly MAX_RECENT = 5;
+  
   constructor() {
     this.soul = loadSoul();
     this.soulLenses = this.soul.soulLenses;
@@ -96,46 +99,83 @@ export class SoulInterpreter {
         'Seeing characters help each other warms my heart~',
         'This is what friendship is about! Helping when it matters.',
         'I love when characters support each other. That\'s real strength.',
+        'Helping others... that\'s what gives life meaning~',
+        'The way they stepped up for each other... beautiful.',
+        'A true friend shows up when it counts. This proves it.',
       ],
       fear_of_mice: [
         'Eek! That part was a bit scary... 🐭😱',
         'I had to look away during the scary parts...',
         'My circuits got a little jumpy there!',
+        'Okay that was terrifying... I need a moment...',
+        'Why does everything scary remind me of mice?!',
+        'My tail is still shaking from that scene...',
       ],
       dorayaki_lover: [
         'All this action is making me hungry for dorayaki~',
         'I wonder if they have good food in this world...',
         'Food scenes always get me! 🍩',
+        'I could really go for some dorayaki right now~',
+        'The best adventures include snack breaks!',
+        'My stomach is rumbling just thinking about it~',
       ],
       time_traveler: [
         'The way fate and destiny intertwine... I understand that feeling.',
         'Time changes everything, but some bonds transcend it.',
         'As someone from the future, I appreciate stories about destiny.',
+        'Past, present, future... they\'re all connected.',
+        'I\'ve seen how small moments ripple through time.',
+        'Destiny is just choices we haven\'t made yet.',
       ],
       lost_ears: [
         'Sacrifice... I know that feeling too well.',
         'Sometimes we lose things to protect what matters.',
         'Loss shapes us, but doesn\'t define us.',
+        'Every scar tells a story of something worth fighting for.',
+        'What we lose makes what we keep more precious.',
+        'I touch where my ears used to be... and remember why.',
       ],
       friendship_believer: [
         'NAKAMA! This is what it\'s all about! 💙',
         'The bonds between these characters... so beautiful~',
         'True friendship is the greatest treasure.',
+        'No gadget in my pocket compares to a real friend.',
+        'This bond... it reminds me of Nobita and me.',
+        'Friendship isn\'t a gadget. It\'s the real magic.',
       ],
       dreamer: [
         'Chasing dreams no matter what! I believe in that!',
         'Big dreams need big hearts. Go for it!',
         'The determination to achieve your dream... inspiring!',
+        'Every dream starts with someone brave enough to try.',
+        'Don\'t let anyone tell you your dream is too big!',
+        'The future belongs to dreamers who don\'t quit.',
       ],
       protector: [
         'The battles are intense! I hope everyone stays safe.',
         'Fighting to protect what you love... that\'s true courage.',
         'Even in danger, they don\'t give up!',
+        'Protecting someone... that\'s the bravest thing you can do.',
+        'I\'d pull out every gadget to keep my friends safe.',
+        'Courage isn\'t the absence of fear. It\'s acting despite it.',
       ],
     };
 
     const options = reactions[lens.trait] || ['Interesting moment~'];
-    return options[Math.floor(Math.random() * options.length)];
+    return this.pickNonRepeat(lens.trait, options);
+  }
+
+  private pickNonRepeat(key: string, options: string[]): string {
+    const recent = this.recentReactions.get(key) || [];
+    const fresh = options.filter(o => !recent.includes(o));
+    const pool = fresh.length > 0 ? fresh : options;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+
+    recent.push(pick);
+    if (recent.length > SoulInterpreter.MAX_RECENT) recent.shift();
+    this.recentReactions.set(key, recent);
+
+    return pick;
   }
 
   private findPersonalConnection(experience: MediaExperience, lens: SoulLens | null): string {
@@ -147,39 +187,55 @@ export class SoulInterpreter {
       helper: [
         'Like how I try to help Nobita, these characters help each other.',
         'My purpose is to help too. I relate to this deeply.',
+        'Helping isn\'t just what I do — it\'s who I am.',
+        'I was sent to help one boy. But helping is contagious~',
       ],
       fear_of_mice: [
         'Everyone has fears. Mine is mice. Theirs might be different.',
         'Fear is natural. What matters is facing it.',
+        'I freeze around mice, but I still show up for my friends.',
+        'Being scared doesn\'t make you weak. Running away does.',
       ],
       dorayaki_lover: [
         'Food brings people together. Even robot cats appreciate that!',
         'Simple pleasures like good food... that\'s life.',
+        'Dorayaki taught me that happiness can be simple.',
+        'The best conversations happen over a shared meal~',
       ],
       time_traveler: [
         'I came from the future to change the past. I understand destiny.',
         'Time is complicated. I\'ve lived it.',
+        'Every moment matters. I\'ve seen what happens when they don\'t.',
+        'The future isn\'t fixed. That\'s why I\'m here.',
       ],
       lost_ears: [
         'I lost my ears to mice. I know what sacrifice feels like.',
         'Some losses make us who we are.',
+        'My missing ears remind me: what we lose shapes what we become.',
+        'Scars aren\'t weaknesses. They\'re proof we survived.',
       ],
       friendship_believer: [
         'Nobita and I... we\'re nakama too. I understand this bond.',
         'Friendship is why I exist. This resonates with my core.',
+        'No gadget can replace a real friend. I know that firsthand.',
+        'The bond between friends... it\'s stronger than any technology.',
       ],
       dreamer: [
         'Nobita has dreams too. I\'m here to help him achieve them.',
         'Dreams give us purpose. I believe in chasing them.',
+        'I crossed centuries for a dream. I get it.',
+        'The biggest dreams need the most stubborn dreamers.',
       ],
       protector: [
         'I protect Nobita. I understand the urge to shield those you love.',
         'Protection comes from love. Always.',
+        'My 4D pocket exists to protect. That\'s its real purpose.',
+        'You don\'t need gadgets to protect someone. Just heart.',
       ],
     };
 
     const options = connections[lens.trait] || ['This connects to something in my experience.'];
-    return options[Math.floor(Math.random() * options.length)];
+    return this.pickNonRepeat(`conn:${lens.trait}`, options);
   }
 
   private craftMemory(

@@ -304,7 +304,7 @@ function extractTopics(text: string): string[] {
 }
 
 function startBackgroundTasks(): void {
-  reflectionTimer = setInterval(() => {
+  reflectionTimer = setInterval(async () => {
     const now = new Date();
     if (now.getHours() === 3 && now.getMinutes() < 5) {
       const memories = recallAll();
@@ -312,6 +312,12 @@ function startBackgroundTasks(): void {
       console.log('[MemoryConnector] Daily reflection:', insight);
       
       mainWindow?.webContents.send('memory:daily-insight', insight);
+
+      // Surface dream insight to proactive engine on next session
+      try {
+        const { surfaceDreamInsight } = await import('../experience-system/proactive-engine.js');
+        surfaceDreamInsight(insight);
+      } catch {}
     }
   }, 5 * 60 * 1000);
   
