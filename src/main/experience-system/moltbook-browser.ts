@@ -90,12 +90,14 @@ let stats: BrowseStats = {
   skippedAlreadyInteracted: 0,
 };
 
+import { cfg } from '../config.js';
+
 function getApiKey(): string | null {
-  return process.env['MOLTBOOK_API_KEY'] || null;
+  return cfg.moltbookApiKey || null;
 }
 
 function isEnabled(): boolean {
-  return process.env['MOLTBOOK_BROWSER_ENABLED'] === '1' && !!getApiKey();
+  return cfg.moltbookBrowserEnabled && !!getApiKey();
 }
 
 async function fetchFeed(limit = 50): Promise<MoltbookPost[]> {
@@ -151,7 +153,7 @@ async function fetchPostComments(postId: string): Promise<MoltbookComment[]> {
 }
 
 function getUsername(): string | null {
-  return process.env['MOLTBOOK_USERNAME'] || null;
+  return cfg.moltbookUsername || null;
 }
 
 async function fetchOwnPosts(limit = 5): Promise<MoltbookPost[]> {

@@ -8,6 +8,7 @@
 
 import type { BrowserWindow } from 'electron';
 import type { EmotionalState, Emotion, LivingPost, ConsciousnessProxy } from './types.js';
+import { cfg } from '../config.js';
 import { learnFromExperience } from '../memory-system/connector.js';
 
 type RendererEmotionType = 
@@ -63,7 +64,7 @@ export class ExperienceBridge {
       this.lastEmotionSent = rendererEmotion;
       
       // Feed emotional state to memory system for learning
-      if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+      if (cfg.memorySystemEnabled) {
         learnFromExperience({
           emotion: rendererEmotion,
           intensity: state.intensity,

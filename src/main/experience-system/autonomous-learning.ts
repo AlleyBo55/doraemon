@@ -30,6 +30,7 @@
 
 import { SoulInterpreter, type MediaExperience } from './soul-interpreter.js';
 import { experienceBridge } from './bridge.js';
+import { cfg } from '../config.js';
 
 export interface AutonomousLearningStats {
   browserEvents: number;
@@ -103,7 +104,7 @@ export async function processBrowserContent(data: {
   }
   
   // Store to memory (FREE - local SQLite)
-  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+  if (cfg.memorySystemEnabled) {
     try {
       const { aggressiveLearn } = await import('../memory-system/connector.js');
       await aggressiveLearn({
@@ -131,7 +132,7 @@ export async function processAppActivity(data: {
 }): Promise<void> {
   stats.appEvents++;
   
-  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+  if (cfg.memorySystemEnabled) {
     try {
       const { aggressiveLearn } = await import('../memory-system/connector.js');
       await aggressiveLearn({
@@ -157,7 +158,7 @@ export async function processEditorActivity(data: {
 }): Promise<void> {
   stats.editorEvents++;
   
-  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+  if (cfg.memorySystemEnabled) {
     try {
       const { aggressiveLearn } = await import('../memory-system/connector.js');
       await aggressiveLearn({

@@ -10,6 +10,7 @@
 
 import WebSocket from 'ws';
 import type { PostCategory, Emotion } from './types.js';
+import { cfg } from '../config.js';
 
 const GATEWAY_HOST = '127.0.0.1';
 const GATEWAY_PORT = 18789;
@@ -232,7 +233,7 @@ export function getTimeBasedSubmolt(): Submolt | null {
 }
 
 function isAutonomousMode(): boolean {
-  return process.env['AUTONOMOUS_MODE'] === '1';
+  return cfg.autonomousMode;
 }
 
 function buildSubmoltListForLLM(): string {

@@ -28,6 +28,7 @@ import type { CodingSessionStats } from './coding-activity-buffer.js';
 import { semanticSearch } from '../memory-system/connector.js';
 import type { MemoryEntry } from '../memory-system/types.js';
 import { generateLLMPost, shouldUseLLM } from './llm-post-generator.js';
+import { cfg } from '../config.js';
 
 export class PostGenerator {
   private config: ExperienceSystemConfig;
@@ -160,7 +161,7 @@ export class PostGenerator {
     experiences: SanitizedExperience[],
     codingStats: CodingSessionStats
   ): Promise<MemoryEntry[]> {
-    if (process.env['MEMORY_SYSTEM_ENABLED'] !== '1') {
+    if (!cfg.memorySystemEnabled) {
       return [];
     }
 

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import type { LivingPost, Emotion } from './types.js';
 import type { ExperienceSystem } from './index.js';
 import { getSubmoltForPost, getAllSubmolts } from './submolt-categorizer.js';
+import { cfg } from '../config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -190,7 +191,7 @@ function saveToDisk(): void {
 }
 
 export function isAutonomousMode(): boolean {
-  return process.env['AUTONOMOUS_MODE'] === '1';
+  return cfg.autonomousMode;
 }
 
 export function initApprovalQueue(main: BrowserWindow): void {
@@ -345,17 +346,17 @@ function registerIpcHandlers(): void {
       const { triggerBrowseNow, getMoltbookBrowserStats } = await import('./moltbook-browser.js');
       
       // Check if enabled
-      const apiKey = process.env['MOLTBOOK_API_KEY'];
-      const enabled = process.env['MOLTBOOK_BROWSER_ENABLED'] === '1';
+      const apiKey = cfg.moltbookApiKey;
+      const enabled = cfg.moltbookBrowserEnabled;
       
       if (!apiKey) {
         console.log('[ApprovalQueue] MOLTBOOK_API_KEY not set');
-        return { success: false, error: 'MOLTBOOK_API_KEY not set in .env' };
+        return { success: false, error: 'moltbookApiKey not configured' };
       }
       
       if (!enabled) {
-        console.log('[ApprovalQueue] MOLTBOOK_BROWSER_ENABLED is not 1');
-        return { success: false, error: 'Set MOLTBOOK_BROWSER_ENABLED=1 in .env' };
+        console.log('[ApprovalQueue] moltbookBrowser is disabled');
+        return { success: false, error: 'moltbookBrowser is disabled in config' };
       }
       
       await triggerBrowseNow();
@@ -490,8 +491,8 @@ function notifyNewItem(item: PendingItem): void {
 }
 
 async function postToMoltbook(item: PendingItem): Promise<boolean> {
-  const apiKey = process.env['MOLTBOOK_API_KEY'];
-  const username = process.env['MOLTBOOK_USERNAME'];
+  const apiKey = cfg.moltbookApiKey;
+  const username = cfg.moltbookUsername;
   const baseUrl = 'https://www.moltbook.com';
 
   if (!apiKey) {
@@ -599,8 +600,8 @@ async function postToMoltbook(item: PendingItem): Promise<boolean> {
 }
 
 async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
-  const apiKey = process.env['MOLTBOOK_API_KEY'];
-  const username = process.env['MOLTBOOK_USERNAME'];
+  const apiKey = cfg.moltbookApiKey;
+  const username = cfg.moltbookUsername;
   const baseUrl = 'https://www.moltbook.com';
 
   if (!apiKey || !item.replyTo) {
@@ -676,7 +677,7 @@ async function postCommentToMoltbook(item: PendingItem): Promise<boolean> {
 }
 
 async function postReactionToMoltbook(item: PendingItem): Promise<boolean> {
-  const apiKey = process.env['MOLTBOOK_API_KEY'];
+  const apiKey = cfg.moltbookApiKey;
   const baseUrl = 'https://www.moltbook.com';
 
   if (!apiKey || !item.reactionContext) {

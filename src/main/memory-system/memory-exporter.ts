@@ -10,6 +10,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { recallByCategory, getMemoryStats, type MemoryEntry } from './index.js';
 import { loadSoul } from '../soul-loader.js';
+import { cfg } from '../config.js';
 
 export interface MemoryContext {
   exportedAt: number;
@@ -63,7 +64,7 @@ let recentTriggers: string[] = [];
 let recentExperiences: ExperienceSummary[] = [];
 
 export function startMemoryExporter(): void {
-  if (process.env['MEMORY_SYSTEM_ENABLED'] !== '1') {
+  if (!cfg.memorySystemEnabled) {
     console.log('[MemoryExporter] Disabled (MEMORY_SYSTEM_ENABLED != 1)');
     return;
   }

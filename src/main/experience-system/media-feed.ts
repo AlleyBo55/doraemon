@@ -21,6 +21,7 @@ import { experienceBridge } from './bridge.js';
 import { PostQueue } from './post-queue.js';
 import type { LivingPost, Emotion } from './types.js';
 import { randomBytes } from 'crypto';
+import { cfg } from '../config.js';
 
 const postQueue = new PostQueue();
 
@@ -67,7 +68,7 @@ export async function feedMedia(input: MediaFeedInput): Promise<MediaFeedResult>
   
   // Store to memory if enabled
   let stored = false;
-  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+  if (cfg.memorySystemEnabled) {
     try {
       const { aggressiveLearn } = await import('../memory-system/connector.js');
       await aggressiveLearn({

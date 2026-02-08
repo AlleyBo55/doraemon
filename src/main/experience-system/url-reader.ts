@@ -45,8 +45,10 @@ interface MangaSiteConfig {
   type: 'image-based' | 'text-based';
 }
 
+import { cfg } from '../config.js';
+
 export function isURLReaderEnabled(): boolean {
-  return process.env['URL_READER_ENABLED'] === '1';
+  return cfg.urlReaderEnabled;
 }
 
 export async function readURL(url: string): Promise<URLReadResult> {

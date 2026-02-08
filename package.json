@@ -42,7 +42,12 @@
     "preview": "electron-vite preview",
     "start": "electron .",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "pack": "electron-vite build && electron-builder --dir",
+    "dist": "electron-vite build && electron-builder",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -58,6 +63,7 @@
     "@types/ws": "^8.5.10",
     "autoprefixer": "^10.4.20",
     "electron": "^40.2.1",
+    "electron-builder": "^26.7.0",
     "electron-vite": "^2.0.0",
     "fast-check": "^4.5.3",
     "postcss": "^8.4.49",

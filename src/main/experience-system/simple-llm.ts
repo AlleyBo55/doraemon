@@ -14,6 +14,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { app } from 'electron';
+import { cfg } from '../config.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-3-haiku-20240307';
@@ -40,7 +41,7 @@ function getApiKey(): string | null {
     // Fall back to process.env (dotenv loaded in index.ts)
   }
   
-  return process.env['ANTHROPIC_API_KEY'] || null;
+  return cfg.anthropicApiKey || null;
 }
 
 export async function simpleLLMCall(

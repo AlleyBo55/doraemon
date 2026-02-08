@@ -8,6 +8,12 @@ import { patchConsole } from './utils/sanitize-log.js';
 // Sanitize all console output (removes paths, API keys, etc.)
 patchConsole();
 
+// Load .env before config (env vars feed into cfg)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenvConfig({ path: path.join(__dirname, '../../.env') });
+
+import { cfg } from './config.js';
+
 import {
   checkNode,
   checkOpenClawInstalled,
@@ -41,10 +47,6 @@ import { initApprovalQueue, openApprovalWindow, getPendingCount, setExperienceSy
 import { startProactiveEngine, stopProactiveEngine, onCodingActivity, onChatMessage, surfaceDreamInsight } from './experience-system/proactive-engine.js';
 import { loadBond, recordInteraction } from './experience-system/bond-tracker.js';
 import { flushHabits } from './experience-system/habit-tracker.js';
-
-// Load .env file
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenvConfig({ path: path.join(__dirname, '../../.env') });
 
 let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -196,7 +198,7 @@ function createMainWindow() {
     });
     
     // Learn from notifications (aggressive learning)
-    if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+    if (cfg.memorySystemEnabled) {
       learnFromNotification({
         app: notification.app,
         title: notification.title,
@@ -218,7 +220,7 @@ function createMainWindow() {
     onCodingActivity(activity.language, activity.action === 'git_commit');
     
     // Learn from editor activity (aggressive learning)
-    if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+    if (cfg.memorySystemEnabled) {
       learnFromEditor({
         action: activity.action,
         language: activity.language,
@@ -284,7 +286,7 @@ function createMainWindow() {
   // Initialize experience system and connect bridge to main window
   experienceBridge.setMainWindow(mainWindow);
   experienceSystem = new ExperienceSystem({
-    enabled: process.env['EXPERIENCE_SYSTEM_ENABLED'] === '1',
+    enabled: cfg.experienceSystemEnabled,
     heartbeatIntervalMinutes: 50,
   });
   
@@ -306,7 +308,7 @@ function createMainWindow() {
   startMoltbookBrowser();
 
   // Initialize secure memory system with gateway bridge
-  if (process.env['MEMORY_SYSTEM_ENABLED'] === '1') {
+  if (cfg.memorySystemEnabled) {
     initGatewayBridge(mainWindow);
     initConnector(mainWindow);
     // Memory exporter kept as library - not auto-started
@@ -621,7 +623,7 @@ ipcMain.handle('get-config', () => {
   const assetsPath = path.join(__dirname, '../../assets/dora-sprites');
   
   return {
-    openclawUrl: process.env['OPENCLAW_URL'] || 'ws://127.0.0.1:18789',
+    openclawUrl: cfg.openclawUrl,
     spritePath: assetsPath,
     isOfflineMode,
   };
@@ -904,7 +906,7 @@ app.whenReady().then(() => {
   });
 
   // Check if we should skip setup (e.g., --skip-setup flag or env var)
-  const skipSetup = process.argv.includes('--skip-setup') || process.env['DORAEMON_SKIP_SETUP'] === '1';
+  const skipSetup = cfg.skipSetup;
   
   if (skipSetup) {
     // Skip setup, go directly to main window
