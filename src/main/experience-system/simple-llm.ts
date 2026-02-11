@@ -11,9 +11,6 @@
  * - Per month: ~$3.60
  */
 
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { app } from 'electron';
 import { cfg } from '../config.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -21,27 +18,12 @@ const MODEL = 'claude-3-haiku-20240307';
 const MAX_TOKENS = 150;
 const TIMEOUT_MS = 25000;
 
-let cachedApiKey: string | null = null;
-
 function getApiKey(): string | null {
-  if (cachedApiKey) return cachedApiKey;
-  
-  // Read directly from .env file using Electron's app path
-  // This bypasses any stale shell environment variables
-  try {
-    const appPath = app.getAppPath();
-    const envPath = join(appPath, '.env');
-    const envContent = readFileSync(envPath, 'utf-8');
-    const match = envContent.match(/^ANTHROPIC_API_KEY=(.+)$/m);
-    if (match) {
-      cachedApiKey = match[1].trim().replace(/^["']|["']$/g, '');
-      return cachedApiKey;
-    }
-  } catch {
-    // Fall back to process.env (dotenv loaded in index.ts)
+  const key = cfg.anthropicApiKey || null;
+  if (key) {
+    console.log('[SimpleLLM] API key found via config (' + key.substring(0, 12) + '...)');
   }
-  
-  return cfg.anthropicApiKey || null;
+  return key;
 }
 
 export async function simpleLLMCall(

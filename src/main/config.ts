@@ -37,6 +37,9 @@ export interface DoraemonMainConfig {
   // anthropic
   anthropicApiKey: string;
 
+  // debug
+  debugConversation: boolean;
+
   // misc
   deviceSalt: string;
   adminKey: string;
@@ -58,6 +61,7 @@ const DEFAULTS: DoraemonMainConfig = {
   moltbookApiKey: '',
   moltbookUsername: '',
   anthropicApiKey: '',
+  debugConversation: false,
   deviceSalt: '',
   adminKey: '',
   skipSetup: false,
@@ -108,6 +112,7 @@ const ENV_KEY_MAP: EnvKeyMap = {
   MOLTBOOK_API_KEY:            { field: 'moltbookApiKey',            parse: toStr },
   MOLTBOOK_USERNAME:           { field: 'moltbookUsername',          parse: toStr },
   ANTHROPIC_API_KEY:           { field: 'anthropicApiKey',           parse: toStr },
+  DEBUG_CONVERSATION:          { field: 'debugConversation',          parse: toBool },
   DEVICE_SALT:                 { field: 'deviceSalt',                parse: toStr },
   ADMIN_KEY:                   { field: 'adminKey',                  parse: toStr },
   DORAEMON_SKIP_SETUP:         { field: 'skipSetup',                 parse: toBool },

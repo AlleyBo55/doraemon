@@ -10,7 +10,15 @@ patchConsole();
 
 // Load .env before config (env vars feed into cfg)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
+
+// Try multiple .env locations (first match wins per variable):
+// 1. ~/.doraemon/.env (user config — works in both dev and production)
+// 2. Project root (dev only — ../../ relative to out/main/)
+// 3. App resources (production — bundled alongside the app)
+dotenvConfig({ path: path.join(home, '.doraemon', '.env') });
 dotenvConfig({ path: path.join(__dirname, '../../.env') });
+dotenvConfig({ path: path.join(process.resourcesPath || __dirname, '.env') });
 
 import { cfg } from './config.js';
 
@@ -47,6 +55,7 @@ import { initApprovalQueue, openApprovalWindow, getPendingCount, setExperienceSy
 import { startProactiveEngine, stopProactiveEngine, onCodingActivity, onChatMessage, surfaceDreamInsight } from './experience-system/proactive-engine.js';
 import { loadBond, recordInteraction } from './experience-system/bond-tracker.js';
 import { flushHabits } from './experience-system/habit-tracker.js';
+import { logConversation, exportConversationLog, getConversationLog, clearConversationLog } from './memory-system/conversation-log.js';
 
 let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -283,6 +292,14 @@ function createMainWindow() {
     }
   );
 
+  // Validate critical keys at startup
+  console.log('[Main] Key validation:',
+    'anthropicApiKey:', cfg.anthropicApiKey ? '✓ loaded' : '✗ MISSING',
+    'moltbookApiKey:', cfg.moltbookApiKey ? '✓ loaded' : '✗ MISSING',
+    'moltbookUsername:', cfg.moltbookUsername || '✗ MISSING',
+    'moltbookBrowser:', cfg.moltbookBrowserEnabled ? 'ON' : 'OFF',
+  );
+
   // Initialize experience system and connect bridge to main window
   experienceBridge.setMainWindow(mainWindow);
   experienceSystem = new ExperienceSystem({
@@ -320,8 +337,7 @@ function createMainWindow() {
 function createTray() {
   // Try multiple icon paths
   const iconPaths = [
-    path.join(__dirname, '../renderer/public/dora-sprites/icon.png'),
-    path.join(__dirname, '../../src/renderer/public/dora-sprites/icon.png'),
+    path.join(__dirname, '../renderer/dora-sprites/icon.png'),
     path.join(__dirname, '../../assets/dora-sprites/icon.png'),
   ];
   
@@ -626,7 +642,25 @@ ipcMain.handle('get-config', () => {
     openclawUrl: cfg.openclawUrl,
     spritePath: assetsPath,
     isOfflineMode,
+    debugConversation: cfg.debugConversation,
   };
+});
+
+ipcMain.handle('log-conversation', (_event, entry: { direction: string; from: string; to: string; channel: string; body: string; tokens?: { input: number; output: number; total: number; model?: string; durationMs?: number } }) => {
+  if (!cfg.debugConversation) return;
+  logConversation(entry as Parameters<typeof logConversation>[0]);
+});
+
+ipcMain.handle('export-conversation-log', () => {
+  return exportConversationLog();
+});
+
+ipcMain.handle('get-conversation-log', (_event, limit?: number) => {
+  return getConversationLog(limit);
+});
+
+ipcMain.handle('clear-conversation-log', () => {
+  return clearConversationLog();
 });
 
 ipcMain.handle('get-screen-size', () => {

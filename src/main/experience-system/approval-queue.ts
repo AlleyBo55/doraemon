@@ -748,11 +748,7 @@ function getPreloadPath(): string {
   
   // Try multiple possible paths
   const possiblePaths = [
-    // From experience-system folder (../../preload)
-    path.join(__dirname, '../../preload/index.mjs'),
-    path.join(__dirname, '../../preload/index.cjs'),
-    path.join(__dirname, '../../preload/index.js'),
-    // From main folder (../preload)
+    // After bundling, __dirname = out/main/
     path.join(__dirname, '../preload/index.mjs'),
     path.join(__dirname, '../preload/index.cjs'),
     path.join(__dirname, '../preload/index.js'),
@@ -802,7 +798,7 @@ export function openApprovalWindow(): void {
     approvalWindow.loadURL('http://localhost:5173/#/approval');
     approvalWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    approvalWindow.loadFile(path.join(__dirname, '../../renderer/index.html'), {
+    approvalWindow.loadFile(path.join(__dirname, '../renderer/index.html'), {
       hash: '/approval',
     });
   }

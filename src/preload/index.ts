@@ -214,6 +214,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Kiro Bridge API (IDE Integration)
   kiroInit: (workspacePath?: string) =>
     ipcRenderer.invoke('kiro:init', workspacePath),
+
+  // Conversation debug logging (WhatsApp)
+  logConversation: (entry: { direction: string; from: string; to: string; channel: string; body: string; tokens?: { input: number; output: number; total: number; model?: string; durationMs?: number } }) =>
+    ipcRenderer.invoke('log-conversation', entry),
+  exportConversationLog: () =>
+    ipcRenderer.invoke('export-conversation-log'),
+  getConversationLog: (limit?: number) =>
+    ipcRenderer.invoke('get-conversation-log', limit),
+  clearConversationLog: () =>
+    ipcRenderer.invoke('clear-conversation-log'),
   kiroAsk: (message: string, workspacePath?: string) =>
     ipcRenderer.invoke('kiro:ask', message, workspacePath),
   kiroFixError: (error: string, file?: string, workspacePath?: string) =>

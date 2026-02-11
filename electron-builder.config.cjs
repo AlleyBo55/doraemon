@@ -26,6 +26,7 @@ module.exports = {
   extraResources: [
     { from: 'assets', to: 'assets' },
     { from: 'browser-extension', to: 'browser-extension' },
+    { from: '.env', to: '.env' },
   ],
 
   mac: {

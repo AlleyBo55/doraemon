@@ -10,7 +10,7 @@ import { getAnimation } from './core/constants/sprites';
 import { MemoryDashboard } from './pages/MemoryDashboard';
 import './styles/globals.css';
 
-const SPRITE_BASE = '/dora-sprites';
+const SPRITE_BASE = import.meta.env.DEV ? '/dora-sprites' : './dora-sprites';
 
 type ScreenBounds = { width: number; height: number; x: number; y: number };
 
