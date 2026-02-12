@@ -8,7 +8,8 @@ export type TaskType =
   | 'image_generation'
   | 'ide_activity'
   | 'notification'
-  | 'task_management';
+  | 'task_management'
+  | 'messaging';
 
 export interface IntentResult {
   intent: TaskType;

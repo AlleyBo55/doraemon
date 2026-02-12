@@ -1,11 +1,12 @@
 /**
- * Setup Page — Simplified
+ * Setup Page
  *
- * No Node.js, no OpenClaw, no port checks.
- * Just: proxy health check → optional browser extension → launch.
+ * Checks: proxy health → OpenClaw gateway → optional browser extension → launch.
+ * OpenClaw is optional — tool routing degrades to proxy-only if unavailable.
  */
 
 import { useState, useEffect, useCallback } from 'preact/hooks';
+import { GATEWAY } from '../core/constants/gateway';
 
 type StepStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped';
 
@@ -71,11 +72,35 @@ async function checkProxyHealth(): Promise<boolean> {
   }
 }
 
+async function checkOpenClawHealth(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), 5000);
+    try {
+      const ws = new WebSocket(`ws://${GATEWAY.DEFAULT_HOST}:${GATEWAY.DEFAULT_PORT}`);
+      ws.onopen = () => {
+        clearTimeout(timeout);
+        ws.close();
+        resolve(true);
+      };
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve(false);
+      };
+    } catch {
+      clearTimeout(timeout);
+      resolve(false);
+    }
+  });
+}
+
+const INITIAL_STEPS: Step[] = [
+  { id: 'proxy', label: 'AI Connection', status: 'pending' },
+  { id: 'openclaw', label: 'OpenClaw Gateway', status: 'pending' },
+  { id: 'extension', label: 'Browser Extension', status: 'pending' },
+];
+
 export function SetupPage() {
-  const [steps, setSteps] = useState<Step[]>([
-    { id: 'proxy', label: 'AI Connection', status: 'pending' },
-    { id: 'extension', label: 'Browser Extension', status: 'pending' },
-  ]);
+  const [steps, setSteps] = useState<Step[]>(INITIAL_STEPS);
   const [phase, setPhase] = useState<'checking' | 'extension' | 'complete' | 'failed'>('checking');
   const [retryCount, setRetryCount] = useState(0);
 
@@ -85,11 +110,9 @@ export function SetupPage() {
 
   const runSetup = useCallback(async () => {
     setPhase('checking');
-    setSteps([
-      { id: 'proxy', label: 'AI Connection', status: 'pending' },
-      { id: 'extension', label: 'Browser Extension', status: 'pending' },
-    ]);
+    setSteps(INITIAL_STEPS.map(s => ({ ...s })));
 
+    // Step 1: Proxy
     updateStep('proxy', { status: 'running', detail: 'Checking...' });
     const proxyOk = await checkProxyHealth();
 
@@ -98,8 +121,19 @@ export function SetupPage() {
       setPhase('failed');
       return;
     }
-
     updateStep('proxy', { status: 'success', detail: 'Connected' });
+
+    // Step 2: OpenClaw (optional — tool routing)
+    updateStep('openclaw', { status: 'running', detail: 'Checking...' });
+    const openclawOk = await checkOpenClawHealth();
+
+    if (openclawOk) {
+      updateStep('openclaw', { status: 'success', detail: 'Connected' });
+    } else {
+      updateStep('openclaw', { status: 'skipped', detail: 'Offline (optional)' });
+    }
+
+    // Step 3: Extension
     setPhase('extension');
   }, [updateStep]);
 
@@ -124,13 +158,16 @@ export function SetupPage() {
 
   const progress = steps.filter(s => s.status === 'success' || s.status === 'skipped').length / steps.length;
 
+  const openclawStep = steps.find(s => s.id === 'openclaw');
+  const openclawOffline = openclawStep?.status === 'skipped';
+
   return (
     <div class="h-screen w-screen flex flex-col select-none bg-[#F5F5F7]">
       <div class="h-[52px] drag-region flex-shrink-0" />
 
       <div class="flex-1 flex flex-col items-center px-10 pb-6">
         <div class="w-[64px] h-[64px] rounded-[16px] bg-white flex items-center justify-center mb-4 shadow-lg overflow-hidden">
-          <img src="/dora-sprites/shime1a.png" alt="Doraemon" class="w-14 h-14 object-contain" />
+          <img src="./dora-sprites/shime1a.png" alt="Doraemon" class="w-14 h-14 object-contain" />
         </div>
 
         <h1 class="text-[18px] font-semibold text-[#1D1D1F] tracking-tight text-center">
@@ -143,7 +180,7 @@ export function SetupPage() {
           {phase === 'complete' ? 'Launching Doraemon...' :
            phase === 'failed' ? 'Could not reach the AI server' :
            phase === 'extension' ? 'Get notifications from your browser' :
-           'Checking connection'}
+           'Checking connections'}
         </p>
 
         <div class="w-full max-w-[300px] mt-5 mb-3">
@@ -180,6 +217,15 @@ export function SetupPage() {
             </div>
           ))}
         </div>
+
+        {openclawOffline && phase === 'extension' && (
+          <div class="w-full max-w-[300px] mt-3 p-2.5 bg-[#FFF9E6] rounded-lg border border-[#F5E6B8]">
+            <p class="text-[11px] text-[#8B7A2B] leading-relaxed">
+              OpenClaw gateway not detected. Tool features (weather, search, messaging) won't be available.
+              Chat still works via the cloud proxy. To enable tools, start OpenClaw locally.
+            </p>
+          </div>
+        )}
 
         {phase === 'extension' && (
           <ExtensionInstallCard

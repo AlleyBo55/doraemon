@@ -6,6 +6,7 @@
  */
 
 import { loadSoul, type SoulLens, type DoraemonSoul } from '../soul-loader.js';
+import { cfg } from '../config.js';
 
 export type { SoulLens };
 
@@ -389,7 +390,7 @@ export async function storeMediaExperience(
   }
   
   // Only import memory system if enabled
-  if (process.env['MEMORY_SYSTEM_ENABLED'] !== '1') {
+  if (!cfg.memorySystemEnabled) {
     return { stored: false, interpreted };
   }
 

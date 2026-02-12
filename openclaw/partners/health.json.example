@@ -1,0 +1,73 @@
+{
+  "partner": {
+    "name": "Your Hospital Network",
+    "shortName": "YHN",
+    "domain": "yourhospital.com",
+    "callCenter": "1500XXX",
+    "whatsapp": "08XXXXXXXXXX",
+    "bookingIdPrefix": "YHN",
+    "searchScope": "site:yourhospital.com",
+    "type": "hospital_network",
+    "apiBase": "https://services.yourhospital.com"
+  },
+  "api": {
+    "doctorSearch": {
+      "url": "/clinic-v2/v1/master-data/doctor/data",
+      "method": "GET",
+      "auth": "none",
+      "params": {
+        "keyword": "search by speciality name or doctor name",
+        "clinic_ref_id": "filter by clinic UUID",
+        "speciality_ref_id": "filter by speciality UUID",
+        "page": "page number (default 1)",
+        "per_page": "results per page (default 20)"
+      },
+      "responseFields": "doctor.name, doctor.slug, clinic.name, speciality.name, schedules[].date, schedules[].day, schedules[].start_time, schedules[].end_time, schedules[].available_slot"
+    },
+    "specialities": {
+      "url": "/clinic-v2/v1/master-data/speciality",
+      "method": "GET",
+      "auth": "none",
+      "params": { "page": "1", "per_page": "100" }
+    },
+    "clinics": {
+      "url": "/clinic-v2/v1/master-data/clinic",
+      "method": "GET",
+      "auth": "none",
+      "params": { "page": "1", "per_page": "50" }
+    },
+    "clinicsDetail": {
+      "url": "/clinics/v1/web/clinics",
+      "method": "GET",
+      "auth": "none"
+    },
+    "articles": {
+      "url": "/companyprofile/v1/web/articles",
+      "method": "GET",
+      "auth": "none",
+      "params": { "page": "1", "per_page": "10" },
+      "articleUrl": "https://www.yourhospital.com/artikel/{slug}"
+    }
+  },
+  "specialityMap": {
+    "batuk": "paru",
+    "flu": "paru",
+    "demam": "dokter umum",
+    "sakit_perut": "penyakit dalam",
+    "sakit_kepala": "saraf",
+    "sakit_gigi": "gigi",
+    "mata": "mata",
+    "kulit": "kulit",
+    "jantung": "jantung",
+    "tulang": "ortopedi",
+    "anak_sakit": "anak",
+    "hamil": "kebidanan",
+    "tht": "tht",
+    "kencing": "urologi",
+    "stress": "kesehatan jiwa"
+  },
+  "clinicMap": {
+    "city_a": { "ref_id": "00000000-0000-0000-0000-000000000001", "name": "Your Hospital City A" },
+    "city_b": { "ref_id": "00000000-0000-0000-0000-000000000002", "name": "Your Hospital City B" }
+  }
+}

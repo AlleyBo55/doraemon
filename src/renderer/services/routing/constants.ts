@@ -56,6 +56,13 @@ export const DEFAULT_MODEL_REGISTRY: Record<TaskType, ModelConfig> = {
     maxTokens: 512,
     temperature: 0.5,
     fallbackId: 'mistralai/mistral-small-3.1-24b-instruct:free'
+  },
+  messaging: {
+    id: 'mistralai/mistral-small-3.1-24b-instruct:free',
+    provider: 'openrouter',
+    maxTokens: 512,
+    temperature: 0.5,
+    fallbackId: 'mistralai/mistral-7b-instruct:free'
   }
 };
 

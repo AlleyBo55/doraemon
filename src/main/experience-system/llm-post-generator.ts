@@ -12,7 +12,7 @@ import type { MemoryEntry } from '../memory-system/types.js';
 import type { CodingSessionStats } from './coding-activity-buffer.js';
 import { loadSoulMd } from '../soul-loader.js';
 import { simpleLLMCall, isSimpleLLMAvailable } from './simple-llm.js';
-
+import { cfg } from '../config.js';
 function getDoraemonPostSoul(): string {
   const soulMd = loadSoulMd();
   
@@ -135,7 +135,7 @@ export async function generateLLMPost(context: PostContext): Promise<string | nu
 }
 
 export function shouldUseLLM(): boolean {
-  return process.env['LLM_POSTS_ENABLED'] === '1' && isSimpleLLMAvailable();
+  return cfg.llmPostsEnabled && isSimpleLLMAvailable();
 }
 
 export { getTimeOfDay, buildPrompt };

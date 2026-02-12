@@ -37,6 +37,19 @@ const INTENT_PATTERNS: Record<TaskType, IntentPattern> = {
     patterns: [/add a? task/i, /remind me/i, /my tasks/i, /what'?s due/i, /create task/i, /show (my )?tasks/i, /todo list/i],
     weight: 1.0
   },
+  messaging: {
+    keywords: ['send', 'message', 'whatsapp', 'telegram', 'text', 'reply', 'dm', 'chat to', 'tell'],
+    patterns: [
+      /send (?:a )?message (?:to|on)/i,
+      /(?:text|message|dm|whatsapp|telegram) (?:to )?\+?\d/i,
+      /send (?:to|on) whatsapp/i,
+      /send (?:to|on) telegram/i,
+      /tell [\w]+ (?:on|via) (?:whatsapp|telegram)/i,
+      /reply (?:to|on) (?:whatsapp|telegram)/i,
+      /whatsapp [\w]+/i,
+    ],
+    weight: 1.0
+  },
   general_chat: {
     keywords: [],
     patterns: [],

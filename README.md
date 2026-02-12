@@ -154,6 +154,7 @@ npm run build
 | [📴 Offline Mode](docs/OFFLINE-MODE.md) | Works without OpenClaw, auto-reconnect |
 | [🔐 Full Disk Access](docs/FULL-DISK-ACCESS.md) | Enable native macOS notifications |
 | [🌐 Browser Extension](browser-extension/README.md) | Web notifications from Twitter, WhatsApp, etc. |
+| [🏥 Health Integration](docs/HEALTH-INTEGRATION.md) | Hospital API integration, doctor search, partner config |
 | [🐛 Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 
 ## 🎭 Emotions & Behaviors

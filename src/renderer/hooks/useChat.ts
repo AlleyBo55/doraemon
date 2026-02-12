@@ -1,20 +1,37 @@
 /**
- * useChat - Direct HTTP chat hook (replaces useOpenClaw WebSocket)
+ * useChat - Hybrid chat hook with intent-based routing
  *
- * Calls the Cloudflare Worker proxy via simple HTTP POST.
- * No WebSocket, no OpenClaw dependency.
+ * General chat → CF Worker proxy (fast, cheap)
+ * Tool intents → OpenClaw gateway via WebSocket (skill-specific routing)
  */
 
-import { useState, useCallback, useRef } from 'preact/hooks';
+import { useState, useCallback, useRef, useEffect } from 'preact/hooks';
 import { emotionStore, configState } from '../stores';
 import { detectEmotion, extractThought } from '../services/openclaw';
+import { routeMessage } from '../services/routing/tool-router';
 import type { EmotionType } from '../core/types/emotion';
+import { GATEWAY } from '../core/constants/gateway';
 import { DORAEMON_SOUL, getRandomCatchphrase } from '../core/constants/soul';
 
 type Message = {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+};
+
+type ToolEvent = {
+  tool: string;
+  status: 'running' | 'done' | 'error';
+  timestamp: number;
+};
+
+type InboundMessage = {
+  from: string;
+  body: string;
+  channel: string;
+  timestamp: number;
+  chatId?: string;
+  isGroup?: boolean;
 };
 
 type ChatState = {
@@ -24,12 +41,22 @@ type ChatState = {
   currentThought: string | null;
   error: string | null;
   agentMode: 'chat' | 'agent';
-  currentTool: null;
-  isAgentRunning: false;
+  currentTool: ToolEvent | null;
+  isAgentRunning: boolean;
+  lastInbound: InboundMessage | null;
 };
+
+type RequestFrame = { type: 'req'; id: string; method: string; params?: unknown };
+type ResponseFrame = { type: 'res'; id: string; ok: boolean; payload?: unknown; error?: { message: string } };
+type EventFrame = { type: 'event'; event: string; payload?: unknown; seq?: number };
 
 const PROXY_URL = (import.meta as any).env?.VITE_PROXY_URL || 'https://doraemon-proxy.doraboss.workers.dev';
 const MAX_HISTORY = 10;
+const OPENCLAW_RESPONSE_TIMEOUT = 30;
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 function getDeviceId(): string {
   const KEY = 'doraemon-device-id';
@@ -64,6 +91,74 @@ function learnFromConversation(userMessage: string, assistantResponse: string): 
       }).catch(() => {});
     }
   } catch {}
+}
+
+type ParsedOutbound = { to: string; body: string; channel: string };
+
+function logToConversationDb(entry: { direction: string; from: string; to: string; channel: string; body: string; tokens?: { input: number; output: number; total: number; model?: string; durationMs?: number } }): void {
+  try {
+    const api = (window as unknown as { electronAPI?: { logConversation?: (e: typeof entry) => Promise<void> } }).electronAPI;
+    api?.logConversation?.(entry)?.catch(() => {});
+  } catch {}
+}
+
+function parseOutboundMessage(text: string): ParsedOutbound | null {
+  // "send message to +628xxx on whatsapp saying hello"
+  // "whatsapp +628xxx hello there"
+  // "text +628xxx on telegram hey"
+  // "send to +628xxx hello"
+
+  const channelMap: Record<string, string> = {
+    whatsapp: 'whatsapp', wa: 'whatsapp',
+    telegram: 'telegram', tg: 'telegram',
+    discord: 'discord',
+    slack: 'slack',
+    signal: 'signal',
+    imessage: 'imessage',
+  };
+
+  const normalized = text.trim();
+
+  // Pattern: "send message to <number> on <channel> saying <body>"
+  const fullPattern = /(?:send|text|message)\s+(?:(?:a\s+)?message\s+)?to\s+(\+?[\d\s-]+)\s+(?:on|via)\s+(\w+)\s+(?:saying|with|:)?\s*(.+)/i;
+  let match = normalized.match(fullPattern);
+  if (match) {
+    const to = match[1].replace(/[\s-]/g, '');
+    const channel = channelMap[match[2].toLowerCase()] || 'whatsapp';
+    const body = match[3].trim();
+    if (to && body) return { to, body, channel };
+  }
+
+  // Pattern: "send to <number> <body>" (defaults to whatsapp)
+  const sendToPattern = /(?:send|text)\s+to\s+(\+?[\d\s-]+)\s+(.+)/i;
+  match = normalized.match(sendToPattern);
+  if (match) {
+    const to = match[1].replace(/[\s-]/g, '');
+    const body = match[2].trim();
+    if (to && body) return { to, body, channel: 'whatsapp' };
+  }
+
+  // Pattern: "<channel> <number> <body>"
+  const channelFirstPattern = /^(whatsapp|wa|telegram|tg|discord|slack|signal|imessage)\s+(\+?[\d\s-]+)\s+(.+)/i;
+  match = normalized.match(channelFirstPattern);
+  if (match) {
+    const channel = channelMap[match[1].toLowerCase()] || 'whatsapp';
+    const to = match[2].replace(/[\s-]/g, '');
+    const body = match[3].trim();
+    if (to && body) return { to, body, channel };
+  }
+
+  // Pattern: "reply to <number> on <channel> <body>"
+  const replyPattern = /reply\s+(?:to\s+)?(\+?[\d\s-]+)\s+(?:on|via)\s+(\w+)\s+(.+)/i;
+  match = normalized.match(replyPattern);
+  if (match) {
+    const to = match[1].replace(/[\s-]/g, '');
+    const channel = channelMap[match[2].toLowerCase()] || 'whatsapp';
+    const body = match[3].trim();
+    if (to && body) return { to, body, channel };
+  }
+
+  return null;
 }
 
 async function getMemoryContext(query: string): Promise<string> {
@@ -102,8 +197,7 @@ async function callProxy(
     return { error: `Server error (${response.status})` };
   }
 
-  const data = await response.json() as { content: string; remaining: number };
-  return data;
+  return await response.json() as { content: string; remaining: number };
 }
 
 export const useChat = () => {
@@ -116,10 +210,25 @@ export const useChat = () => {
     agentMode: 'chat',
     currentTool: null,
     isAgentRunning: false,
+    lastInbound: null,
   });
 
   const messagesRef = useRef<Message[]>([]);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // OpenClaw WebSocket refs
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsConnectedRef = useRef(false);
+  const wsReconnectAttemptsRef = useRef(0);
+  const wsReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openclawUrlRef = useRef<string | null>(null);
+  const debugConversationRef = useRef(false);
+  const pendingRef = useRef<Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>>(new Map());
+  const responseBufferRef = useRef('');
+  const currentRunIdRef = useRef<string | null>(null);
+  const lastTokenUsageRef = useRef<{ input: number; output: number; total: number; model?: string; durationMs?: number } | null>(null);
+  const lastInboundFromRef = useRef<string | null>(null);
+  const lastInboundChannelRef = useRef<string>('whatsapp');
 
   const clearBubbleTimeout = useCallback(() => {
     if (bubbleTimeoutRef.current) {
@@ -134,6 +243,389 @@ export const useChat = () => {
       setState(prev => ({ ...prev, currentThought: null }));
     }, delay);
   }, [clearBubbleTimeout]);
+
+  // ── OpenClaw WebSocket management ──
+
+  const sendWsRequest = useCallback(<T = unknown>(method: string, params?: unknown): Promise<T> => {
+    return new Promise((resolve, reject) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        reject(new Error('OpenClaw not connected'));
+        return;
+      }
+      const id = generateId();
+      const frame: RequestFrame = { type: 'req', id, method, params };
+      pendingRef.current.set(id, { resolve: (v) => resolve(v as T), reject });
+      wsRef.current.send(JSON.stringify(frame));
+    });
+  }, []);
+
+  const handleWsMessage = useCallback((event: MessageEvent) => {
+    try {
+      const msg = JSON.parse(event.data) as { type?: string };
+
+      if (msg.type === 'event') {
+        const evt = msg as EventFrame;
+
+        if (evt.event === 'chat') {
+          const p = evt.payload as {
+            state?: string;
+            message?: unknown;
+            content?: string;
+            text?: string;
+            delta?: string;
+            sessionKey?: string;
+            from?: string;
+            channel?: string;
+            chatId?: string;
+            isGroup?: boolean;
+            usage?: { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
+            model?: string;
+            durationMs?: number;
+          } | undefined;
+
+          // Detect inbound messages from channels
+          if (p?.state === 'inbound' && p.from) {
+            const inbound: InboundMessage = {
+              from: p.from,
+              body: p.content || p.text || '',
+              channel: p.channel || 'whatsapp',
+              timestamp: Date.now(),
+              chatId: p.chatId,
+              isGroup: p.isGroup,
+            };
+            setState(prev => ({ ...prev, lastInbound: inbound }));
+            lastInboundFromRef.current = p.from;
+            lastInboundChannelRef.current = p.channel || 'whatsapp';
+            console.log('[useChat] Inbound message:', inbound);
+            if (debugConversationRef.current) {
+              logToConversationDb({ direction: 'inbound', from: inbound.from, to: 'doraemon', channel: inbound.channel, body: inbound.body });
+            }
+          } else if (p?.state === 'delta' || p?.state === 'streaming') {
+            const m = p.message as { content?: Array<{ text?: string }> | string } | undefined;
+            if (p.delta) {
+              responseBufferRef.current += p.delta;
+            } else {
+              let text = '';
+              if (typeof m?.content === 'string') text = m.content;
+              else if (Array.isArray(m?.content)) text = m.content.map(c => c.text || '').join('');
+              else if (p.content) text = p.content;
+              else if (p.text) text = p.text;
+              if (text) responseBufferRef.current = text;
+            }
+            if (responseBufferRef.current) {
+              setState(prev => ({ ...prev, currentThought: responseBufferRef.current }));
+            }
+          } else if (p?.state === 'final' || p?.state === 'complete' || p?.state === 'error' || p?.state === 'aborted') {
+            // Capture token usage if present
+            if (p.usage) {
+              const inputTok = p.usage.input_tokens ?? p.usage.prompt_tokens ?? 0;
+              const outputTok = p.usage.output_tokens ?? p.usage.completion_tokens ?? 0;
+              lastTokenUsageRef.current = {
+                input: inputTok,
+                output: outputTok,
+                total: inputTok + outputTok,
+                model: p.model,
+                durationMs: p.durationMs,
+              };
+            }
+
+            // Log auto-reply outbound with token usage
+            if (debugConversationRef.current && responseBufferRef.current && lastInboundFromRef.current) {
+              logToConversationDb({
+                direction: 'outbound',
+                from: 'doraemon',
+                to: lastInboundFromRef.current,
+                channel: lastInboundChannelRef.current,
+                body: responseBufferRef.current,
+                tokens: lastTokenUsageRef.current || undefined,
+              });
+              lastInboundFromRef.current = null;
+              lastTokenUsageRef.current = null;
+            }
+
+            const runId = currentRunIdRef.current;
+            if (runId) {
+              const pending = pendingRef.current.get(runId);
+              if (pending) {
+                pendingRef.current.delete(runId);
+                pending.resolve({ content: responseBufferRef.current || p.content || p.text || '' });
+              }
+            }
+          }
+        } else if (evt.event === 'run') {
+          const p = evt.payload as {
+            state?: string;
+            content?: string;
+            text?: string;
+            delta?: string;
+            usage?: { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
+            model?: string;
+            durationMs?: number;
+          } | undefined;
+          if (p?.state === 'streaming' || p?.state === 'delta') {
+            if (p.delta) responseBufferRef.current += p.delta;
+            else {
+              const text = p.content || p.text || '';
+              if (text) responseBufferRef.current = text;
+            }
+            setState(prev => ({ ...prev, currentThought: responseBufferRef.current }));
+          } else if (p?.state === 'complete' || p?.state === 'final') {
+            if (p.usage) {
+              const inputTok = p.usage.input_tokens ?? p.usage.prompt_tokens ?? 0;
+              const outputTok = p.usage.output_tokens ?? p.usage.completion_tokens ?? 0;
+              lastTokenUsageRef.current = {
+                input: inputTok,
+                output: outputTok,
+                total: inputTok + outputTok,
+                model: p.model,
+                durationMs: p.durationMs,
+              };
+            }
+            const runId = currentRunIdRef.current;
+            if (runId) {
+              const pending = pendingRef.current.get(runId);
+              if (pending) {
+                pendingRef.current.delete(runId);
+                pending.resolve({ content: responseBufferRef.current || p.content || p.text || '' });
+              }
+            }
+          }
+        } else if (evt.event === 'agent') {
+          const p = evt.payload as {
+            stream?: string;
+            data?: { tool?: string; phase?: string; text?: string };
+          } | undefined;
+
+          if (p?.stream === 'tool' && p.data?.tool) {
+            setState(prev => ({
+              ...prev,
+              currentTool: { tool: p.data!.tool!, status: 'running', timestamp: Date.now() },
+              currentThought: `Using ${p.data!.tool}...`,
+              isAgentRunning: true,
+            }));
+          } else if (p?.stream === 'lifecycle') {
+            if (p.data?.phase === 'end' || p.data?.phase === 'error') {
+              setState(prev => ({ ...prev, isAgentRunning: false, currentTool: null }));
+            }
+          } else if (p?.stream === 'assistant' && p.data?.text) {
+            responseBufferRef.current = p.data.text;
+            setState(prev => ({ ...prev, currentThought: responseBufferRef.current }));
+          }
+        } else if (evt.event === 'message') {
+          const p = evt.payload as { content?: string; text?: string; delta?: string; message?: string } | undefined;
+          if (p?.delta) responseBufferRef.current += p.delta;
+          else {
+            const text = p?.content || p?.text || p?.message || '';
+            if (text) responseBufferRef.current = text;
+          }
+          if (responseBufferRef.current) {
+            setState(prev => ({ ...prev, currentThought: responseBufferRef.current }));
+          }
+        }
+      } else if (msg.type === 'res') {
+        const resp = msg as ResponseFrame;
+        const pending = pendingRef.current.get(resp.id);
+        if (pending) {
+          pendingRef.current.delete(resp.id);
+          resp.ok ? pending.resolve(resp.payload) : pending.reject(new Error(resp.error?.message || 'Error'));
+        }
+      }
+    } catch { /* ignore parse errors */ }
+  }, []);
+
+  const connectOpenClaw = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
+
+    const url = openclawUrlRef.current || `ws://${GATEWAY.DEFAULT_HOST}:${GATEWAY.DEFAULT_PORT}`;
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      wsReconnectAttemptsRef.current = 0;
+      setTimeout(async () => {
+        try {
+          await sendWsRequest('connect', {
+            minProtocol: 3, maxProtocol: 3,
+            client: { id: 'webchat-ui', displayName: 'Doraemon', version: '1.0.0', platform: 'electron', mode: 'webchat' },
+            role: 'operator', scopes: ['operator.admin'], caps: ['chat.events', 'run.events'],
+            auth: { token: GATEWAY.DEFAULT_TOKEN },
+          });
+          wsConnectedRef.current = true;
+          console.log('[useChat] OpenClaw connected (tool routing ready)');
+        } catch (e) {
+          console.warn('[useChat] OpenClaw connect handshake failed:', e);
+          wsConnectedRef.current = false;
+        }
+      }, 800);
+    };
+
+    ws.onmessage = handleWsMessage;
+
+    ws.onclose = () => {
+      wsConnectedRef.current = false;
+      wsRef.current = null;
+      pendingRef.current.forEach(p => p.reject(new Error('Disconnected')));
+      pendingRef.current.clear();
+
+      wsReconnectAttemptsRef.current++;
+      if (wsReconnectAttemptsRef.current <= GATEWAY.MAX_RECONNECT_ATTEMPTS) {
+        wsReconnectTimerRef.current = setTimeout(connectOpenClaw, GATEWAY.RECONNECT_DELAY);
+      } else {
+        console.log('[useChat] OpenClaw max reconnect attempts reached, tool routing disabled');
+      }
+    };
+
+    ws.onerror = () => {
+      wsConnectedRef.current = false;
+    };
+  }, [sendWsRequest, handleWsMessage]);
+
+  // Fetch OpenClaw URL from main process config, then connect
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const doraemonApi = (window as any).doraemon;
+        if (doraemonApi?.getConfig) {
+          const config = await doraemonApi.getConfig();
+          if (config?.openclawUrl) {
+            openclawUrlRef.current = config.openclawUrl;
+          }
+          if (config?.debugConversation) {
+            debugConversationRef.current = true;
+          }
+        }
+      } catch {}
+      connectOpenClaw();
+    };
+    init();
+    return () => {
+      if (wsReconnectTimerRef.current) clearTimeout(wsReconnectTimerRef.current);
+      wsRef.current?.close();
+    };
+  }, [connectOpenClaw]);
+
+  // ── Send via OpenClaw with skill filter ──
+
+  const sendViaOpenClaw = useCallback(async (
+    messageWithContext: string,
+    skillFilter?: string[]
+  ): Promise<string | null> => {
+    responseBufferRef.current = '';
+    const runId = generateId();
+    currentRunIdRef.current = runId;
+
+    try {
+      const eventPromise = new Promise<string>((resolve) => {
+        let checkCount = 0;
+
+        const checkInterval = setInterval(() => {
+          checkCount++;
+          if (responseBufferRef.current && responseBufferRef.current.length > 10) {
+            clearInterval(checkInterval);
+            resolve(responseBufferRef.current);
+            return;
+          }
+          if (checkCount >= OPENCLAW_RESPONSE_TIMEOUT) {
+            clearInterval(checkInterval);
+            resolve(responseBufferRef.current || '');
+          }
+        }, 1000);
+
+        pendingRef.current.set(runId, {
+          resolve: (v) => {
+            clearInterval(checkInterval);
+            resolve((v as { content?: string }).content || responseBufferRef.current || '');
+          },
+          reject: () => {
+            clearInterval(checkInterval);
+            resolve(responseBufferRef.current || '');
+          },
+        });
+      });
+
+      await sendWsRequest('chat.send', {
+        sessionKey: 'main',
+        message: messageWithContext,
+        deliver: true,
+        idempotencyKey: runId,
+        ...(skillFilter?.length ? { skillFilter } : {}),
+      });
+
+      const content = await eventPromise;
+      return content || null;
+    } catch (e) {
+      console.warn('[useChat] OpenClaw send failed, will fall back to proxy:', e);
+      pendingRef.current.delete(runId);
+      return null;
+    } finally {
+      currentRunIdRef.current = null;
+    }
+  }, [sendWsRequest]);
+
+  // ── Send via CF Worker proxy ──
+
+  const sendViaProxy = useCallback(async (
+    messageWithContext: string,
+    userMessage: Message
+  ): Promise<string | null> => {
+    const history = messagesRef.current
+      .slice(-MAX_HISTORY)
+      .map(m => ({
+        role: m.role,
+        content: m === userMessage ? messageWithContext : m.content,
+      }));
+
+    const result = await callProxy(history, getDeviceId());
+
+    if ('error' in result) {
+      return result.error.includes('Rate limit')
+        ? "Mou~ I've used up my energy for today. Let's chat again tomorrow~ 💤"
+        : `Mou~ Something went wrong: ${result.error}`;
+    }
+
+    return result.content;
+  }, []);
+
+  // ── Send outbound message via gateway `send` method ──
+
+  const sendOutbound = useCallback(async (
+    to: string,
+    message: string,
+    channel: string = 'whatsapp',
+    accountId?: string
+  ): Promise<{ ok: boolean; messageId?: string; error?: string }> => {
+    if (!wsConnectedRef.current) {
+      return { ok: false, error: 'OpenClaw not connected' };
+    }
+
+    try {
+      const result = await sendWsRequest<{
+        runId: string;
+        messageId: string;
+        channel: string;
+        toJid?: string;
+      }>('send', {
+        to,
+        message,
+        channel,
+        ...(accountId ? { accountId } : {}),
+        idempotencyKey: generateId(),
+      });
+
+      console.log('[useChat] Outbound sent:', result);
+      if (debugConversationRef.current) {
+        logToConversationDb({ direction: 'outbound', from: 'doraemon', to, channel, body: message });
+      }
+      return { ok: true, messageId: result?.messageId };
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.warn('[useChat] Outbound send failed:', errorMsg);
+      return { ok: false, error: errorMsg };
+    }
+  }, [sendWsRequest]);
+
+  // ── Main sendMessage with hybrid routing ──
 
   const sendMessage = useCallback(async (text: string): Promise<string | null> => {
     clearBubbleTimeout();
@@ -156,6 +648,7 @@ export const useChat = () => {
 
     emotionStore.actions.setEmotion('thinking', 'user');
 
+    // Inject memory context
     let messageWithContext = text;
     try {
       const memoryContext = await getMemoryContext(text);
@@ -164,35 +657,78 @@ export const useChat = () => {
       }
     } catch {}
 
-    try {
-      const history = messagesRef.current
-        .slice(-MAX_HISTORY)
-        .map(m => ({ role: m.role, content: m.role === 'user' && m === userMessage ? messageWithContext : m.content }));
+    // Route based on intent
+    const decision = routeMessage(text);
+    const useOpenClaw = decision.route === 'openclaw' && wsConnectedRef.current;
+    const isDirectSend = decision.intent.intent === 'messaging' && wsConnectedRef.current;
 
-      const result = await callProxy(history, getDeviceId());
+    if (isDirectSend) {
+      // Parse outbound message: extract target and body from natural language
+      const parsed = parseOutboundMessage(text);
+      if (parsed) {
+        emotionStore.actions.setEmotionProtected('excited', 'ai');
+        setState(prev => ({
+          ...prev,
+          currentThought: `Sending message to ${parsed.to} on ${parsed.channel}~`,
+        }));
 
-      if ('error' in result) {
-        const fallback = result.error.includes('Rate limit')
-          ? "Mou~ I've used up my energy for today. Let's chat again tomorrow~ 💤"
-          : `Mou~ Something went wrong: ${result.error}`;
+        const result = await sendOutbound(parsed.to, parsed.body, parsed.channel);
 
-        const assistantMessage: Message = { role: 'assistant', content: fallback, timestamp: Date.now() };
+        const responseText = result.ok
+          ? `Message sent to ${parsed.to} on ${parsed.channel}~ ✉️`
+          : `Mou~ Couldn't send: ${result.error || 'unknown error'}`;
+
+        const assistantMessage: Message = { role: 'assistant', content: responseText, timestamp: Date.now() };
         messagesRef.current = [...messagesRef.current, assistantMessage];
 
         setState(prev => ({
           ...prev,
           messages: messagesRef.current,
           isThinking: false,
-          currentThought: extractThought(fallback),
-          error: result.error,
+          currentThought: responseText,
+          error: result.ok ? null : (result.error || null),
+          currentTool: null,
+          isAgentRunning: false,
         }));
 
-        emotionStore.actions.setEmotionProtected('frustrated', 'ai');
+        emotionStore.actions.setEmotionProtected(result.ok ? 'happy' : 'frustrated', 'ai');
         setBubbleTimeout();
-        return fallback;
+        return responseText;
+      }
+    }
+
+    if (useOpenClaw) {
+      emotionStore.actions.setEmotionProtected(decision.fallbackEmotion, 'ai');
+      setState(prev => ({
+        ...prev,
+        currentThought: `Let me check my 4D pocket~ (${decision.intent.intent.replace('_', ' ')})`,
+      }));
+    }
+
+    try {
+      let content: string | null = null;
+
+      if (useOpenClaw) {
+        content = await sendViaOpenClaw(messageWithContext, decision.skillFilter);
+
+        // Fallback to proxy if OpenClaw returned nothing
+        if (!content) {
+          console.log('[useChat] OpenClaw returned empty, falling back to proxy');
+          content = await sendViaProxy(messageWithContext, userMessage);
+        }
+      } else {
+        // General chat or OpenClaw offline → proxy
+        if (decision.route === 'openclaw' && !wsConnectedRef.current) {
+          console.log('[useChat] OpenClaw offline, falling back to proxy for:', decision.intent.intent);
+        }
+        content = await sendViaProxy(messageWithContext, userMessage);
       }
 
-      const { content } = result;
+      if (!content) {
+        throw new Error('No response from any backend');
+      }
+
+      const isProxyError = content.startsWith('Mou~');
       const assistantMessage: Message = { role: 'assistant', content, timestamp: Date.now() };
       messagesRef.current = [...messagesRef.current, assistantMessage];
 
@@ -200,11 +736,16 @@ export const useChat = () => {
         ...prev,
         messages: messagesRef.current,
         isThinking: false,
-        currentThought: extractThought(content),
-        error: null,
+        currentThought: extractThought(content!),
+        error: isProxyError ? content : null,
+        currentTool: null,
+        isAgentRunning: false,
       }));
 
-      emotionStore.actions.setEmotionProtected(detectEmotion(content), 'ai');
+      const emotion = isProxyError
+        ? 'frustrated' as EmotionType
+        : detectEmotion(content);
+      emotionStore.actions.setEmotionProtected(emotion, 'ai');
       setBubbleTimeout();
       learnFromConversation(text, content);
       return content;
@@ -216,13 +757,15 @@ export const useChat = () => {
         isThinking: false,
         currentThought: 'Mou~ Something went wrong...',
         error: errorMsg,
+        currentTool: null,
+        isAgentRunning: false,
       }));
 
       emotionStore.actions.setEmotionProtected('confused', 'ai');
       setBubbleTimeout();
       return null;
     }
-  }, [clearBubbleTimeout, setBubbleTimeout]);
+  }, [clearBubbleTimeout, setBubbleTimeout, sendViaOpenClaw, sendViaProxy, sendOutbound]);
 
   const triggerEmotion = useCallback((emotion: EmotionType) => {
     emotionStore.actions.setEmotion(emotion, 'user');
@@ -257,13 +800,13 @@ export const useChat = () => {
   }, [setBubbleTimeout]);
 
   const getModelMode = useCallback(() => configState.modelMode.value, []);
-
   const setAgentMode = useCallback(() => {}, []);
   const toggleAgentMode = useCallback(() => {}, []);
 
   return {
     ...state,
     sendMessage,
+    sendOutbound,
     triggerEmotion,
     clearHistory,
     getModelMode,
