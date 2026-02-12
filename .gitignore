@@ -33,3 +33,6 @@ npm-debug.log*
 .amazonq
 .cursor
 plan.md
+
+# Partner configs (contain real API keys, ref_ids, phone numbers)
+openclaw/partners/health.json
