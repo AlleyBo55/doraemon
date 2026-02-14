@@ -89,18 +89,7 @@ Run from the `doraemon/` directory:
 bash openclaw/sync.sh
 ```
 
-## API Endpoints
 
-All endpoints are public (no authentication required):
-
-| Endpoint | Purpose |
-|----------|---------|
-| `/clinic-v2/v1/master-data/doctor/data` | Search doctors by specialty/name, filter by clinic |
-| `/clinic-v2/v1/master-data/speciality` | List all medical specialties |
-| `/clinic-v2/v1/master-data/clinic` | List all clinic branches with ref IDs |
-| `/clinics/v1/web/clinics` | Clinic details with addresses and coordinates |
-| `/companyprofile/v1/web/articles` | Health articles and content |
-| `/companyprofile/v1/web/promotions` | Current promotions |
 
 ## Adding a New Hospital Partner
 
