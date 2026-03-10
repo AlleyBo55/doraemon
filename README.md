@@ -26,6 +26,11 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 *He's finally here.*
 
+<p align="center">
+  <a href="https://drive.google.com/file/d/17NMMkTNCPznhwkEroJAVsVbA12EOYJA-/view?usp=sharing">
+    <img src="https://drive.google.com/thumbnail?id=17NMMkTNCPznhwkEroJAVsVbA12EOYJA-&sz=w800" alt="Watch the demo video" width="800"/>
+  </a>
+</p>
 ---
 
 > ⭐ **If this project brings back memories for you too, please give it a star!**  
