@@ -28,9 +28,27 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 <p align="center">
   <a href="https://drive.google.com/file/d/17NMMkTNCPznhwkEroJAVsVbA12EOYJA-/view?usp=sharing">
-    <img src="https://drive.google.com/thumbnail?id=17NMMkTNCPznhwkEroJAVsVbA12EOYJA-&sz=w800" alt="Watch the demo video" width="800"/>
+    <img src="https://drive.google.com/thumbnail?id=17NMMkTNCPznhwkEroJAVsVbA12EOYJA-&sz=w600" alt="▶ Watch Demo" width="600"/>
   </a>
+  <br/>
+  <em>▶ Click to watch demo video</em>
 </p>
+
+### 📸 Showcase
+
+<p align="center">
+  <img src="assets/showcase/screenshot-1.jpeg" alt="Desktop Companion" width="360"/>
+  <img src="assets/showcase/screenshot-4.jpeg" alt="Coding Mode" width="360"/>
+</p>
+<p align="center">
+  <img src="assets/showcase/screenshot-5.jpeg" alt="Chat Interface" width="360"/>
+  <img src="assets/showcase/screenshot-6.jpeg" alt="Memory System" width="360"/>
+</p>
+<p align="center">
+  <img src="assets/showcase/screenshot-2.jpeg" alt="Mobile View 1" width="200"/>
+  <img src="assets/showcase/screenshot-3.jpeg" alt="Mobile View 2" width="200"/>
+</p>
+
 ---
 
 > ⭐ **If this project brings back memories for you too, please give it a star!**  
