@@ -1,0 +1,13 @@
+{
+  "name": "OpenClaw Soul Sync",
+  "version": "1.0.0",
+  "description": "Syncs soul.md to runtime when Doraemon's personality is edited",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/openclaw/soul.md"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "bash doraemon/openclaw/sync.sh"
+  }
+}

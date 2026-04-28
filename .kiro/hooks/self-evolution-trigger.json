@@ -1,0 +1,12 @@
+{
+  "name": "Self-Evolution Periodic Trigger",
+  "version": "1.0.0",
+  "description": "Triggers Doraemon's self-reflection after agent stops, analyzing conversation quality and extracting learnings",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Quick self-reflection: Review the conversation that just ended. In 2-3 sentences, note:\n1. What went well (response quality, helpfulness)\n2. What could improve (missed intent, wrong tone, incomplete answer)\n3. Any pattern worth remembering\n\nStore this as a brief internal note. Do NOT modify any files. Do NOT execute any commands. This is READ-ONLY reflection only. Keep it under 100 words."
+  }
+}

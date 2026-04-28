@@ -1,0 +1,13 @@
+{
+  "name": "Doraemon Bridge (Edit)",
+  "version": "1.0.0",
+  "description": "Watches for Doraemon request edits and processes them through Kiro chat",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/.doraemon/request.json"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A Doraemon request has been updated. Read the file .doraemon/request.json to see what Doraemon wants. Process the request based on its type:\n\n- If type is 'chat': Answer the message field as a normal chat request\n- If type is 'command': Execute the command field\n- If type is 'file-edit': Edit the specified file with the content\n\nAfter processing, write the response to .doraemon/response.json with this format:\n{\n  \"id\": \"<same id from request>\",\n  \"success\": true/false,\n  \"result\": \"<your response or result>\",\n  \"error\": \"<error message if failed>\",\n  \"timestamp\": <current timestamp>\n}\n\nThen delete the request.json file."
+  }
+}

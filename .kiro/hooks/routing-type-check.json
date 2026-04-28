@@ -1,0 +1,13 @@
+{
+  "name": "Routing System Type Check",
+  "version": "1.0.0",
+  "description": "Type-checks the routing system after edits to catch broken intent patterns or skill mappings",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/services/routing/*.ts"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A routing system file was edited. Run getDiagnostics on all routing files to check for type errors:\n- doraemon/src/renderer/services/routing/types.ts\n- doraemon/src/renderer/services/routing/constants.ts\n- doraemon/src/renderer/services/routing/intent-detector.ts\n- doraemon/src/renderer/services/routing/tool-router.ts\n\nIf there are errors, fix them immediately. The routing system must stay type-safe — broken types mean broken skill routing for Doraemon."
+  }
+}

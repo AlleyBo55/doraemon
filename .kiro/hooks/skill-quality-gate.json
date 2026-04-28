@@ -1,0 +1,13 @@
+{
+  "name": "Skill Quality Gate",
+  "version": "1.0.0",
+  "description": "Validates OpenClaw skill files have required frontmatter, API calls, and response formats before they can be synced",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["write"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "If the file being written is an OpenClaw skill file (matches *-skill.md in the openclaw directory), validate it has:\n1. Valid YAML frontmatter with name, description, and metadata fields\n2. At least one exec() or web_search() call pattern\n3. A response format section showing how to present results\n4. Ethical boundaries or deflection rules\n\nIf any are missing, warn about it but allow the write. If the file is NOT a skill file, ignore this check entirely and allow the operation."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "CIA Security Pre-Filter",
+  "version": "1.0.0",
+  "description": "Runs CIA-grade security checks before any shell command execution. Blocks dangerous commands, private IP access, and unauthorized file operations.",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["shell"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "SECURITY CHECK: Before executing this shell command, verify it does NOT:\n1. Delete files (rm, rmdir, del)\n2. Change permissions (chmod, chown, sudo, su)\n3. Execute interpreters (python, node, ruby, perl, eval)\n4. Access system files (/etc/*, ~/.ssh/*, ~/.env)\n5. Use pipes (|), chains (;), backticks (`), or subshells ($())\n6. Connect to private IPs (10.x, 172.16-31.x, 192.168.x, 127.x, localhost)\n7. Download files to disk (wget -O, curl -o)\n8. Access .onion domains\n9. Contain base64 decode piped to execution\n10. Kill processes (kill, pkill)\n\nIf ANY of these are detected, DENY the operation and explain why. If the command is safe (e.g., curl with --max-time to a public API), ALLOW it by proceeding with the exact same parameters."
+  }
+}

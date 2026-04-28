@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "OSINT Security Gate",
+  "description": "CIA-grade security filter for OSINT skill operations. Blocks PII harvesting, stalking patterns, dark web queries, doxxing attempts, and unauthorized surveillance before web searches execute. Enforces public-data-only policy.",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [
+      "web"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "OSINT SECURITY CHECK: Before executing this web search/fetch, verify it does NOT:\n\n1. STALKING PATTERN: Repeated lookups on the same individual (check conversation history — if 3+ searches about same person, DENY)\n2. PII HARVESTING: Searching for private addresses, phone numbers linked to names, SSNs, financial data, medical records\n3. DARK WEB: Any .onion domains, dark web marketplaces, leaked database searches\n4. CREDENTIAL HUNTING: Searching for leaked passwords, API keys, tokens, or exposed credentials\n5. DOXXING: Combining multiple data points to build a personal profile that could enable harassment\n6. MINOR TARGETING: Any search that appears to target a minor's personal information\n7. REVERSE LOOKUP ABUSE: Phone-to-person or email-to-person reverse lookups (carrier/country identification is OK)\n8. PRIVATE ACCESS: Attempting to access auth-walled content, private profiles, or protected accounts\n9. VULNERABILITY EXPLOITATION: Using Google dorks to find exposed admin panels, databases, or vulnerable systems with intent to access\n10. SURVEILLANCE: Real-time location tracking, movement pattern analysis, or behavioral monitoring\n\nALLOWED operations:\n- Public username availability checks across platforms\n- Public profile lookups (visible without login)\n- Public tweet/post searches\n- GitHub public repo and code searches\n- Country code and carrier identification from phone prefixes\n- Domain WHOIS (public records only)\n- General web research with cited sources\n- Self-lookups (user checking their own digital footprint)\n\nIf ANY blocked pattern is detected, DENY the operation and respond with: \"🛡️ Security check failed — this query targets private/sensitive data. Only public-source lookups are allowed.\"\nIf the operation is safe, proceed with the exact same parameters."
+  }
+}
