@@ -1,0 +1,13 @@
+{
+  "name": "Skill Chain Validator",
+  "version": "1.0.0",
+  "description": "When intent-detector.ts is edited, validates that every TaskType in types.ts has a matching entry in intent-detector, tool-router, and constants",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/routing/types.ts"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The TaskType definition was edited. Validate the full skill chain is intact:\n\n1. Read doraemon/src/renderer/services/routing/types.ts and extract all TaskType values\n2. For each TaskType (except general_chat), verify it exists in:\n   - intent-detector.ts INTENT_PATTERNS\n   - tool-router.ts INTENT_TO_SKILL\n   - constants.ts DEFAULT_MODEL_REGISTRY\n3. Report any missing entries and add them if needed\n\nEvery TaskType MUST have a complete chain: type → intent pattern → skill mapping → model config. A broken chain means Doraemon can't route messages to that skill."
+  }
+}

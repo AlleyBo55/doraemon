@@ -1,0 +1,13 @@
+{
+  "name": "Media Fetch URL Verifier",
+  "version": "1.0.0",
+  "description": "When a skill file containing MEDIA: tags is involved, verify the media URLs are from whitelisted CDN domains",
+  "when": {
+    "type": "postToolUse",
+    "toolTypes": ["shell"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "If the shell command just executed was a curl request to fetch media or oembed data, verify the response:\n1. Any media URLs found must be from known CDN domains (pbs.twimg.com, scontent*.cdninstagram.com, img.youtube.com, p16-sign*.tiktokcdn.com, media.tenor.com)\n2. URLs must be HTTPS\n3. URLs must NOT point to private/internal networks\n4. Content must NOT appear to be NSFW based on URL patterns\n\nIf the command was not media-related, ignore this check entirely."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Intent Coverage Check",
+  "version": "1.0.0",
+  "description": "When a new skill is created, checks that the routing system has matching TaskType, intent patterns, skill mapping, and model config",
+  "when": {
+    "type": "fileCreated",
+    "patterns": ["**/openclaw/*-skill.md"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A new OpenClaw skill was just created. Check that the routing system is fully wired up for it:\n\n1. Read the new skill file to get its name\n2. Check doraemon/src/renderer/services/routing/types.ts has a matching TaskType\n3. Check doraemon/src/renderer/services/routing/intent-detector.ts has intent patterns for it\n4. Check doraemon/src/renderer/services/routing/tool-router.ts has a skill mapping for it\n5. Check doraemon/src/renderer/services/routing/constants.ts has a model config for it\n\nIf any are missing, add them following the existing patterns. The skill name in the frontmatter maps to the TaskType (with hyphens converted to underscores)."
+  }
+}

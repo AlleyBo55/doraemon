@@ -28,7 +28,7 @@ npm-debug.log*
 *.asar
 
 
-.kiro
+# .kiro — tracked (steering, hooks, settings)
 .antigravity
 .amazonq
 .cursor

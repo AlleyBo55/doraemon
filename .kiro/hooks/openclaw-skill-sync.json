@@ -1,0 +1,13 @@
+{
+  "name": "OpenClaw Skill Auto-Sync",
+  "version": "1.0.0",
+  "description": "Automatically syncs OpenClaw skills to runtime when skill files are edited",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/openclaw/*-skill.md"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "bash doraemon/openclaw/sync.sh"
+  }
+}

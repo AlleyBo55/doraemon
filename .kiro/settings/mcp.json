@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "doraemon": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "./doraemon/src/main/mcp-server/doraemon-mcp.ts",
+        "--workspace",
+        "."
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "doraemon_notify",
+        "doraemon_emotion",
+        "doraemon_coding_status",
+        "doraemon_celebrate"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": [
+        "read_multiple_files",
+        "list_allowed_directories",
+        "list_directory",
+        "directory_tree",
+        "read_text_file",
+        "search_files"
+      ]
+    }
+  }
+}
