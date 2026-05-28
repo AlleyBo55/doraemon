@@ -258,6 +258,17 @@ contextBridge.exposeInMainWorld('setupAPI', {
   minimizeWindow: () => ipcRenderer.send('setup:minimize-window'),
 });
 
+// LLM Provider API (for picker window and tray-driven workflows)
+contextBridge.exposeInMainWorld('llmProviderAPI', {
+  detectProviders: () => ipcRenderer.invoke('llm:detect-providers'),
+  getCurrentProvider: () => ipcRenderer.invoke('llm:get-current-provider'),
+  setCurrentProvider: (provider: string) =>
+    ipcRenderer.invoke('llm:set-current-provider', provider),
+  openPicker: () => ipcRenderer.invoke('llm:open-picker'),
+  closePicker: () => ipcRenderer.invoke('llm:close-picker'),
+  cancelPicker: () => ipcRenderer.invoke('llm:cancel-picker'),
+});
+
 // Approval API (for approval window)
 contextBridge.exposeInMainWorld('approvalAPI', {
   getPendingItems: () => ipcRenderer.invoke('approval:get-pending'),

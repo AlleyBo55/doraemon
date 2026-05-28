@@ -56,6 +56,14 @@ import { startProactiveEngine, stopProactiveEngine, onCodingActivity, onChatMess
 import { loadBond, recordInteraction } from './experience-system/bond-tracker.js';
 import { flushHabits } from './experience-system/habit-tracker.js';
 import { logConversation, exportConversationLog, getConversationLog, clearConversationLog } from './memory-system/conversation-log.js';
+import {
+  registerLLMProviderIpc,
+  openPickerWindow,
+  setProviderTrayRefresher,
+  getCurrentProviderDisplayName,
+} from './llm-provider-ipc.js';
+import { setPickerOpener } from './llm-provider/index.js';
+import { bootstrapProvider, stopKiroGateway } from './llm-provider/index.js';
 
 let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -379,9 +387,20 @@ function createTray() {
   tray.setToolTip('Doraemon');
 }
 
+let cachedProviderLabel = 'LLM Provider…';
+
+async function refreshProviderLabel(): Promise<void> {
+  try {
+    const name = await getCurrentProviderDisplayName();
+    cachedProviderLabel = `LLM: ${name}`;
+  } catch {
+    cachedProviderLabel = 'LLM Provider…';
+  }
+}
+
 function updateTrayMenu() {
   if (!tray) return;
-  
+
   const contextMenu = Menu.buildFromTemplate([
     { 
       label: 'Show/Hide', 
@@ -441,6 +460,18 @@ function updateTrayMenu() {
           }
         },
       ]
+    },
+    { type: 'separator' },
+    {
+      label: cachedProviderLabel,
+      submenu: [
+        {
+          label: 'Switch LLM Provider…',
+          click: () => {
+            openPickerWindow();
+          },
+        },
+      ],
     },
     { type: 'separator' },
     {
@@ -939,6 +970,15 @@ app.whenReady().then(() => {
     return net.fetch(`file://${filePath}`);
   });
 
+  // LLM provider IPC + tray label refresher
+  registerLLMProviderIpc();
+  setProviderTrayRefresher(() => {
+    void refreshProviderLabel().then(() => updateTrayMenu());
+  });
+  setPickerOpener(() => openPickerWindow());
+  void refreshProviderLabel();
+  void bootstrapProvider();
+
   // Check if we should skip setup (e.g., --skip-setup flag or env var)
   const skipSetup = cfg.skipSetup;
   
@@ -1013,6 +1053,12 @@ app.on('before-quit', async () => {
     closeKiroBridge();
   } catch (err) {
     console.error('[Shutdown] Failed to close Kiro bridge:', err);
+  }
+
+  try {
+    await stopKiroGateway();
+  } catch (err) {
+    console.error('[Shutdown] Failed to stop Kiro gateway:', err);
   }
 
   try {
