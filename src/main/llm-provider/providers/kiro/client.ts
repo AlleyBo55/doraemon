@@ -1,4 +1,4 @@
-import { ensureFreshAccessToken } from './auth.js';
+import { ensureFreshAccessToken, refreshOnUnauthorized } from './auth.js';
 import { parseEventStream, decodePayloadAsJson } from './event-stream.js';
 import { resolveModel } from './model-map.js';
 
@@ -142,14 +142,39 @@ function accumulateFromFrames(
 }
 
 export async function kiroChat(req: KiroChatRequest): Promise<KiroChatResponse> {
-  const { accessToken, region, profileArn } = await ensureFreshAccessToken();
+  const initial = await ensureFreshAccessToken();
   const kiroModelId = resolveModel(req.model);
-
   const body = buildBody(req, kiroModelId);
-  if (profileArn) {
-    body['profileArn'] = profileArn;
+  if (initial.profileArn) {
+    body['profileArn'] = initial.profileArn;
   }
 
+  let attemptToken = initial.accessToken;
+  let didRetryOn401 = false;
+
+  while (true) {
+    try {
+      return await sendKiroRequest(body, attemptToken, initial.region, kiroModelId);
+    } catch (err) {
+      if (err instanceof KiroRequestError && err.status === 401 && !didRetryOn401) {
+        didRetryOn401 = true;
+        // Token died mid-request (Kiro IDE refreshed and invalidated ours, or
+        // we were holding a copy that expired). Force a disk-aware refresh and
+        // retry exactly once.
+        attemptToken = await refreshOnUnauthorized();
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+async function sendKiroRequest(
+  body: Record<string, unknown>,
+  accessToken: string,
+  region: string,
+  kiroModelId: string,
+): Promise<KiroChatResponse> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
 
