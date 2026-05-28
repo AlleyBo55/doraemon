@@ -1,12 +1,30 @@
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { constants as fsc } from 'node:fs';
 
 const DEFAULT_REGION = 'us-east-1';
-const REFRESH_LEADTIME_MS = 60_000;
+// Two-tier expiry policy.
+//   - SOON:    "good idea to refresh", but the token still works
+//   - EXPIRED: "must refresh, the old token is dead"
+// We refresh proactively at SOON, but if the refresh call fails we fall back
+// to the still-valid access token until EXPIRED. This handles the case where
+// Kiro IDE just rotated our refresh token: the old refresh is dead but the
+// access token has minutes of life left, so a transient AWS 400 doesn't break
+// the gateway.
+const REFRESH_LEADTIME_SOON_MS = 5 * 60_000;
+const REFRESH_LEADTIME_EXPIRED_MS = 5_000;
 const REFRESH_TIMEOUT_MS = 15_000;
+const LOCK_STALE_MS = 30_000;
+const LOCK_POLL_INTERVAL_MS = 200;
+const LOCK_TOTAL_WAIT_MS = 30_000;
 
-const CRED_PATH = path.join(os.homedir(), '.aws', 'sso', 'cache', 'kiro-auth-token.json');
+const HOME = os.homedir();
+const CRED_PATH = path.join(HOME, '.aws', 'sso', 'cache', 'kiro-auth-token.json');
+const LOCK_PATH = `${CRED_PATH}.refresh-lock`;
+// User-facing kill-switch: `touch ~/.aws/sso/cache/kiro-auth-token.json.no-refresh`
+// to forbid the gateway from ever calling AWS to refresh.
+const NO_REFRESH_FLAG = `${CRED_PATH}.no-refresh`;
 
 export interface KiroCreds {
   accessToken: string;
@@ -94,8 +112,67 @@ function expiresAtMs(creds: KiroCreds): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-function isExpired(creds: KiroCreds): boolean {
-  return Date.now() + REFRESH_LEADTIME_MS >= expiresAtMs(creds);
+function isExpiringSoon(creds: KiroCreds): boolean {
+  return Date.now() + REFRESH_LEADTIME_SOON_MS >= expiresAtMs(creds);
+}
+
+function isHardExpired(creds: KiroCreds): boolean {
+  return Date.now() + REFRESH_LEADTIME_EXPIRED_MS >= expiresAtMs(creds);
+}
+
+async function noRefreshGuard(): Promise<void> {
+  try {
+    await fs.access(NO_REFRESH_FLAG, fsc.F_OK);
+    throw new KiroAuthExpired(
+      `refresh blocked by ${NO_REFRESH_FLAG}. Remove the file to re-enable.`,
+    );
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+}
+
+/**
+ * Cross-process exclusive lock implemented via O_EXCL lockfile creation.
+ * If a lockfile is older than LOCK_STALE_MS, treat it as orphaned and remove.
+ */
+async function acquireRefreshLock(): Promise<() => Promise<void>> {
+  const start = Date.now();
+  while (Date.now() - start < LOCK_TOTAL_WAIT_MS) {
+    try {
+      const handle = await fs.open(LOCK_PATH, 'wx', 0o600);
+      const payload = JSON.stringify({ pid: process.pid, ts: Date.now() });
+      await handle.writeFile(payload);
+      await handle.close();
+      return async () => {
+        try {
+          await fs.unlink(LOCK_PATH);
+        } catch {
+          // best-effort
+        }
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw new KiroAuthNetwork(
+          `failed to take refresh lock: ${err instanceof Error ? err.message : 'unknown'}`,
+        );
+      }
+      // Lock exists. If it's stale, kill it. Otherwise wait.
+      try {
+        const stat = await fs.stat(LOCK_PATH);
+        if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+          console.warn('[kiro-auth] removing stale refresh lock');
+          await fs.unlink(LOCK_PATH);
+          continue;
+        }
+      } catch {
+        // race: lock disappeared, retry immediately
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, LOCK_POLL_INTERVAL_MS));
+    }
+  }
+  throw new KiroAuthNetwork('refresh lock timeout — another refresher is stuck');
 }
 
 async function refreshKiroDesktop(creds: KiroCreds): Promise<KiroCreds> {
@@ -184,11 +261,63 @@ async function refreshAwsSso(creds: KiroCreds): Promise<KiroCreds> {
   }
 }
 
-async function performRefresh(creds: KiroCreds): Promise<KiroCreds> {
-  const useSso = Boolean(creds.clientId && creds.clientSecret);
-  const next = useSso ? await refreshAwsSso(creds) : await refreshKiroDesktop(creds);
-  await writeCredsToDisk(next);
-  return next;
+/**
+ * Holds the cross-process lock for the duration of a refresh attempt.
+ * Critical sequence:
+ *   1. Take the lockfile.
+ *   2. Re-read disk (Kiro IDE may have just refreshed; that token is fresher).
+ *   3. If disk token is now valid, return it without calling AWS.
+ *   4. Otherwise call AWS and persist the result.
+ *   5. Release the lock no matter what.
+ */
+/**
+ * Refreshes the credentials with graceful degradation.
+ *
+ * Critical sequence:
+ *   1. Take the cross-process lockfile.
+ *   2. Re-read disk (Kiro IDE may have just refreshed; that token is fresher).
+ *   3. If disk token is now valid, return it without calling AWS.
+ *   4. Otherwise call AWS and persist the result.
+ *   5. Release the lock no matter what.
+ *
+ * If the AWS call fails AND the existing access token is not yet hard-expired,
+ * we return the existing creds and let the caller try the request anyway.
+ * Throws KiroAuthExpired only when the token is truly dead.
+ */
+async function performRefresh(staleCreds: KiroCreds): Promise<KiroCreds> {
+  await noRefreshGuard();
+  const release = await acquireRefreshLock();
+  try {
+    let onDisk: KiroCreds;
+    try {
+      onDisk = await readCredsFromDisk();
+    } catch {
+      onDisk = staleCreds;
+    }
+    if (!isExpiringSoon(onDisk)) {
+      return onDisk;
+    }
+    const useSso = Boolean(onDisk.clientId && onDisk.clientSecret);
+    try {
+      const next = useSso ? await refreshAwsSso(onDisk) : await refreshKiroDesktop(onDisk);
+      await writeCredsToDisk(next);
+      return next;
+    } catch (err) {
+      // Graceful degradation: if our refresh token is dead but the access
+      // token is still alive, keep going. Kiro IDE just out-raced us — we'll
+      // pick up the new pair from disk on the next call.
+      if (!isHardExpired(onDisk)) {
+        const reason = err instanceof Error ? err.message : 'unknown';
+        console.warn(
+          `[kiro-auth] refresh failed but access token still valid; degrading gracefully (${reason})`,
+        );
+        return onDisk;
+      }
+      throw err;
+    }
+  } finally {
+    await release();
+  }
 }
 
 export async function loadCreds(force = false): Promise<KiroCreds> {
@@ -197,6 +326,12 @@ export async function loadCreds(force = false): Promise<KiroCreds> {
   return cached;
 }
 
+/**
+ * Returns a usable access token. Only refreshes when the on-disk token is
+ * actually expiring soon. If a refresh fails but the access token is still
+ * within its hard-expiry window, returns the existing token (graceful
+ * degradation).
+ */
 export async function ensureFreshAccessToken(): Promise<{
   accessToken: string;
   region: string;
@@ -212,8 +347,19 @@ export async function ensureFreshAccessToken(): Promise<{
     };
   }
 
-  let creds = cached ?? (await loadCreds());
-  if (!isExpired(creds)) {
+  let creds: KiroCreds;
+  try {
+    creds = await readCredsFromDisk();
+    cached = creds;
+  } catch (err) {
+    if (cached) {
+      creds = cached;
+    } else {
+      throw err;
+    }
+  }
+
+  if (!isExpiringSoon(creds)) {
     const profileArn = creds.profileArn ?? (await ensureProfileArn(creds));
     return {
       accessToken: creds.accessToken,
@@ -239,6 +385,44 @@ export async function ensureFreshAccessToken(): Promise<{
     region: next.region ?? DEFAULT_REGION,
     profileArn,
   };
+}
+
+/**
+ * Called by the Kiro client when an upstream call returns 401. Re-reads disk
+ * (Kiro IDE may have refreshed for us) and, if still expired, attempts a
+ * single refresh. Falls back to the existing access token if refresh fails
+ * but the token isn't hard-expired.
+ */
+export async function refreshOnUnauthorized(): Promise<string> {
+  if (inFlightRefresh) {
+    const r = await inFlightRefresh;
+    return r.accessToken;
+  }
+  let onDisk: KiroCreds;
+  try {
+    onDisk = await readCredsFromDisk();
+  } catch (err) {
+    if (cached) {
+      onDisk = cached;
+    } else {
+      throw err;
+    }
+  }
+  cached = onDisk;
+  if (!isExpiringSoon(onDisk)) {
+    return onDisk.accessToken;
+  }
+  inFlightRefresh = (async () => {
+    try {
+      const next = await performRefresh(onDisk);
+      cached = next;
+      return next;
+    } finally {
+      inFlightRefresh = null;
+    }
+  })();
+  const next = await inFlightRefresh;
+  return next.accessToken;
 }
 
 async function fetchProfileArn(creds: KiroCreds): Promise<string | null> {
@@ -290,7 +474,6 @@ async function ensureProfileArn(creds: KiroCreds): Promise<string | undefined> {
       if (arn) {
         const updated: KiroCreds = { ...creds, profileArn: arn };
         cached = updated;
-        // Persist so we don't have to re-fetch on every cold boot.
         try {
           await writeCredsToDisk(updated);
         } catch (err) {
@@ -315,4 +498,4 @@ export function clearAuthCache(): void {
   inFlightProfileLookup = null;
 }
 
-export const __test__ = { CRED_PATH, isExpired, expiresAtMs };
+export const __test__ = { CRED_PATH, LOCK_PATH, NO_REFRESH_FLAG, isExpiringSoon, isHardExpired, expiresAtMs };
