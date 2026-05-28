@@ -1,4 +1,7 @@
 import http from 'node:http';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 import { kiroChat, KiroRequestError } from './providers/kiro/client.js';
 import { KiroAuthExpired, KiroAuthMissing, KiroAuthNetwork } from './providers/kiro/auth.js';
 import { listKnownModels, resolveModel } from './providers/kiro/model-map.js';
@@ -6,6 +9,8 @@ import { logLLMCall } from './logger.js';
 
 const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const TOKEN_REFRESH_TTL_MS = 5_000;
+const AGENTS_DIR = path.join(os.homedir(), '.openclaw', 'agents');
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -32,6 +37,54 @@ interface OpenAIChatRequest {
 let server: http.Server | null = null;
 let activeToken: string | null = null;
 let activePort = 0;
+
+interface DiskTokenCache {
+  tokens: Set<string>;
+  fetchedAt: number;
+}
+let diskTokenCache: DiskTokenCache | null = null;
+
+async function readAllAgentTokens(): Promise<Set<string>> {
+  const tokens = new Set<string>();
+  let entries: string[];
+  try {
+    entries = await fs.readdir(AGENTS_DIR);
+  } catch {
+    return tokens;
+  }
+  await Promise.all(
+    entries.map(async (name) => {
+      const file = path.join(AGENTS_DIR, name, 'agent', 'auth-profiles.json');
+      try {
+        const raw = await fs.readFile(file, 'utf-8');
+        const parsed = JSON.parse(raw) as unknown;
+        if (typeof parsed !== 'object' || parsed === null) return;
+        const profiles = (parsed as { profiles?: unknown }).profiles;
+        if (typeof profiles !== 'object' || profiles === null) return;
+        const kiro = (profiles as Record<string, unknown>)['kiro:default'];
+        if (typeof kiro !== 'object' || kiro === null) return;
+        const key = (kiro as { key?: unknown }).key;
+        if (typeof key === 'string' && key.length >= 16) {
+          tokens.add(key);
+        }
+      } catch {
+        // best-effort: skip unreadable / malformed files
+      }
+    }),
+  );
+  return tokens;
+}
+
+async function getAcceptableTokens(): Promise<Set<string>> {
+  const now = Date.now();
+  if (diskTokenCache && now - diskTokenCache.fetchedAt < TOKEN_REFRESH_TTL_MS) {
+    return diskTokenCache.tokens;
+  }
+  const tokens = await readAllAgentTokens();
+  if (activeToken) tokens.add(activeToken);
+  diskTokenCache = { tokens, fetchedAt: now };
+  return tokens;
+}
 
 export interface GatewayInfo {
   port: number;
@@ -81,17 +134,38 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
-function checkAuth(req: http.IncomingMessage): { ok: true } | { ok: false; reason: string } {
-  if (!activeToken) return { ok: false, reason: 'gateway not initialized' };
-
+async function checkAuth(req: http.IncomingMessage): Promise<{ ok: true } | { ok: false; reason: string }> {
   const apiKey = req.headers['x-api-key'];
   const auth = req.headers['authorization'];
 
-  if (typeof apiKey === 'string' && apiKey === activeToken) return { ok: true };
-
-  if (typeof auth === 'string') {
+  let presented: string | null = null;
+  if (typeof apiKey === 'string' && apiKey.length > 0) {
+    presented = apiKey;
+  } else if (typeof auth === 'string') {
     const m = auth.match(/^Bearer\s+(.+)$/i);
-    if (m && m[1] === activeToken) return { ok: true };
+    if (m && m[1]) presented = m[1];
+  }
+
+  if (!presented) return { ok: false, reason: 'invalid or missing token' };
+
+  // Fast path: matches the boot-time token.
+  if (activeToken && presented === activeToken) return { ok: true };
+
+  // Slow path: check on-disk per-agent kiro:default keys (rotated by wire script).
+  // Cached for TOKEN_REFRESH_TTL_MS so we don't hammer the FS on every request.
+  const acceptable = await getAcceptableTokens();
+  if (acceptable.has(presented)) {
+    // Promote to fast-path so subsequent calls don't even hit the cache.
+    activeToken = presented;
+    return { ok: true };
+  }
+
+  // One last try: bypass the TTL in case the token was just rotated.
+  diskTokenCache = null;
+  const fresh = await getAcceptableTokens();
+  if (fresh.has(presented)) {
+    activeToken = presented;
+    return { ok: true };
   }
 
   return { ok: false, reason: 'invalid or missing token' };
@@ -491,7 +565,7 @@ async function router(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return;
   }
 
-  const auth = checkAuth(req);
+  const auth = await checkAuth(req);
   if (!auth.ok) {
     console.warn(
       `[kiro-gateway] auth-fail method=${req.method} path=${url.pathname} reason="${auth.reason}"`,
