@@ -413,8 +413,8 @@ export function emitBrowserThought(domain: string, category: string): void {
     thought,
     domain,
     category,
-    emotion: category === 'dev' ? 'working' : category === 'entertainment' ? 'playful' : 'curious',
-    animation: 'idle',
+    emotion: category === 'dev' ? 'focus' : category === 'entertainment' ? 'excitement' : 'curiosity',
+    animation: category === 'dev' ? 'action_coding_thinking' : 'action_research',
   });
 }
 

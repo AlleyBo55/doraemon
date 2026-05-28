@@ -28,7 +28,7 @@ export const DORAEMON_TOOLS: MCPToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        emotion: { type: 'string', description: 'Emotion: happy, sad, excited, thinking, coding, coding_intense, coding_celebrate, sleepy, confused, proud, curious, playful' },
+        emotion: { type: 'string', description: 'Emotion/animation: joy, pride, curiosity, focus, concern, fatigue, action_research, action_gadget_search, action_chat_answer, action_hungry' },
         intensity: { type: 'number', description: 'Intensity 0-1 (default: 0.8)' },
       },
       required: ['emotion'],
@@ -105,9 +105,9 @@ export const DORAEMON_TOOLS: MCPToolDefinition[] = [
 ];
 
 export const CODING_STATUS_EMOTION_MAP: Record<string, string> = {
-  started: 'coding',
-  completed: 'coding_celebrate',
-  error: 'frustrated',
-  thinking: 'coding_thinking',
-  reviewing: 'thinking',
+  started: 'action_coding_typing',
+  completed: 'emotion_pride',
+  error: 'frustration',
+  thinking: 'action_coding_thinking',
+  reviewing: 'action_coding_thinking',
 };

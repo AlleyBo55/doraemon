@@ -72,14 +72,14 @@ function processCommand(command: DoraemonCommand): void {
     case 'coding_status':
       const action = command.params.action as string;
       const emotionMap: Record<string, string> = {
-        started: 'coding',
-        completed: 'coding_celebrate',
-        error: 'frustrated',
-        thinking: 'coding_thinking',
-        reviewing: 'thinking',
+        started: 'action_coding_typing',
+        completed: 'emotion_pride',
+        error: 'frustration',
+        thinking: 'action_coding_thinking',
+        reviewing: 'action_coding_thinking',
       };
       
-      mainWindow?.webContents.send('trigger-emotion', emotionMap[action] || 'coding');
+      mainWindow?.webContents.send('trigger-emotion', emotionMap[action] || 'action_coding_typing');
       
       if (command.params.message) {
         mainWindow?.webContents.send('mcp-notify', {
@@ -90,19 +90,19 @@ function processCommand(command: DoraemonCommand): void {
       }
       
       updateState({
-        emotion: emotionMap[action] || 'coding',
+        emotion: emotionMap[action] || 'action_coding_typing',
         lastActivity: `coding_${action}`,
       });
       break;
       
     case 'celebrate':
-      mainWindow?.webContents.send('trigger-emotion', 'excited');
+      mainWindow?.webContents.send('trigger-emotion', 'emotion_pride');
       mainWindow?.webContents.send('mcp-notify', {
         message: `🎉 ${command.params.reason}`,
-        emotion: 'excited',
+        emotion: 'pride',
         duration: 6000,
       });
-      updateState({ emotion: 'excited', lastActivity: 'celebration' });
+      updateState({ emotion: 'pride', lastActivity: 'celebration' });
       break;
       
     case 'remember':

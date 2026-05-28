@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'preact/hooks';
 import thoughts from '../core/constants/thoughts.json';
 import codingThoughts from '../core/constants/coding-thoughts.json';
 import { DORAEMON_SOUL, getRandomGadget } from '../core/constants/soul';
+import { animationStore } from '../stores';
 import type { EmotionType } from '../core/types/emotion';
 
 type ThoughtCategory = keyof typeof thoughts;
@@ -14,6 +15,28 @@ const COOLDOWN_CYCLES = 3;
 const CODING_MODE_COOLDOWN = 10000; // 10s delay after coding ends before random thoughts resume
 
 const emotionToCategory: Partial<Record<EmotionType, ThoughtCategory>> = {
+  joy: 'happy',
+  pride: 'happy',
+  satisfaction: 'idle',
+  curiosity: 'curious',
+  wonder: 'curious',
+  determination: 'determined',
+  focus: 'working',
+  calm: 'idle',
+  contemplation: 'thinking',
+  concern: 'anxious',
+  frustration: 'anxious',
+  fatigue: 'sleepy',
+  longing: 'nostalgic',
+  gratitude: 'grateful',
+  connection: 'greeting',
+  confusion: 'thinking',
+  excitement: 'excited',
+  melancholy: 'sad',
+  hope: 'determined',
+  awe: 'excited',
+  angry: 'anxious',
+  hungry: 'hungry',
   happy: 'happy',
   sad: 'sad',
   thinking: 'thinking',
@@ -32,6 +55,87 @@ const emotionToCategory: Partial<Record<EmotionType, ThoughtCategory>> = {
   anxious: 'anxious',
 };
 
+const emotionToAnimation: Partial<Record<EmotionType, string>> = {
+  joy: 'emotion_joy',
+  pride: 'emotion_pride',
+  satisfaction: 'emotion_satisfaction',
+  curiosity: 'emotion_curiosity',
+  wonder: 'emotion_wonder',
+  determination: 'emotion_determination',
+  focus: 'emotion_focus',
+  calm: 'emotion_calm',
+  contemplation: 'emotion_contemplation',
+  concern: 'emotion_concern',
+  frustration: 'emotion_frustration',
+  fatigue: 'emotion_fatigue',
+  longing: 'emotion_longing',
+  gratitude: 'emotion_gratitude',
+  connection: 'emotion_connection',
+  confusion: 'emotion_confusion',
+  excitement: 'emotion_excitement',
+  melancholy: 'emotion_melancholy',
+  hope: 'emotion_hope',
+  awe: 'emotion_awe',
+  angry: 'action_angry',
+  hungry: 'action_hungry',
+  happy: 'emotion_joy',
+  sad: 'emotion_melancholy',
+  excited: 'emotion_excitement',
+  thinking: 'emotion_contemplation',
+  confused: 'emotion_confusion',
+  sleepy: 'emotion_fatigue',
+  surprised: 'emotion_wonder',
+  working: 'emotion_focus',
+  frustrated: 'emotion_frustration',
+  proud: 'emotion_pride',
+  curious: 'emotion_curiosity',
+  playful: 'action_random_thought',
+  determined: 'emotion_determination',
+  relaxed: 'emotion_satisfaction',
+  anxious: 'emotion_concern',
+  neutral: 'emotion_calm',
+};
+
+const categoryToAnimation: Partial<Record<ThoughtCategory, string>> = {
+  idle: 'action_random_thought',
+  happy: 'emotion_joy',
+  sad: 'emotion_melancholy',
+  thinking: 'emotion_contemplation',
+  excited: 'emotion_excitement',
+  sleepy: 'emotion_fatigue',
+  curious: 'action_gadget_search',
+  working: 'emotion_focus',
+  playful: 'action_random_thought',
+  greeting: 'action_greeting',
+  nostalgic: 'emotion_longing',
+  hungry: 'action_hungry',
+  protective: 'action_protect',
+  philosophical: 'emotion_contemplation',
+  mischievous: 'action_gadget_surprise',
+  determined: 'emotion_determination',
+  grateful: 'emotion_gratitude',
+  anxious: 'emotion_concern',
+};
+
+const resolveCategoryAnimation = (category: ThoughtCategory, emotion: EmotionType): string => {
+  if (category === 'hungry') return Math.random() > 0.45 ? 'action_hungry' : 'action_eating';
+  if (category === 'sleepy') return Math.random() > 0.5 ? 'action_nap' : 'action_rest';
+  if (category === 'curious') return Math.random() > 0.55 ? 'action_gadget_search' : 'action_explain_gadget';
+  if (category === 'determined') return Math.random() > 0.55 ? 'emotion_determination' : 'action_walk';
+  return categoryToAnimation[category] || emotionToAnimation[emotion] || 'action_random_thought';
+};
+
+const codingCategoryToAnimation: Partial<Record<CodingThoughtCategory, string>> = {
+  general: 'action_coding_typing',
+  debugging: 'action_coding_thinking',
+  thinking: 'action_coding_thinking',
+  progress: 'action_coding_typing',
+  motivation: 'emotion_determination',
+  humor: 'action_random_thought',
+  languages: 'action_coding_thinking',
+  tools: 'action_gadget_use',
+};
+
 interface ThoughtHistory {
   thought: string;
   cycleUsed: number;
@@ -47,6 +151,8 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
   const historyRef = useRef<ThoughtHistory[]>([]);
   const codingHistoryRef = useRef<ThoughtHistory[]>([]);
   const codingEndedAtRef = useRef<number | null>(null);
+  const lastThoughtCategoryRef = useRef<ThoughtCategory>('idle');
+  const lastThoughtAnimationRef = useRef<string | null>(null);
   
   // Use refs to avoid stale closures in setTimeout
   const isPausedRef = useRef(isPaused);
@@ -115,7 +221,7 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     }
   }, []);
 
-  const getRandomCodingThought = useCallback((): string => {
+  const getRandomCodingThought = useCallback((): { text: string; animation: string } => {
     const categories: CodingThoughtCategory[] = ['general', 'debugging', 'thinking', 'progress', 'motivation', 'humor', 'languages', 'tools'];
     const category = categories[Math.floor(Math.random() * categories.length)];
     const categoryThoughts = codingThoughts[category] || codingThoughts.general;
@@ -123,14 +229,28 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     const availableThoughts = categoryThoughts.filter(t => isCodingThoughtAvailable(t));
     
     if (availableThoughts.length > 0) {
-      return availableThoughts[Math.floor(Math.random() * availableThoughts.length)];
+      return {
+        text: availableThoughts[Math.floor(Math.random() * availableThoughts.length)],
+        animation: codingCategoryToAnimation[category] || 'action_coding_typing',
+      };
     }
-    return categoryThoughts[Math.floor(Math.random() * categoryThoughts.length)];
+    return {
+      text: categoryThoughts[Math.floor(Math.random() * categoryThoughts.length)],
+      animation: codingCategoryToAnimation[category] || 'action_coding_typing',
+    };
   }, [isCodingThoughtAvailable]);
 
   const getSoulEnhancedThought = useCallback((baseThought: string): string => {
     if (Math.random() < 0.1) {
       const gadget = getRandomGadget();
+      lastThoughtAnimationRef.current =
+        gadget.name === 'Take-copter'
+          ? 'action_take_copter'
+          : gadget.name === 'Time Machine'
+            ? 'action_time_travel'
+            : gadget.name === 'Anywhere Door'
+              ? 'action_gadget_use'
+              : 'action_explain_gadget';
       const gadgetThoughts = [
         `${gadget.emoji} Maybe I should use my ${gadget.name}~`,
         `The ${gadget.name} (${gadget.japanese}) could help here~`,
@@ -140,6 +260,7 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     }
 
     if (Math.random() < 0.08) {
+      lastThoughtAnimationRef.current = 'action_random_thought';
       const soulThoughts = [
         `${DORAEMON_SOUL.relationships.bestFriend} would like this~`,
         `I wonder what ${DORAEMON_SOUL.relationships.sister} is doing...`,
@@ -155,6 +276,7 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
 
   const getRandomThought = useCallback((emotion: EmotionType): string => {
     const specialCategories: ThoughtCategory[] = ['nostalgic', 'hungry', 'protective', 'philosophical', 'mischievous', 'grateful'];
+    lastThoughtAnimationRef.current = null;
     
     let category: ThoughtCategory;
     if (Math.random() < 0.15) {
@@ -162,6 +284,7 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     } else {
       category = emotionToCategory[emotion] || 'idle';
     }
+    lastThoughtCategoryRef.current = category;
     
     const categoryThoughts = thoughts[category] || thoughts.idle;
     
@@ -177,8 +300,11 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     return getSoulEnhancedThought(selectedThought);
   }, [isThoughtAvailable, getSoulEnhancedThought]);
 
-  const showThought = useCallback((text: string, duration = THOUGHT_DISPLAY_DURATION, isCoding = false) => {
+  const showThought = useCallback((text: string, duration = THOUGHT_DISPLAY_DURATION, isCoding = false, animation?: string) => {
     setThought(text);
+    if (animation) {
+      animationStore.actions.trigger(animation, duration);
+    }
     if (isCoding) {
       recordCodingThought(text);
     } else {
@@ -201,11 +327,13 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
       if (isCodingModeRef.current) {
         // In coding mode - use coding thoughts
         const codingThought = getRandomCodingThought();
-        showThought(codingThought, THOUGHT_DISPLAY_DURATION, true);
+        showThought(codingThought.text, THOUGHT_DISPLAY_DURATION, true, codingThought.animation);
       } else if (!inCodingCooldown) {
         // Not in coding mode and cooldown passed - use regular thoughts
-        const randomThought = getRandomThought(emotionRef.current);
-        showThought(randomThought);
+        const emotion = emotionRef.current;
+        const randomThought = getRandomThought(emotion);
+        const animation = lastThoughtAnimationRef.current || resolveCategoryAnimation(lastThoughtCategoryRef.current, emotion);
+        showThought(randomThought, THOUGHT_DISPLAY_DURATION, false, animation);
         
         thoughtsInCycleRef.current++;
         if (thoughtsInCycleRef.current >= THOUGHTS_PER_CYCLE) {
@@ -247,8 +375,10 @@ export const useRandomThoughts = (currentEmotion: EmotionType, isConnected: bool
     } else if (wasPausedRef.current && !isPaused) {
       // Was paused, now unpaused - trigger a new thought after short delay
       setTimeout(() => {
-        const newThought = getRandomThought(emotionRef.current);
-        showThought(newThought);
+        const emotion = emotionRef.current;
+        const newThought = getRandomThought(emotion);
+        const animation = lastThoughtAnimationRef.current || resolveCategoryAnimation(lastThoughtCategoryRef.current, emotion);
+        showThought(newThought, THOUGHT_DISPLAY_DURATION, false, animation);
       }, 2000);
     }
     wasPausedRef.current = isPaused;

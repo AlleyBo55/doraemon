@@ -8,22 +8,22 @@ type SkillMapping = {
 };
 
 const INTENT_TO_SKILL: Record<Exclude<TaskType, 'general_chat'>, SkillMapping> = {
-  weather: { skills: ['weather'], emotion: 'curious' },
-  time: { skills: ['time'], emotion: 'thinking' },
-  web_search: { skills: ['web-search', 'browser'], emotion: 'curious' },
-  image_generation: { skills: ['image-gen'], emotion: 'excited' },
-  ide_activity: { skills: ['ide-bridge', 'coding-stats'], emotion: 'working' },
-  notification: { skills: ['whatsapp', 'telegram', 'slack', 'discord'], emotion: 'surprised' },
-  task_management: { skills: ['tasks', 'reminders'], emotion: 'determined' },
-  messaging: { skills: ['whatsapp', 'telegram', 'slack', 'discord'], emotion: 'excited' },
+  weather: { skills: ['weather'], emotion: 'curiosity' },
+  time: { skills: ['time'], emotion: 'contemplation' },
+  web_search: { skills: ['web-search', 'browser'], emotion: 'curiosity' },
+  image_generation: { skills: ['image-gen'], emotion: 'excitement' },
+  ide_activity: { skills: ['ide-bridge', 'coding-stats'], emotion: 'focus' },
+  notification: { skills: ['whatsapp', 'telegram', 'slack', 'discord'], emotion: 'wonder' },
+  task_management: { skills: ['tasks', 'reminders'], emotion: 'determination' },
+  messaging: { skills: ['whatsapp', 'telegram', 'slack', 'discord'], emotion: 'connection' },
 };
 
 const TOOL_RESULT_EMOTIONS: Record<string, EmotionType> = {
-  success: 'happy',
-  error: 'frustrated',
-  not_found: 'confused',
-  timeout: 'anxious',
-  partial: 'thinking',
+  success: 'satisfaction',
+  error: 'frustration',
+  not_found: 'confusion',
+  timeout: 'concern',
+  partial: 'contemplation',
 };
 
 export interface RouteDecision {
@@ -40,7 +40,7 @@ export function routeMessage(message: string): RouteDecision {
     return {
       route: 'proxy',
       intent,
-      fallbackEmotion: 'neutral',
+      fallbackEmotion: 'calm',
     };
   }
 
@@ -54,7 +54,7 @@ export function routeMessage(message: string): RouteDecision {
 }
 
 export function emotionFromToolResult(status: string): EmotionType {
-  return TOOL_RESULT_EMOTIONS[status] ?? 'neutral';
+  return TOOL_RESULT_EMOTIONS[status] ?? 'calm';
 }
 
 export function getSkillsForIntent(intent: TaskType): string[] | undefined {

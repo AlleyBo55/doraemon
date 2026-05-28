@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'preact/hooks';
-import { emotionStore, configState } from '../stores';
+import { animationStore, emotionStore, configState } from '../stores';
 import { detectEmotion, extractThought } from '../services/openclaw';
 import type { EmotionType } from '../core/types/emotion';
 import { GATEWAY } from '../core/constants/gateway';
@@ -327,7 +327,8 @@ export const useOpenClaw = () => {
       currentThought: 'Hmm, let me think~',
     }));
 
-    emotionStore.actions.setEmotion('thinking', 'user');
+    emotionStore.actions.setEmotion('contemplation', 'user');
+    animationStore.actions.trigger('action_chat_question', 7000);
     responseBufferRef.current = '';
 
     const runId = generateId();
@@ -426,6 +427,7 @@ export const useOpenClaw = () => {
             error: null,
           }));
           emotionStore.actions.setEmotionProtected(detectEmotion(content), 'ai');
+          animationStore.actions.trigger('action_chat_answer', 9000);
           setBubbleTimeout(50000);
           
           // Learn from conversation (secure memory system)
@@ -449,6 +451,7 @@ export const useOpenClaw = () => {
           error: null,
         }));
         emotionStore.actions.setEmotionProtected(detectEmotion(content), 'ai');
+        animationStore.actions.trigger('action_chat_answer', 9000);
         setBubbleTimeout(50000);
         
         // Learn from conversation (secure memory system)
@@ -471,7 +474,8 @@ export const useOpenClaw = () => {
         error: null,
       }));
 
-      emotionStore.actions.setEmotionProtected('confused', 'ai');
+      emotionStore.actions.setEmotionProtected('confusion', 'ai');
+      animationStore.actions.trigger('emotion_confusion', 8000);
       setBubbleTimeout(50000);
       return fallbackMsg;
 
@@ -486,7 +490,8 @@ export const useOpenClaw = () => {
         error: errorMsg,
       }));
 
-      emotionStore.actions.setEmotionProtected('confused', 'ai');
+      emotionStore.actions.setEmotionProtected('confusion', 'ai');
+      animationStore.actions.trigger('emotion_confusion', 8000);
       setBubbleTimeout(50000);
 
       return null;
@@ -497,7 +502,29 @@ export const useOpenClaw = () => {
 
   const triggerEmotion = useCallback((emotion: EmotionType) => {
     emotionStore.actions.setEmotion(emotion, 'user');
-    const thoughts: Record<EmotionType, string> = {
+    const thoughts: Partial<Record<EmotionType, string>> = {
+      joy: `${DORAEMON_SOUL.speechPatterns.exclamations.happy} 🎉`,
+      pride: 'I did it! ✨',
+      satisfaction: 'Ahh~ That feels complete.',
+      curiosity: 'Interesting...',
+      wonder: 'Wow! Look at that!',
+      determination: "I won't give up!",
+      focus: 'Working on it~',
+      calm: 'Ahh~ So peaceful~',
+      contemplation: `${DORAEMON_SOUL.speechPatterns.exclamations.thinking} Let me think...`,
+      concern: 'I hope this works...',
+      frustration: `${DORAEMON_SOUL.speechPatterns.exclamations.frustrated} This is difficult!`,
+      fatigue: '*yawn* So sleepy~',
+      longing: 'I miss my friends...',
+      gratitude: 'Thank you~',
+      connection: 'Hello there~',
+      confusion: `${DORAEMON_SOUL.speechPatterns.exclamations.surprised} What happened?`,
+      excitement: 'This is amazing!',
+      melancholy: 'Oh no...',
+      hope: 'Maybe we can still make it work.',
+      awe: 'That is incredible!',
+      angry: 'Mou~ That is not okay!',
+      hungry: 'Dorayaki would help right now...',
       happy: `${DORAEMON_SOUL.speechPatterns.exclamations.happy} 🎉`,
       sad: 'Oh no...',
       excited: 'This is amazing!',

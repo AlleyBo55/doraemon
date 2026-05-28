@@ -12,31 +12,32 @@ import { cfg } from '../config.js';
 import { learnFromExperience } from '../memory-system/connector.js';
 
 type RendererEmotionType = 
-  | 'neutral' | 'happy' | 'sad' | 'excited' | 'thinking' | 'confused'
-  | 'sleepy' | 'surprised' | 'working' | 'frustrated' | 'proud'
-  | 'curious' | 'playful' | 'determined' | 'relaxed' | 'anxious';
+  | 'joy' | 'pride' | 'satisfaction' | 'curiosity' | 'wonder'
+  | 'determination' | 'focus' | 'calm' | 'contemplation' | 'concern'
+  | 'frustration' | 'fatigue' | 'longing' | 'gratitude' | 'connection'
+  | 'confusion' | 'excitement' | 'melancholy' | 'hope' | 'awe';
 
 const EMOTION_MAP: Record<Emotion, RendererEmotionType> = {
-  joy: 'happy',
-  pride: 'proud',
-  satisfaction: 'happy',
-  curiosity: 'curious',
-  wonder: 'surprised',
-  determination: 'determined',
-  focus: 'working',
-  calm: 'relaxed',
-  contemplation: 'thinking',
-  concern: 'anxious',
-  frustration: 'frustrated',
-  fatigue: 'sleepy',
-  longing: 'sad',
-  gratitude: 'happy',
-  connection: 'happy',
-  confusion: 'confused',
-  excitement: 'excited',
-  melancholy: 'sad',
-  hope: 'determined',
-  awe: 'surprised',
+  joy: 'joy',
+  pride: 'pride',
+  satisfaction: 'satisfaction',
+  curiosity: 'curiosity',
+  wonder: 'wonder',
+  determination: 'determination',
+  focus: 'focus',
+  calm: 'calm',
+  contemplation: 'contemplation',
+  concern: 'concern',
+  frustration: 'frustration',
+  fatigue: 'fatigue',
+  longing: 'longing',
+  gratitude: 'gratitude',
+  connection: 'connection',
+  confusion: 'confusion',
+  excitement: 'excitement',
+  melancholy: 'melancholy',
+  hope: 'hope',
+  awe: 'awe',
 };
 
 export class ExperienceBridge {
@@ -51,7 +52,7 @@ export class ExperienceBridge {
   sendEmotionalState(state: EmotionalState): void {
     if (!this.mainWindow) return;
 
-    const rendererEmotion = EMOTION_MAP[state.primary] || 'neutral';
+    const rendererEmotion = EMOTION_MAP[state.primary] || 'calm';
     
     if (rendererEmotion !== this.lastEmotionSent) {
       this.mainWindow.webContents.send('experience-emotion', {
@@ -149,8 +150,8 @@ export class ExperienceBridge {
       thought: thoughts,
       domain,
       category,
-      emotion: category === 'dev' ? 'working' : category === 'entertainment' ? 'playful' : 'curious',
-      animation: 'idle',
+      emotion: category === 'dev' ? 'focus' : category === 'entertainment' ? 'excitement' : 'curiosity',
+      animation: category === 'dev' ? 'action_coding_thinking' : 'action_research',
     });
   }
 

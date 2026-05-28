@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
 import { actions as emotionActions } from '../stores/emotion';
+import { animationStore } from '../stores';
 import type { EmotionType } from '../core/types/emotion';
 
 type ExperienceEmotion = {
@@ -11,31 +12,37 @@ type ExperienceEmotion = {
 };
 
 const EXPERIENCE_TO_SPRITE_EMOTION: Record<string, EmotionType> = {
-  joy: 'happy',
-  pride: 'proud',
-  satisfaction: 'proud',
-  curiosity: 'curious',
-  wonder: 'curious',
-  determination: 'determined',
-  focus: 'working',
-  calm: 'relaxed',
-  contemplation: 'thinking',
-  concern: 'anxious',
-  frustration: 'frustrated',
-  fatigue: 'sleepy',
-  longing: 'sad',
-  gratitude: 'happy',
-  connection: 'happy',
-  confusion: 'confused',
-  excitement: 'excited',
-  melancholy: 'sad',
-  hope: 'curious',
-  awe: 'surprised',
+  joy: 'joy',
+  pride: 'pride',
+  satisfaction: 'satisfaction',
+  curiosity: 'curiosity',
+  wonder: 'wonder',
+  determination: 'determination',
+  focus: 'focus',
+  calm: 'calm',
+  contemplation: 'contemplation',
+  concern: 'concern',
+  frustration: 'frustration',
+  fatigue: 'fatigue',
+  longing: 'longing',
+  gratitude: 'gratitude',
+  connection: 'connection',
+  confusion: 'confusion',
+  excitement: 'excitement',
+  melancholy: 'melancholy',
+  hope: 'hope',
+  awe: 'awe',
 };
 
 function mapExperienceEmotionToSprite(emotion: string): EmotionType {
-  return EXPERIENCE_TO_SPRITE_EMOTION[emotion] || 'neutral';
+  return EXPERIENCE_TO_SPRITE_EMOTION[emotion] || 'calm';
 }
+
+const thoughtSourceAnimation = (source: string): string => {
+  if (source === 'coding') return 'action_coding_thinking';
+  if (source === 'browser' || source === 'research') return 'action_research';
+  return 'action_random_thought';
+};
 
 interface ExperienceThought {
   thought: string;
@@ -88,12 +95,14 @@ export function useExperienceSystem(
     if (event.intensity > 0.5) {
       const spriteEmotion = mapExperienceEmotionToSprite(event.emotion);
       emotionActions.setEmotion(spriteEmotion, 'interaction');
+      animationStore.actions.trigger(`emotion_${spriteEmotion}`, 7000);
     }
   }, []);
 
   const handleExperienceThought = useCallback((event: ExperienceThought) => {
     if (onThought && event.thought) {
       onThought(event.thought, event.duration);
+      animationStore.actions.trigger(thoughtSourceAnimation(event.source), event.duration);
     }
   }, [onThought]);
 

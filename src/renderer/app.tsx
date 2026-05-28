@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { MascotLayout } from './ui/layouts';
 import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
 import { useEmotion, useIdleDetection, useChat, useRandomThoughts, useExperienceSystem } from './hooks';
-import { emotionStore } from './stores';
+import { animationStore, emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
 import type { Position } from './core/engine';
 import { getAnimation } from './core/constants/sprites';
@@ -22,6 +22,7 @@ declare global {
       focusWindow: () => void;
       onNotification: (callback: (data: { app: string; title: string; message: string }) => void) => void;
       onEditorActivity: (callback: (data: { editor: string; action: string; file?: string; language?: string; fileType?: string; thought: string; emotion: string; animation: string }) => void) => void;
+      onBrowserActivity: (callback: (data: { thought: string; domain: string; category: string; emotion: string; animation: string }) => void) => void;
       onBreakReminder: (callback: (data: { minutes: number; message: string }) => void) => void;
       onCodingStreak: (callback: (data: { minutes: number; message: string }) => void) => void;
       onDailySummary: (callback: (data: { message: string; duration: number; priority: boolean }) => void) => void;
@@ -57,7 +58,7 @@ type NotificationData = {
   body?: string;
 } | null;
 
-type ActivityType = 'notification' | 'chat' | null;
+type ActivityType = 'notification' | 'chat' | 'browser' | null;
 
 const ACTIVITY_PROTECTION_DURATION = 15000; // 15 seconds protection for activity messages
 
@@ -132,9 +133,14 @@ const App = () => {
 
   // Helper to trigger coding animation temporarily - this LOCKS the animation
   const triggerCodingAnimation = useCallback((animation: string, duration = 8000) => {
+    if (!getAnimation(animation)) {
+      console.warn('[App] Unknown mascot animation:', animation);
+      return;
+    }
+
     if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
     
-    console.log('[App] Triggering coding animation:', animation, 'for', duration, 'ms');
+    console.log('[App] Triggering mascot animation:', animation, 'for', duration, 'ms');
     
     // Lock the animation by setting it directly and preventing engine override
     currentAnimRef.current = animation;
@@ -148,7 +154,7 @@ const App = () => {
     }
     
     codingAnimTimerRef.current = setTimeout(() => {
-      console.log('[App] Coding animation ended, unlocking');
+      console.log('[App] Mascot animation ended, unlocking');
       // Unlock and return to normal behavior
       if (engineRef.current) {
         (engineRef.current as any)._codingLock = false;
@@ -168,6 +174,13 @@ const App = () => {
 
   // Connect experience system - emotions update the store directly, thoughts via callback
   useExperienceSystem(showExternalThought);
+
+  const animationRequest = animationStore.state.current.value;
+  useEffect(() => {
+    if (animationRequest) {
+      triggerCodingAnimation(animationRequest.name, animationRequest.duration);
+    }
+  }, [animationRequest?.id, animationRequest?.name, animationRequest?.duration, triggerCodingAnimation]);
 
   // Listen for web notifications from browser extension - separate effect, runs once
   useEffect(() => {
@@ -258,6 +271,19 @@ const App = () => {
       }
     });
 
+    window.electronAPI?.onBrowserActivity?.((data) => {
+      console.log('[App] Browser activity received:', data);
+
+      if (data.thought) {
+        showExternalThought(data.thought, 8000);
+      }
+      if (data.emotion) {
+        emotionStore.actions.setEmotionProtected(data.emotion as any, 'interaction');
+      }
+      triggerCodingAnimation(data.animation || 'action_research', 8000);
+      startActivityProtection('browser');
+    });
+
     // Listen for break reminders
     window.electronAPI?.onBreakReminder?.((data) => {
       console.log('[App] Break reminder:', data);
@@ -295,13 +321,15 @@ const App = () => {
     });
 
     window.electronAPI?.onTriggerEmotion?.((emotion) => {
-      // Check if this is a coding animation (not a regular emotion)
-      const codingAnimations = ['coding', 'coding_allday', 'coding_intense', 'coding_thinking', 'coding_celebrate', 'coding_focused', 'coding_typing'];
-      if (codingAnimations.includes(emotion)) {
-        // Trigger as a long-running coding animation (until manually changed)
-        console.log('[App] Triggering coding animation from tray:', emotion);
+      const isAnimationName =
+        emotion.startsWith('coding') ||
+        emotion.startsWith('action_') ||
+        emotion.startsWith('emotion_');
+
+      if (isAnimationName && getAnimation(emotion)) {
+        console.log('[App] Triggering animation from tray:', emotion);
         triggerCodingAnimation(emotion, 60 * 60 * 1000); // 1 hour - effectively permanent until changed
-        showExternalThought(`Coding mode: ${emotion.replace('coding_', '').replace('coding', 'active')}~`, 3000);
+        showExternalThought(`${emotion.replace(/_/g, ' ')}~`, 3000);
       } else {
         triggerEmotion(emotion as any);
       }
@@ -312,9 +340,11 @@ const App = () => {
       if (codingAnimTimerRef.current) clearTimeout(codingAnimTimerRef.current);
       if (engineRef.current) {
         (engineRef.current as any)._codingLock = false;
+        (engineRef.current as any)._forcedCodingState = null;
       }
       currentAnimRef.current = 'idle';
       frameIndexRef.current = 0;
+      animationStore.actions.clear();
       setIsCodingMode(false);
       showExternalThought('Back to normal~', 2000);
     });
@@ -605,8 +635,8 @@ const App = () => {
             class="pointer-events-none"
             style={{ 
               transform: actualFlip ? 'scaleX(-1)' : 'none',
-              width: currentFrame.startsWith('coding') ? '168px' : '128px',
-              height: currentFrame.startsWith('coding') ? '168px' : '128px',
+              width: '128px',
+              height: '128px',
             }}
             draggable={false}
           />

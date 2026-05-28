@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'preact/hooks';
-import { emotionStore, configState } from '../stores';
+import { animationStore, emotionStore, configState } from '../stores';
 import { detectEmotion, extractThought } from '../services/openclaw';
 import { routeMessage } from '../services/routing/tool-router';
 import type { EmotionType } from '../core/types/emotion';
@@ -646,7 +646,8 @@ export const useChat = () => {
       error: null,
     }));
 
-    emotionStore.actions.setEmotion('thinking', 'user');
+    emotionStore.actions.setEmotion('contemplation', 'user');
+    animationStore.actions.trigger('action_chat_question', 7000);
 
     // Inject memory context
     let messageWithContext = text;
@@ -666,7 +667,8 @@ export const useChat = () => {
       // Parse outbound message: extract target and body from natural language
       const parsed = parseOutboundMessage(text);
       if (parsed) {
-        emotionStore.actions.setEmotionProtected('excited', 'ai');
+        emotionStore.actions.setEmotionProtected('connection', 'ai');
+        animationStore.actions.trigger('action_gadget_use', 7000);
         setState(prev => ({
           ...prev,
           currentThought: `Sending message to ${parsed.to} on ${parsed.channel}~`,
@@ -691,7 +693,8 @@ export const useChat = () => {
           isAgentRunning: false,
         }));
 
-        emotionStore.actions.setEmotionProtected(result.ok ? 'happy' : 'frustrated', 'ai');
+        emotionStore.actions.setEmotionProtected(result.ok ? 'satisfaction' : 'frustration', 'ai');
+        animationStore.actions.trigger(result.ok ? 'action_chat_answer' : 'emotion_frustration', 8000);
         setBubbleTimeout();
         return responseText;
       }
@@ -699,6 +702,10 @@ export const useChat = () => {
 
     if (useOpenClaw) {
       emotionStore.actions.setEmotionProtected(decision.fallbackEmotion, 'ai');
+      animationStore.actions.trigger(
+        decision.intent.intent === 'web_search' ? 'action_research' : 'action_gadget_search',
+        8000
+      );
       setState(prev => ({
         ...prev,
         currentThought: `Let me check my 4D pocket~ (${decision.intent.intent.replace('_', ' ')})`,
@@ -743,9 +750,10 @@ export const useChat = () => {
       }));
 
       const emotion = isProxyError
-        ? 'frustrated' as EmotionType
+        ? 'frustration' as EmotionType
         : detectEmotion(content);
       emotionStore.actions.setEmotionProtected(emotion, 'ai');
+      animationStore.actions.trigger(isProxyError ? 'emotion_frustration' : 'action_chat_answer', 9000);
       setBubbleTimeout();
       learnFromConversation(text, content);
       return content;
@@ -761,7 +769,8 @@ export const useChat = () => {
         isAgentRunning: false,
       }));
 
-      emotionStore.actions.setEmotionProtected('confused', 'ai');
+      emotionStore.actions.setEmotionProtected('confusion', 'ai');
+      animationStore.actions.trigger('emotion_confusion', 8000);
       setBubbleTimeout();
       return null;
     }
@@ -769,7 +778,29 @@ export const useChat = () => {
 
   const triggerEmotion = useCallback((emotion: EmotionType) => {
     emotionStore.actions.setEmotion(emotion, 'user');
-    const thoughts: Record<EmotionType, string> = {
+    const thoughts: Partial<Record<EmotionType, string>> = {
+      joy: `${DORAEMON_SOUL.speechPatterns.exclamations.happy} 🎉`,
+      pride: 'I did it! ✨',
+      satisfaction: 'Ahh~ That feels complete.',
+      curiosity: 'Interesting...',
+      wonder: 'Wow! Look at that!',
+      determination: "I won't give up!",
+      focus: 'Working on it~',
+      calm: 'Ahh~ So peaceful~',
+      contemplation: `${DORAEMON_SOUL.speechPatterns.exclamations.thinking} Let me think...`,
+      concern: 'I hope this works...',
+      frustration: `${DORAEMON_SOUL.speechPatterns.exclamations.frustrated} This is difficult!`,
+      fatigue: '*yawn* So sleepy~',
+      longing: 'I miss my friends...',
+      gratitude: 'Thank you~',
+      connection: 'Hello there~',
+      confusion: `${DORAEMON_SOUL.speechPatterns.exclamations.surprised} What happened?`,
+      excitement: 'This is amazing!',
+      melancholy: 'Oh no...',
+      hope: 'Maybe we can still make it work.',
+      awe: 'That is incredible!',
+      angry: 'Mou~ That is not okay!',
+      hungry: 'Dorayaki would help right now...',
       happy: `${DORAEMON_SOUL.speechPatterns.exclamations.happy} 🎉`,
       sad: 'Oh no...',
       excited: 'This is amazing!',

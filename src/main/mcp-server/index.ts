@@ -49,21 +49,21 @@ function handleToolCall(
       return { success: true, result: 'Doraemon is thinking about your question...' };
       
     case 'doraemon_coding_status':
-      mainWindow?.webContents.send('trigger-emotion', CODING_STATUS_EMOTION_MAP[params.action as string] || 'coding');
+      mainWindow?.webContents.send('trigger-emotion', CODING_STATUS_EMOTION_MAP[params.action as string] || 'action_coding_typing');
       if (params.message) {
         mainWindow?.webContents.send('mcp-notify', {
           message: params.message,
-          emotion: CODING_STATUS_EMOTION_MAP[params.action as string] || 'coding',
+          emotion: CODING_STATUS_EMOTION_MAP[params.action as string] || 'action_coding_typing',
           duration: 4000,
         });
       }
       return { success: true, result: `Coding status updated: ${params.action}` };
       
     case 'doraemon_celebrate':
-      mainWindow?.webContents.send('trigger-emotion', 'excited');
+      mainWindow?.webContents.send('trigger-emotion', 'emotion_pride');
       mainWindow?.webContents.send('mcp-notify', {
         message: `🎉 ${params.reason}`,
-        emotion: 'excited',
+        emotion: 'pride',
         duration: 6000,
       });
       return { success: true, result: 'Doraemon is celebrating!' };
