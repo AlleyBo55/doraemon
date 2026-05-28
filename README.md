@@ -57,6 +57,21 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ---
 
+## 🆕 What's new — Kiro Gateway
+
+This release adds a **local gateway tunnel** that routes every Claude call through your Kiro IDE session, so OpenClaw runs Claude **Opus 4.7** as the orchestrator and **Haiku 4.5** for workers — without touching `api.anthropic.com`.
+
+| Tier | Agent | Upstream model |
+|------|-------|----------------|
+| 🧠 Orchestrator | `main` | **Claude Opus 4.7** |
+| ⚡ Responders | every worker | **Claude Haiku 4.5** |
+
+- 🔐 No hardcoded credentials. The gateway reads your local Kiro token at runtime.
+- ☁️ Works on macOS (LaunchAgent) and Linux/Contabo (systemd) with one-shot installers.
+- 📖 Setup guide: [`scripts/README-kiro-gateway.md`](scripts/README-kiro-gateway.md)
+
+---
+
 ## ✨ Features
 
 ### 🎭 The Living Desktop Companion
@@ -76,6 +91,18 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 - 💬 **Chat interface** — Talk directly with your AI through Doraemon
 - 🔄 **Auto-reconnect** — Graceful handling of connection issues
 - 🌐 **Multi-model support** — Haiku 3.5, Haiku 4.5, or intelligent routing
+
+### 🆕 Kiro Gateway — Two-tier Claude routing through your IDE session
+- 🚇 **Local gateway tunnel** — Wraps your Kiro IDE session in an Anthropic-shape API on `127.0.0.1:18790`
+- 🧠 **Opus 4.7 orchestrator** — The `main` agent thinks with Claude Opus 4.7
+- ⚡ **Haiku 4.5 responders** — Every worker agent (osint, weather, web-search, messaging…) runs on Haiku 4.5
+- 💸 **Zero per-token cost** — Routes through your Kiro entitlement, not `api.anthropic.com`
+- 🔐 **No keys in code** — Reads `~/.aws/sso/cache/kiro-auth-token.json` from your machine at runtime
+- 🍎 **macOS LaunchAgent** + 🐧 **Linux systemd** — One-shot installers for both
+- ☁️ **Contabo-ready** — `./scripts/bootstrap-contabo.sh` deploys the whole stack to a Linux VPS
+- 📊 **Structured logs** — Every call writes `[llm] provider=kiro model=claude-opus-4.7 ms=… ok=true`
+
+> See [`scripts/README-kiro-gateway.md`](scripts/README-kiro-gateway.md) for setup and verification.
 
 ### 🦞 The Social Butterfly (Moltbook Integration)
 - 📝 **Autonomous Posts** — Doraemon shares thoughts on Moltbook every 50 minutes
