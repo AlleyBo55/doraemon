@@ -1,6 +1,8 @@
 import { PHYSICS } from '../constants/sprites';
 import type { EmotionType } from '../types/emotion';
 
+type GeneratedSpriteState = `emotion_${string}` | `action_${string}`;
+
 export type ShimejiState =
   | 'stand' | 'walk' | 'run' | 'dash' | 'fly'
   | 'sit' | 'sit_lookup' | 'sit_spin_head' | 'sit_dangle'
@@ -12,7 +14,8 @@ export type ShimejiState =
   | 'pocket_search' | 'gadget_pull'
   | 'pull_up' | 'helping' | 'success'
   | 'wave' | 'greet' | 'cheer' | 'celebrate' | 'victory'
-  | 'coding' | 'coding_intense' | 'coding_focused' | 'coding_typing' | 'coding_thinking' | 'coding_celebrate';
+  | 'coding' | 'coding_intense' | 'coding_focused' | 'coding_typing' | 'coding_thinking' | 'coding_celebrate'
+  | GeneratedSpriteState;
 
 export type Position = { x: number; y: number };
 type Velocity = { vx: number; vy: number };
@@ -26,7 +29,7 @@ const GROUND_MARGIN = 50;
 
 type BehaviorDef = { state: ShimejiState; weight: number; duration: [number, number] };
 
-const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
+const EMOTION_BEHAVIORS: Partial<Record<EmotionType, BehaviorDef[]>> = {
   neutral: [
     { state: 'stand', weight: 200, duration: [1000, 3000] },
     { state: 'sit', weight: 150, duration: [2000, 4000] },
@@ -160,6 +163,88 @@ const EMOTION_BEHAVIORS: Record<EmotionType, BehaviorDef[]> = {
   ],
 };
 
+const EMOTION_BEHAVIOR_ALIAS: Partial<Record<EmotionType, EmotionType>> = {
+  joy: 'happy',
+  pride: 'proud',
+  satisfaction: 'relaxed',
+  curiosity: 'curious',
+  wonder: 'surprised',
+  determination: 'determined',
+  focus: 'working',
+  calm: 'relaxed',
+  contemplation: 'thinking',
+  concern: 'anxious',
+  frustration: 'frustrated',
+  fatigue: 'sleepy',
+  longing: 'sad',
+  gratitude: 'happy',
+  connection: 'happy',
+  confusion: 'confused',
+  excitement: 'excited',
+  melancholy: 'sad',
+  hope: 'determined',
+  awe: 'surprised',
+  angry: 'frustrated',
+  hungry: 'curious',
+};
+
+const EMOTION_REACTION_STATE: Partial<Record<EmotionType, ShimejiState>> = {
+  neutral: 'emotion_calm',
+  calm: 'emotion_calm',
+  happy: 'emotion_joy',
+  joy: 'emotion_joy',
+  sad: 'emotion_melancholy',
+  melancholy: 'emotion_melancholy',
+  longing: 'emotion_longing',
+  excited: 'emotion_excitement',
+  excitement: 'emotion_excitement',
+  thinking: 'emotion_contemplation',
+  contemplation: 'emotion_contemplation',
+  confused: 'emotion_confusion',
+  confusion: 'emotion_confusion',
+  sleepy: 'emotion_fatigue',
+  fatigue: 'emotion_fatigue',
+  surprised: 'emotion_wonder',
+  wonder: 'emotion_wonder',
+  awe: 'emotion_awe',
+  working: 'emotion_focus',
+  focus: 'emotion_focus',
+  frustrated: 'emotion_frustration',
+  frustration: 'emotion_frustration',
+  angry: 'action_angry',
+  proud: 'emotion_pride',
+  pride: 'emotion_pride',
+  curious: 'emotion_curiosity',
+  curiosity: 'emotion_curiosity',
+  playful: 'action_random_thought',
+  determined: 'emotion_determination',
+  determination: 'emotion_determination',
+  relaxed: 'emotion_satisfaction',
+  satisfaction: 'emotion_satisfaction',
+  anxious: 'emotion_concern',
+  concern: 'emotion_concern',
+  gratitude: 'emotion_gratitude',
+  connection: 'emotion_connection',
+  hope: 'emotion_hope',
+  hungry: 'action_hungry',
+};
+
+const EMOTION_REACTION_DURATION: Partial<Record<EmotionType, number>> = {
+  fatigue: 5000,
+  sleepy: 5000,
+  longing: 3500,
+  melancholy: 3500,
+  sad: 3500,
+  calm: 3000,
+  satisfaction: 3000,
+  relaxed: 3000,
+  focus: 3500,
+  working: 3500,
+};
+
+const resolveBehaviorEmotion = (emotion: EmotionType): EmotionType =>
+  EMOTION_BEHAVIOR_ALIAS[emotion] ?? emotion;
+
 const WALL_BEHAVIORS: BehaviorDef[] = [
   { state: 'grab_wall', weight: 100, duration: [500, 1500] },
   { state: 'climb_wall', weight: 100, duration: [2000, 5000] },
@@ -181,7 +266,7 @@ export class ShimejiEngine {
   private screenOffsetX: number;
   private screenOffsetY: number;
   private spriteSize = { width: 128, height: 128 };
-  private codingSpriteSize = { width: 168, height: 168 };
+  private codingSpriteSize = { width: 128, height: 128 };
   private behaviorTimer = 0;
   private behaviorDuration = 0;
   private isDragging = false;
@@ -241,44 +326,17 @@ export class ShimejiEngine {
   }
 
   private triggerEmotionReaction(emotion: EmotionType) {
-    const reactions: Record<EmotionType, () => void> = {
-      neutral: () => { this.state = 'stand'; this.behaviorDuration = 1000; },
-      happy: () => { this.state = Math.random() > 0.5 ? 'wave' : 'jump'; this.behaviorDuration = 1000; },
-      sad: () => { this.state = 'sprawl'; this.behaviorDuration = 3000; },
-      excited: () => { 
-        const roll = Math.random();
-        if (roll > 0.6) {
-          this.state = 'fly';
-          this.behaviorDuration = 3000;
-          this.isOnGround = false;
-        } else if (roll > 0.3) {
-          this.state = 'run';
-          this.behaviorDuration = 1500;
-        } else {
-          this.state = 'cheer';
-          this.behaviorDuration = 1500;
-        }
-      },
-      thinking: () => { this.state = 'pocket_search'; this.behaviorDuration = 2000; },
-      confused: () => { this.state = Math.random() > 0.5 ? 'sit_spin_head' : 'trip'; this.behaviorDuration = 1500; },
-      sleepy: () => { this.state = 'sleep'; this.behaviorDuration = 5000; },
-      surprised: () => { 
-        this.state = 'jump'; 
-        this.behaviorDuration = 500; 
-        this.velocity.vy = this.jumpVelocity; 
-        this.isOnGround = false; 
-      },
-      working: () => { this.state = 'pocket_search'; this.behaviorDuration = 2000; },
-      frustrated: () => { this.state = 'resist'; this.behaviorDuration = 2000; },
-      proud: () => { this.state = 'success'; this.behaviorDuration = 2000; },
-      curious: () => { this.state = 'pocket_search'; this.behaviorDuration = 2500; },
-      playful: () => { this.state = Math.random() > 0.5 ? 'bounce' : 'jump'; this.behaviorDuration = 500; },
-      determined: () => { this.state = 'run'; this.behaviorDuration = 2000; },
-      relaxed: () => { this.state = 'sit_dangle'; this.behaviorDuration = 3000; },
-      anxious: () => { this.state = 'sit_spin_head'; this.behaviorDuration = 1500; },
-    };
-
-    reactions[emotion]?.();
+    const resolvedEmotion = resolveBehaviorEmotion(emotion);
+    this.state =
+      EMOTION_REACTION_STATE[emotion] ??
+      EMOTION_REACTION_STATE[resolvedEmotion] ??
+      'emotion_calm';
+    this.behaviorDuration =
+      EMOTION_REACTION_DURATION[emotion] ??
+      EMOTION_REACTION_DURATION[resolvedEmotion] ??
+      2200;
+    this.velocity.vx = 0;
+    this.velocity.vy = 0;
     this.behaviorTimer = 0;
   }
 
@@ -328,7 +386,11 @@ export class ShimejiEngine {
       'coding', 'coding_intense', 'coding_focused', 'coding_typing', 'coding_thinking', 'coding_celebrate',
     ];
 
-    if (stationaryStates.includes(this.state)) {
+    if (
+      stationaryStates.includes(this.state) ||
+      this.state.startsWith('emotion_') ||
+      this.state.startsWith('action_')
+    ) {
       this.velocity.vx = 0;
       this.velocity.vy = 0;
       if (!this.isOnGround && !this.isOnWall && !this.isOnCeiling) {
@@ -486,7 +548,11 @@ export class ShimejiEngine {
     } else if (this.isOnWall) {
       behaviors = WALL_BEHAVIORS;
     } else if (this.isOnGround) {
-      behaviors = EMOTION_BEHAVIORS[this.currentEmotion] || EMOTION_BEHAVIORS.neutral;
+      behaviors =
+        EMOTION_BEHAVIORS[this.currentEmotion] ||
+        EMOTION_BEHAVIORS[resolveBehaviorEmotion(this.currentEmotion)] ||
+        EMOTION_BEHAVIORS.neutral ||
+        [];
     } else {
       return;
     }

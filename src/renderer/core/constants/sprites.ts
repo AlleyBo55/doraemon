@@ -14,7 +14,99 @@ export const PHYSICS = {
   DRAG_DAMPING: 0.95,
 } as const;
 
+const EMOTION_FRAME_COUNTS: Record<string, number> = {
+  awe: 3,
+};
+
+const emotionNames = [
+  'joy',
+  'pride',
+  'satisfaction',
+  'curiosity',
+  'wonder',
+  'determination',
+  'focus',
+  'calm',
+  'contemplation',
+  'concern',
+  'frustration',
+  'fatigue',
+  'longing',
+  'gratitude',
+  'connection',
+  'confusion',
+  'excitement',
+  'melancholy',
+  'hope',
+  'awe',
+] as const;
+
+const actionNames = [
+  'angry',
+  'chat_answer',
+  'chat_question',
+  'coding_thinking',
+  'coding_typing',
+  'eating',
+  'explain_gadget',
+  'gadget_search',
+  'gadget_surprise',
+  'gadget_use',
+  'greeting',
+  'hungry',
+  'nap',
+  'protect',
+  'random_thought',
+  'research',
+  'rest',
+  'take_copter',
+  'time_travel',
+  'walk',
+] as const;
+
+const spriteFrames = (prefix: 'emotion' | 'action', name: string, count: number): string[] =>
+  Array.from({ length: count }, (_, idx) => `${prefix}-${name}-${String(idx + 1).padStart(2, '0')}.png`);
+
+const pingPong = (frames: string[]): string[] =>
+  frames.length > 2 ? [...frames, ...frames.slice(1, -1).reverse()] : frames;
+
+const emotionFrames = (name: string): string[] =>
+  pingPong(spriteFrames('emotion', name, EMOTION_FRAME_COUNTS[name] ?? 4));
+
+const actionFrames = (name: string): string[] =>
+  pingPong(spriteFrames('action', name, 3));
+
+const createEmotionAnimations = (): Record<string, SpriteAnimation> =>
+  Object.fromEntries(
+    emotionNames.map(name => [
+      `emotion_${name}`,
+      {
+        frames: emotionFrames(name),
+        frameDelay: name === 'calm' || name === 'satisfaction' ? 180 : 120,
+        loop: true,
+      },
+    ])
+  );
+
+const createActionAnimations = (): Record<string, SpriteAnimation> =>
+  Object.fromEntries(
+    actionNames.map(name => [
+      `action_${name}`,
+      {
+        frames: actionFrames(name),
+        frameDelay: name === 'rest' || name === 'nap' ? 220 : 120,
+        loop: true,
+      },
+    ])
+  );
+
+const GENERATED_EMOTION_ANIMATIONS = createEmotionAnimations();
+const GENERATED_ACTION_ANIMATIONS = createActionAnimations();
+
 export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
+  ...GENERATED_EMOTION_ANIMATIONS,
+  ...GENERATED_ACTION_ANIMATIONS,
+
   // ═══════════════════════════════════════════════════════════════
   // BASIC MOVEMENTS (shime1-3)
   // ═══════════════════════════════════════════════════════════════
@@ -226,249 +318,76 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   },
 
   // ═══════════════════════════════════════════════════════════════
-  // SPECIAL ACTIONS (shime38-40)
+  // GENERATED ACTION / EMOTION ALIASES
   // ═══════════════════════════════════════════════════════════════
-  pocket_search: {
-    frames: ['shime38.png', 'shime38a.png', 'shime39.png', 'shime40.png'],
-    frameDelay: 150,
-    loop: true,
-  },
-  gadget_pull: {
-    frames: ['shime38.png', 'shime38a.png', 'shime39.png', 'shime40.png', 'shime39.png'],
-    frameDelay: 100,
-    loop: false,
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // PULL UP / HELPING (shime41, shime41a-n)
-  // ═══════════════════════════════════════════════════════════════
-  pull_up: {
-    frames: [
-      'shime41.png', 'shime41a.png', 'shime41b.png', 'shime41c.png',
-      'shime41d.png', 'shime41e.png', 'shime41f.png', 'shime41g.png',
-      'shime41h.png', 'shime41i.png', 'shime41j.png', 'shime41k.png',
-      'shime41l.png', 'shime41m.png', 'shime41n.png',
-    ],
-    frameDelay: 100,
-    loop: false,
-  },
-  helping: {
-    frames: ['shime41.png', 'shime41a.png', 'shime41b.png', 'shime41c.png', 'shime41d.png'],
-    frameDelay: 120,
-    loop: true,
-  },
-  success: {
-    frames: ['codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png'],
-    frameDelay: 150,
-    loop: true,
-  },
+  pocket_search: { ...GENERATED_ACTION_ANIMATIONS.action_gadget_search, frameDelay: 150 },
+  gadget_pull: { ...GENERATED_ACTION_ANIMATIONS.action_gadget_use, frameDelay: 100 },
+  pull_up: { ...GENERATED_ACTION_ANIMATIONS.action_protect, frameDelay: 100 },
+  helping: { ...GENERATED_EMOTION_ANIMATIONS.emotion_gratitude, frameDelay: 120 },
+  success: { ...GENERATED_EMOTION_ANIMATIONS.emotion_satisfaction, frameDelay: 150 },
+  wave: { ...GENERATED_EMOTION_ANIMATIONS.emotion_connection, frameDelay: 100 },
+  greet: { ...GENERATED_ACTION_ANIMATIONS.action_greeting, frameDelay: 120 },
+  cheer: { ...GENERATED_EMOTION_ANIMATIONS.emotion_excitement, frameDelay: 100 },
+  celebrate: { ...GENERATED_EMOTION_ANIMATIONS.emotion_excitement, frameDelay: 80 },
+  victory: { ...GENERATED_EMOTION_ANIMATIONS.emotion_pride, frameDelay: 150 },
+  idle: { ...GENERATED_EMOTION_ANIMATIONS.emotion_calm, frameDelay: 300 },
+  neutral: { ...GENERATED_EMOTION_ANIMATIONS.emotion_calm, frameDelay: 400 },
+  happy: { ...GENERATED_EMOTION_ANIMATIONS.emotion_joy, frameDelay: 150 },
+  sad: { ...GENERATED_EMOTION_ANIMATIONS.emotion_melancholy, frameDelay: 400 },
+  excited: { ...GENERATED_EMOTION_ANIMATIONS.emotion_excitement, frameDelay: 80 },
+  thinking: { ...GENERATED_EMOTION_ANIMATIONS.emotion_contemplation, frameDelay: 200 },
+  confused: { ...GENERATED_EMOTION_ANIMATIONS.emotion_confusion, frameDelay: 100 },
+  sleepy: { ...GENERATED_EMOTION_ANIMATIONS.emotion_fatigue, frameDelay: 500 },
+  surprised: { ...GENERATED_EMOTION_ANIMATIONS.emotion_wonder, frameDelay: 100 },
+  working: { ...GENERATED_EMOTION_ANIMATIONS.emotion_focus, frameDelay: 120 },
+  frustrated: { ...GENERATED_EMOTION_ANIMATIONS.emotion_frustration, frameDelay: 80 },
+  proud: { ...GENERATED_EMOTION_ANIMATIONS.emotion_pride, frameDelay: 150 },
+  curious: { ...GENERATED_EMOTION_ANIMATIONS.emotion_curiosity, frameDelay: 150 },
+  playful: { ...GENERATED_ACTION_ANIMATIONS.action_random_thought, frameDelay: 100 },
+  determined: { ...GENERATED_EMOTION_ANIMATIONS.emotion_determination, frameDelay: 80 },
+  relaxed: { ...GENERATED_EMOTION_ANIMATIONS.emotion_satisfaction, frameDelay: 300 },
+  anxious: { ...GENERATED_EMOTION_ANIMATIONS.emotion_concern, frameDelay: 100 },
+  angry: { ...GENERATED_ACTION_ANIMATIONS.action_angry, frameDelay: 100 },
+  hungry: { ...GENERATED_ACTION_ANIMATIONS.action_hungry, frameDelay: 160 },
 
   // ═══════════════════════════════════════════════════════════════
-  // WAVING/GREETING (shime42-45)
-  // ═══════════════════════════════════════════════════════════════
-  wave: {
-    frames: ['shime42.png', 'shime43.png', 'shime44.png', 'shime45.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-  greet: {
-    frames: ['shime42.png', 'shime43.png', 'shime42.png', 'shime44.png', 'shime45.png'],
-    frameDelay: 120,
-    loop: false,
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // CHEERING/CELEBRATING (shime46-50)
-  // ═══════════════════════════════════════════════════════════════
-  cheer: {
-    frames: ['shime46.png', 'shime47.png', 'shime48.png', 'shime49.png', 'shime50.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-  celebrate: {
-    frames: ['shime46.png', 'shime47.png', 'shime48.png', 'shime49.png', 'shime50.png', 'shime49.png', 'shime48.png'],
-    frameDelay: 80,
-    loop: true,
-  },
-  victory: {
-    frames: ['shime50.png', 'shime49.png', 'shime50.png'],
-    frameDelay: 150,
-    loop: true,
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // EMOTION-SPECIFIC ANIMATIONS
-  // ═══════════════════════════════════════════════════════════════
-  
-  // Neutral - calm standing/sitting
-  idle: {
-    frames: ['shime1.png', 'shime1.png', 'shime1a.png'],
-    frameDelay: 300,
-    loop: true,
-  },
-  neutral: {
-    frames: ['shime1.png', 'shime1.png', 'shime1a.png'],
-    frameDelay: 400,
-    loop: true,
-  },
-
-  // Happy - jumping, waving
-  happy: {
-    frames: ['shime22.png', 'shime1.png', 'shime42.png', 'shime43.png', 'shime41n.png'],
-    frameDelay: 150,
-    loop: true,
-  },
-
-  // Sad - laying down, moping
-  sad: {
-    frames: ['shime20.png', 'shime20a.png', 'shime21.png', 'shime21a.png'],
-    frameDelay: 400,
-    loop: true,
-  },
-
-  // Excited - jumping, cheering
-  excited: {
-    frames: ['shime22.png', 'shime1.png', 'shime46.png', 'shime47.png', 'shime48.png', 'shime49.png'],
-    frameDelay: 80,
-    loop: true,
-  },
-
-  // Thinking - head spinning, looking up
-  thinking: {
-    frames: ['shime26.png', 'shime27.png', 'shime28.png', 'shime29.png', 'shime38.png', 'shime38a.png'],
-    frameDelay: 200,
-    loop: true,
-  },
-
-  // Confused - dizzy head spin, tripping
-  confused: {
-    frames: ['shime26.png', 'shime27.png', 'shime28.png', 'shime29.png', 'shime19.png', 'shime18.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-
-  // Sleepy - laying, yawning
-  sleepy: {
-    frames: ['shime20.png', 'shime20a.png', 'shime20b.png', 'shime11.png', 'shime11d.png'],
-    frameDelay: 500,
-    loop: true,
-  },
-
-  // Surprised - jumping, falling
-  surprised: {
-    frames: ['shime4.png', 'shime22.png', 'shime18.png', 'shime19.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-
-  // Working - carrying, walking with items
-  working: {
-    frames: ['shime34.png', 'shime35.png', 'shime36.png', 'shime32.png', 'shime33.png'],
-    frameDelay: 120,
-    loop: true,
-  },
-
-  // Frustrated - resisting, struggling
-  frustrated: {
-    frames: ['shime5.png', 'shime6.png', 'shime7.png', 'shime8.png', 'shime9.png', 'shime10.png'],
-    frameDelay: 80,
-    loop: true,
-  },
-
-  // Proud - success pose, victory
-  proud: {
-    frames: ['shime41n.png', 'shime50.png', 'shime49.png', 'shime48.png', 'shime41m.png'],
-    frameDelay: 150,
-    loop: true,
-  },
-
-  // Curious - looking around, searching pocket
-  curious: {
-    frames: ['shime26.png', 'shime38.png', 'shime38a.png', 'shime39.png', 'shime13.png', 'shime13a.png'],
-    frameDelay: 150,
-    loop: true,
-  },
-
-  // Playful - bouncing, waving
-  playful: {
-    frames: ['shime18.png', 'shime19.png', 'shime22.png', 'shime42.png', 'shime43.png', 'shime44.png', 'shime45.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-
-  // Determined - focused walking, climbing
-  determined: {
-    frames: ['shime14.png', 'shime13.png', 'shime12.png', 'shime1.png', 'shime2.png', 'shime3.png'],
-    frameDelay: 80,
-    loop: true,
-  },
-
-  // Relaxed - sitting calmly, dangling legs
-  relaxed: {
-    frames: ['shime11.png', 'shime11a.png', 'shime30.png', 'shime31.png', 'shime26.png'],
-    frameDelay: 300,
-    loop: true,
-  },
-
-  // Anxious - fidgeting, looking around nervously
-  anxious: {
-    frames: ['shime26.png', 'shime27.png', 'shime1.png', 'shime1a.png', 'shime28.png', 'shime29.png', 'shime7.png'],
-    frameDelay: 100,
-    loop: true,
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // CODING ANIMATIONS (coding, coding2-8) - Special IDE integration
+  // CODING ANIMATIONS - Special IDE integration
   // ═══════════════════════════════════════════════════════════════
   coding: {
-    frames: ['coding.png', 'coding9.png', 'coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png',
-      'coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png','coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png','coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png','coding3.png', 'coding4.png','coding11.png','coding9.png','coding10.png','coding11.png','codingthinking1.png','codingintense1.png','codingintense2.png','codingintense3.png','codingthinking3.png','codingthinking2.png','codingthinking5.png','codingintense4.png','codingthinking4.png'],
+    frames: [
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_typing.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_thinking.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_focus.frames,
+    ],
     frameDelay: 200,
     loop: true,
   },
   coding_intense: {
-    frames: ['coding.png', 'coding9.png', 'coding3.png', 
-      'coding4.png','codingintense1.png',
-      'codingintense3.png','codingintense2.png','codingintense1.png','codingintense3.png',
-      'codingintense4.png','coding.png', 
-      'coding10.png', 'coding3.png', 'coding4.png','codingintense1.png','codingintense3.png',
-      'codingintense2.png','codingintense1.png','codingintense3.png','codingintense4.png','coding.png', 'coding9.png', 'coding3.png', 'coding4.png','codingintense1.png',
-      'codingintense3.png','codingintense2.png','codingintense1.png','codingintense3.png','codingintense4.png'],
+    frames: [
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_typing.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_determination.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_focus.frames,
+    ],
     frameDelay: 120,
     loop: true,
   },
   coding_focused: {
-    frames: ['coding10.png', 'coding9.png', 'coding11.png', 'coding4.png', 'coding.png', 
-      'coding10.png', 'codingthinking3.png','codingthinking4.png',
-      'coding10.png', 'coding9.png', 
-       'codingthinking3.png','codingthinking4.png','codingthinking5.png',
-            'codingintense3.png', 'codingintense4.png',
-],
+    frames: GENERATED_EMOTION_ANIMATIONS.emotion_focus.frames,
     frameDelay: 180,
     loop: true,
   },
   coding_typing: {
-    frames: ['coding.png', 'coding3.png', 
-      'coding4.png', 'codingthinking3.png','codingthinking4.png','codingthinking5.png',
-      'coding9.png', 'coding3.png', 'coding10.png', 'coding.png',
-      'codingthinking3.png','codingthinking4.png','codingthinking5.png',
-      'coding11.png', 'coding.png', 'coding11.png', 'coding.png', 'coding3.png', 'codingthinking3.png','codingthinking4.png','codingthinking5.png', 
-      'coding11.png', 'coding.png', 'coding3.png', 'coding4.png', 'coding9.png', 'coding10.png', 'coding11.png'],
+    frames: GENERATED_ACTION_ANIMATIONS.action_coding_typing.frames,
     frameDelay: 100,
     loop: true,
   },
   coding_thinking: {
-    frames: ['coding.png','coding3.png','coding4.png','codingthinking1.png','coding9.png', 'coding11.png',
-      'codingthinking3.png','codingthinking4.png','codingthinking5.png',
-       'coding4.png', 'coding.png', 'coding10.png',
-       'coding3.png', 'coding9.png','codingthinking2.png',
-       'codingthinking3.png','codingthinking4.png','codingthinking5.png',
-       'codingthinking3.png','codingthinking2.png','codingthinking4.png','coding.png','coding3.png','coding4.png','codingthinking1.png','codingthinking2.png','codingthinking3.png','codingthinking4.png','codingthinking5.png','codingthinking3.png','codingthinking2.png','codingthinking4.png'],
+    frames: GENERATED_ACTION_ANIMATIONS.action_coding_thinking.frames,
     frameDelay: 300,
     loop: true,
   },
   coding_celebrate: {
-    frames: ['codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png','codingcelebrate4.png','codingcelebrate5.png','codingcelebrate6.png','codingcelebrate7.png','codingcelebrate8.png','codingcelebrate9.png','codingcelebrate10.png','codingcelebrate11.png'],
+    frames: GENERATED_EMOTION_ANIMATIONS.emotion_pride.frames,
     frameDelay: 120,
     loop: true,
   },
@@ -476,84 +395,28 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   // Coding All Day - comprehensive coding animation
   coding_allday: {
     frames: [
-      // Regular coding
-      'coding.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
-      // Intense coding
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense3.png', 'codingintense4.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      // Thinking
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking4.png', 'codingthinking5.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      // Back to regular
-      'coding.png', 'coding9.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
-      // More intense
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense3.png', 'codingintense4.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      // More thinking
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking4.png', 'codingthinking5.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      // Regular again
-      'coding.png', 'coding9.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
-      // Intense burst
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense3.png', 'codingintense4.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense3.png', 'codingintense4.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      'codingintense3.png', 'codingintense4.png',
-      'codingintense.png', 'codingintense1.png', 'codingintense2.png',
-      // Deep thinking
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking4.png', 'codingthinking5.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking4.png', 'codingthinking5.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      'codingthinking4.png', 'codingthinking5.png',
-      'codingthinking1.png', 'codingthinking2.png', 'codingthinking3.png',
-      // Final regular
-      'coding.png', 'coding9.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
-      'coding.png', 'coding9.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
-      'coding.png', 'coding10.png', 'coding3.png', 'coding4.png',
-      'coding9.png', 'coding10.png', 'coding11.png',
-      'coding3.png', 'coding4.png', 'coding.png',
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_typing.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_thinking.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_focus.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_research.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_determination.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_typing.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_rest.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_coding_thinking.frames,
     ],
-    frameDelay: 250,
+    frameDelay: 160,
     loop: true,
   },
 
-  // Coding Celebrate - full celebration sequence (unrestricted size)
+  // Coding Celebrate - generated celebration sequence in the shared 128px frame box
   coding_celebrate_full: {
     frames: [
-      'codingcelebrate1.png', 'codingcelebrate2.png', 'codingcelebrate3.png',
-      'codingcelebrate4.png', 'codingcelebrate5.png', 'codingcelebrate6.png',
-      'codingcelebrate7.png', 'codingcelebrate8.png', 'codingcelebrate9.png',
-      'codingcelebrate10.png', 'codingcelebrate11.png',
-      'codingcelebrate1.png', 'codingcelebrate2.png', 'codingcelebrate3.png',
-      'codingcelebrate4.png', 'codingcelebrate5.png', 'codingcelebrate6.png',
-      'codingcelebrate7.png', 'codingcelebrate8.png', 'codingcelebrate9.png',
-      'codingcelebrate10.png', 'codingcelebrate11.png',
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_pride.frames,
+      ...GENERATED_EMOTION_ANIMATIONS.emotion_excitement.frames,
+      ...GENERATED_ACTION_ANIMATIONS.action_chat_answer.frames,
     ],
     frameDelay: 100,
     loop: true,
-    useNativeSize: true,
   },
 };
 

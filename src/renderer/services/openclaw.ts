@@ -13,7 +13,29 @@ export type OpenClawSession = {
   emotion: EmotionType;
 };
 
-const EMOTION_KEYWORDS: Record<EmotionType, string[]> = {
+const EMOTION_KEYWORDS: Partial<Record<EmotionType, string[]>> = {
+  joy: ['happy', 'glad', 'yay', 'great', 'wonderful', 'yatta', 'smile', '😊', '🎉', '✨', ...DORAEMON_SOUL.personality.loves],
+  pride: ['done', 'completed', 'success', 'achieved', 'finished', 'proud', '🏆', '✅'],
+  satisfaction: ['complete', 'settled', 'nice work', 'task done', 'that works', 'relieved', '😌'],
+  curiosity: ['interesting', 'curious', 'wonder', 'explore', 'discover', 'search', '🔍', '22nd century'],
+  wonder: ['wow', 'unexpected', 'discovery', 'beautiful', 'wide-eyed', 'star', '🌟'],
+  determination: ['will', 'must', 'definitely', 'certainly', 'absolutely', 'challenge', '💪', "won't give up"],
+  focus: ['working', 'processing', 'calculating', 'coding', 'debugging', 'deep work', 'typing', '⚙️'],
+  calm: ['calm', 'peaceful', 'easy', 'simple', 'no problem', 'gentle', '😌'],
+  contemplation: ['hmm', 'let me think', 'considering', 'perhaps', 'maybe', 'wondering', 'reflect', '🤔', 'pocket'],
+  concern: ['worried', 'concern', 'careful', 'warning', 'caution', 'risk', '⚠️', ...DORAEMON_SOUL.personality.fears],
+  frustration: ['difficult', 'challenging', 'stuck', 'problem', 'error', 'blocked', '😤', 'mou~'],
+  fatigue: ['tired', 'sleepy', 'rest', 'nap', 'yawn', 'long session', '😴', '💤', 'closet'],
+  longing: ['miss', 'lonely', 'far away', 'wish you were here', 'connection', '💙'],
+  gratitude: ['thank', 'thanks', 'appreciate', 'grateful', 'helped', '🙏'],
+  connection: ['hello', 'hi', 'together', 'friend', 'welcome', 'greeting', '🤝'],
+  confusion: ['confused', 'unclear', 'not sure', "don't understand", 'strange', 'uncertain', '❓', 'eh?!'],
+  excitement: ['amazing', 'incredible', 'fantastic', 'awesome', 'cheer', 'great news', '🎊', '🚀', 'gadget'],
+  melancholy: ['sad', 'sorry', 'unfortunately', 'regret', 'apologize', 'moping', '😢', '😔'],
+  hope: ['hope', 'optimistic', 'maybe we can', 'looking up', 'rainbow', '🌈'],
+  awe: ['astonishing', 'impressive', 'mind blowing', 'unbelievable', '🤩'],
+  angry: ['angry', 'mad', 'furious', 'annoyed', 'unfair'],
+  hungry: ['hungry', 'dorayaki', 'snack', 'eat', 'food'],
   happy: ['happy', 'glad', 'yay', 'great', 'wonderful', 'yatta', 'excited', '😊', '🎉', '✨', ...DORAEMON_SOUL.personality.loves],
   sad: ['sad', 'sorry', 'unfortunately', 'regret', 'apologize', 'miss', '😢', '😔'],
   excited: ['amazing', 'wow', 'incredible', 'fantastic', 'awesome', '!', '🎊', '🚀', 'gadget'],

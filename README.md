@@ -213,6 +213,12 @@ npm run build
 
 Doraemon experiences a rich spectrum of emotions, each with unique animations:
 
+<p align="center">
+  <img src="docs/assets/doraemon-live-sprites-preview.png" alt="Preview of generated transparent Doraemon emotion and action sprites" width="100%">
+</p>
+
+The live sprite set now includes **139 transparent PNG frames**: **79 emotion frames** for the 20 emotional states below, plus **60 action frames** for chat, coding, research, gadget use, eating, rest, anger, hunger, take-copter, time travel, and random thought moments. Each set is normalized to a stable 128x128 frame box so animations keep a consistent scale and anchor.
+
 | Emotion | Emoji | Animation | Trigger |
 |---------|-------|-----------|---------|
 | Joy | 😊 | Happy bounce, waving | Success, good news |
@@ -242,11 +248,25 @@ When you're coding, Doraemon codes with you:
 
 | Animation | Description | Trigger |
 |-----------|-------------|---------|
-| `coding` | Regular typing | File edits |
-| `coding_intense` | Fast typing, focused | Rapid changes |
-| `coding_thinking` | Pondering, head scratch | Pauses |
-| `coding_celebrate` | Jump for joy! | Build success |
+| `action_coding_typing` | Laptop typing loop | File edits |
+| `action_coding_thinking` | Pondering with code | Pauses, reviews |
+| `emotion_focus` | Deep-work focus pose | Long focus streaks |
+| `emotion_determination` | Intense coding energy | Rapid changes |
+| `emotion_pride` | Victory pose | Build success |
 | `coding_allday` | Full day cycle | Long sessions |
+
+### Generated Action Sprites
+
+| Action Asset | Used For |
+|--------------|----------|
+| `action_chat_question`, `action_chat_answer` | Getting a chat question and answering |
+| `action_research` | Browser activity and web/search work |
+| `action_gadget_search`, `action_gadget_use`, `action_explain_gadget`, `action_gadget_surprise` | Looking for, using, and explaining gadgets |
+| `action_eating`, `action_hungry` | Dorayaki hunger and eating moments |
+| `action_rest`, `action_nap` | Resting after long sessions |
+| `action_angry`, `action_protect`, `action_greeting` | Strong emotion, helping, and social moments |
+| `action_take_copter`, `action_time_travel`, `action_walk` | Doraemon-series gadget and movement moments |
+| `action_random_thought` | Idle/random thought bubbles |
 
 ### OpenClaw Event Reactions
 

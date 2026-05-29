@@ -303,9 +303,29 @@ async function performRefresh(staleCreds: KiroCreds): Promise<KiroCreds> {
       await writeCredsToDisk(next);
       return next;
     } catch (err) {
-      // Graceful degradation: if our refresh token is dead but the access
-      // token is still alive, keep going. Kiro IDE just out-raced us — we'll
-      // pick up the new pair from disk on the next call.
+      // AWS rejected our refresh. Most likely cause: the Kiro IDE refreshed
+      // a millisecond before us, used our refresh token, and is in the middle
+      // of writing the new pair to disk. The atomic rename is fast, but we
+      // started this AWS call several seconds ago — give the disk a final
+      // peek before declaring failure.
+      try {
+        const fresher = await readCredsFromDisk();
+        if (
+          fresher.refreshToken !== onDisk.refreshToken &&
+          !isExpiringSoon(fresher)
+        ) {
+          const reason = err instanceof Error ? err.message : 'unknown';
+          console.warn(
+            `[kiro-auth] refresh rejected by AWS, but disk holds fresher creds from another writer (${reason}); using disk`,
+          );
+          return fresher;
+        }
+      } catch {
+        // disk re-read failed; fall through to the access-token fallback below
+      }
+
+      // Last resort: if our access token still has time on its clock, return
+      // it and let the caller try. The next request will re-read disk.
       if (!isHardExpired(onDisk)) {
         const reason = err instanceof Error ? err.message : 'unknown';
         console.warn(

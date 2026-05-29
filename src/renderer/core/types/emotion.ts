@@ -1,4 +1,24 @@
 export type EmotionType =
+  | 'joy'
+  | 'pride'
+  | 'satisfaction'
+  | 'curiosity'
+  | 'wonder'
+  | 'determination'
+  | 'focus'
+  | 'calm'
+  | 'contemplation'
+  | 'concern'
+  | 'frustration'
+  | 'fatigue'
+  | 'longing'
+  | 'gratitude'
+  | 'connection'
+  | 'confusion'
+  | 'excitement'
+  | 'melancholy'
+  | 'hope'
+  | 'awe'
   | 'neutral'
   | 'happy'
   | 'sad'
@@ -14,7 +34,9 @@ export type EmotionType =
   | 'playful'
   | 'determined'
   | 'relaxed'
-  | 'anxious';
+  | 'anxious'
+  | 'angry'
+  | 'hungry';
 
 export type EmotionState = {
   current: EmotionType;
