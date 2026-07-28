@@ -78,6 +78,39 @@ if (!process.env['OVSX_PAT']) {
   process.exit(1);
 }
 
+/*
+ * The tag names the release but the VSIX version comes from package.json. If they
+ * disagree, the wrong version is published under a misleading tag, and Open VSX
+ * will not let it be replaced afterwards.
+ */
+const tag = process.env['GITHUB_REF_NAME'];
+if (tag && tag.startsWith('kiro-extension-v')) {
+  const tagged = tag.slice('kiro-extension-v'.length);
+  if (tagged !== manifest.version) {
+    console.error(`[doraemon] tag ${tag} does not match package.json ${manifest.version}.`);
+    console.error('[doraemon] bump the version and retag, rather than publishing a mismatch.');
+    process.exit(1);
+  }
+}
+
+/*
+ * Publishing into a namespace that does not exist fails outright. Creating it is
+ * idempotent, so doing it here means the first ever release needs no manual step.
+ */
+console.log(`[doraemon] ensuring namespace "${manifest.publisher}" exists`);
+const namespace = spawnSync(
+  'npx',
+  ['--yes', 'ovsx', 'create-namespace', manifest.publisher],
+  { cwd: root, encoding: 'utf-8', shell: process.platform === 'win32' }
+);
+const namespaceOutput = `${namespace.stdout ?? ''}${namespace.stderr ?? ''}`;
+if (namespace.status !== 0 && !/already (exists|owned)/i.test(namespaceOutput)) {
+  console.error('[doraemon] could not create the namespace:');
+  console.error(namespaceOutput.trim());
+  console.error('[doraemon] claim it manually at https://open-vsx.org and retry.');
+  process.exit(1);
+}
+
 console.log(`[doraemon] publishing ${target} to Open VSX as "${manifest.publisher}"`);
 run('npx', ['--yes', 'ovsx', 'publish', vsix, '--target', target]);
-console.log('[doraemon] published');
+console.log(`[doraemon] published ${manifest.name} ${manifest.version} (${target})`);
