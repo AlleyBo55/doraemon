@@ -1,0 +1,183 @@
+{
+  "name": "doraemon-coding-companion",
+  "displayName": "Doraemon Coding Companion",
+  "description": "A Doraemon desktop pet that lives in your sidebar and reacts to how you code. Fully offline, zero configuration.",
+  "version": "0.1.0",
+  "publisher": "AlleyBo55",
+  "license": "MIT",
+  "author": "AlleyBo55",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlleyBo55/doraemon.git",
+    "directory": "kiro-extension"
+  },
+  "homepage": "https://github.com/AlleyBo55/doraemon#readme",
+  "bugs": {
+    "url": "https://github.com/AlleyBo55/doraemon/issues"
+  },
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["doraemon", "shimeji", "desktop-pet", "mascot", "companion"],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "The companion only observes editor events and never executes workspace code."
+    },
+    "virtualWorkspaces": true
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "doraemon",
+          "title": "Doraemon",
+          "icon": "media/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "doraemon": [
+        {
+          "id": "doraemon.pet",
+          "name": "Companion",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "doraemon.focus",
+        "title": "Doraemon: Show Companion"
+      },
+      {
+        "command": "doraemon.triggerEmotion",
+        "title": "Doraemon: Trigger Emotion"
+      },
+      {
+        "command": "doraemon.showStats",
+        "title": "Doraemon: Show Coding Stats"
+      },
+      {
+        "command": "doraemon.resetPosition",
+        "title": "Doraemon: Reset Position"
+      },
+      {
+        "command": "doraemon.openInWindow",
+        "title": "Doraemon: Open in Separate Window"
+      },
+      {
+        "command": "doraemon.closeWindow",
+        "title": "Doraemon: Close Separate Window"
+      },
+      {
+        "command": "doraemon.restartCompanion",
+        "title": "Doraemon: Restart Desktop Companion"
+      },
+      {
+        "command": "doraemon.stopCompanion",
+        "title": "Doraemon: Stop Desktop Companion"
+      },
+      {
+        "command": "doraemon.locateDesktopApp",
+        "title": "Doraemon: Locate Desktop App..."
+      },
+      {
+        "command": "doraemon.diagnose",
+        "title": "Doraemon: Diagnose"
+      }
+    ],
+    "configuration": {
+      "title": "Doraemon Coding Companion",
+      "properties": {
+        "doraemon.target": {
+          "type": "string",
+          "enum": ["auto", "desktop", "window", "sidebar"],
+          "default": "auto",
+          "enumDescriptions": [
+            "Use the desktop app if installed, otherwise open a detached window.",
+            "Transparent mascot floating freely over the desktop. Requires the Doraemon desktop app.",
+            "A separate OS window outside the IDE frame, movable to any monitor. No extra install needed.",
+            "Docked in the sidebar panel."
+          ],
+          "description": "Where Doraemon lives."
+        },
+        "doraemon.desktopAppPath": {
+          "type": "string",
+          "default": "",
+          "description": "Full path to the Doraemon desktop app executable. Leave empty to auto-detect."
+        },
+        "doraemon.showThoughts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Doraemon's speech bubble."
+        },
+        "doraemon.thoughtIntervalSeconds": {
+          "type": "number",
+          "default": 45,
+          "minimum": 10,
+          "maximum": 600,
+          "description": "How often Doraemon shares an idle thought."
+        },
+        "doraemon.reactToDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "React when errors appear in or disappear from the active file."
+        },
+        "doraemon.breakReminderMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "maximum": 600,
+          "description": "Remind you to take a break after this many minutes of continuous coding. Set to 0 to disable."
+        },
+        "doraemon.installAgentHooks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write the Kiro hooks that report agent state into .kiro/hooks/ on activation. Existing files are never overwritten."
+        },
+        "doraemon.agentStallSeconds": {
+          "type": "number",
+          "default": 25,
+          "minimum": 0,
+          "maximum": 600,
+          "description": "If Kiro goes quiet mid-task for this long, Doraemon suspects it is waiting for you. Set to 0 to disable."
+        },
+        "doraemon.idleMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 120,
+          "description": "Doraemon gets sleepy after this many minutes without edits."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy-sprites": "node scripts/copy-sprites.mjs",
+    "build-companion": "node scripts/build-companion.mjs",
+    "verify-sprites": "node scripts/verify-sprites.mjs",
+    "verify-deps": "node scripts/verify-deps.mjs",
+    "typecheck": "npm run verify-deps && tsc --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs",
+    "verify-coverage": "node scripts/verify-coverage.mjs",
+    "build": "npm run copy-sprites && node scripts/build.mjs && npm run build-companion && npm run verify-sprites && npm run verify-coverage",
+    "watch": "npm run copy-sprites && node scripts/build.mjs --watch",
+    "test": "npm run typecheck && npm run build && npm run smoke",
+    "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies",
+    "release": "npm run build && node scripts/release.mjs",
+    "release:publish": "npm run build && node scripts/release.mjs --publish",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.30",
+    "@types/vscode": "1.84.0",
+    "esbuild": "0.24.2",
+    "typescript": "5.3.3"
+  }
+}

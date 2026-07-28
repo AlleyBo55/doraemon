@@ -1,0 +1,24 @@
+[package]
+name = "doraemon-companion"
+version = "0.1.0"
+edition = "2021"
+description = "Floating Doraemon mascot window driven by the Kiro extension"
+license = "MIT"
+
+[dependencies]
+tao = "=0.35.3"
+# The `transparent` feature is what actually lets the webview stop painting a
+# background on macOS. Without it the window is transparent but the web content
+# renders opaque white on top of it.
+wry = { version = "=0.55.1", features = ["transparent"] }
+serde_json = "=1.0.151"
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.180"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

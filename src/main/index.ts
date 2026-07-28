@@ -64,6 +64,7 @@ import {
 } from './llm-provider-ipc.js';
 import { setPickerOpener } from './llm-provider/index.js';
 import { bootstrapProvider, stopKiroGateway } from './llm-provider/index.js';
+import { startExtensionBridge, stopExtensionBridge } from './extension-bridge.js';
 
 let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -204,6 +205,15 @@ function createMainWindow() {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  }
+
+  // Extension companion mode: the IDE extension is the activity source and
+  // drives the mascot over the command channel. None of the local watchers,
+  // experience, memory or social subsystems belong in this mode.
+  if (cfg.extensionMode) {
+    console.log('[Main] Extension companion mode: mascot only');
+    void startExtensionBridge(mainWindow);
+    return;
   }
 
   // Start watchers
@@ -989,7 +999,12 @@ app.whenReady().then(() => {
   });
   setPickerOpener(() => openPickerWindow());
   void refreshProviderLabel();
-  void bootstrapProvider();
+
+  // The companion has no chat surface, so there is no provider to bootstrap and
+  // no gateway to spin up.
+  if (!cfg.extensionMode) {
+    void bootstrapProvider();
+  }
 
   // Check if we should skip setup (e.g., --skip-setup flag or env var)
   const skipSetup = cfg.skipSetup;
@@ -1024,6 +1039,8 @@ app.whenReady().then(() => {
 
 app.on('before-quit', async () => {
   console.log('[Main] Graceful shutdown starting...');
+
+  stopExtensionBridge();
 
   try {
     const { stopNotificationWatcher } = await import('./watchers/index.js');

@@ -27,6 +27,14 @@ const CLIMB_SPEED = 2;
 const CEILING_SPEED = 2;
 const GROUND_MARGIN = 50;
 
+// How long the user has to hold before Doraemon starts struggling.
+const DRAG_RESIST_DELAY = 3000;
+// Fling strength carried over from the pointer when the user lets go.
+const THROW_VELOCITY_SCALE = 0.9;
+const MAX_THROW_VELOCITY = 22;
+// Pointer samples older than this are treated as "let go while holding still".
+const THROW_SAMPLE_WINDOW = 120;
+
 type BehaviorDef = { state: ShimejiState; weight: number; duration: [number, number] };
 
 const EMOTION_BEHAVIORS: Partial<Record<EmotionType, BehaviorDef[]>> = {
@@ -271,6 +279,8 @@ export class ShimejiEngine {
   private behaviorDuration = 0;
   private isDragging = false;
   private dragStartTime = 0;
+  private lastDragPoint: { x: number; y: number; time: number } | null = null;
+  private throwVelocity: Velocity = { vx: 0, vy: 0 };
   private isOnGround = true;
   private isOnWall: 'left' | 'right' | null = null;
   private isOnCeiling = false;
@@ -342,9 +352,12 @@ export class ShimejiEngine {
 
   update(deltaTime: number) {
     if (this.isDragging) {
-      if (Date.now() - this.dragStartTime > 3000) {
+      if (Date.now() - this.dragStartTime > DRAG_RESIST_DELAY) {
         this.state = 'resist';
       }
+      // Publish the drag/resist state so the renderer follows the lean direction
+      // instead of staying pinned on the frame set at pointer-down.
+      this.onStateChange?.(this.state, 0, this.facingRight);
       return;
     }
 
@@ -585,6 +598,12 @@ export class ShimejiEngine {
     this.dragStartTime = Date.now();
     this.state = 'drag';
     this.velocity = { vx: 0, vy: 0 };
+    this.throwVelocity = { vx: 0, vy: 0 };
+    this.lastDragPoint = null;
+    // A held animation would otherwise keep forcing its own state and skip
+    // physics entirely, so direct interaction takes the lock back.
+    this._codingLock = false;
+    this._forcedCodingState = null;
   }
 
   setPosition(x: number, y: number) {
@@ -607,20 +626,57 @@ export class ShimejiEngine {
     else if (diff > 10) this.state = 'drag_right';
     else this.state = 'drag';
 
-    if (Date.now() - this.dragStartTime > 3000) this.state = 'resist';
+    const now = Date.now();
+    if (now - this.dragStartTime > DRAG_RESIST_DELAY) this.state = 'resist';
+
+    this.trackThrowVelocity(x, y, now);
 
     this.position.x = x - currentSize.width / 2;
     this.position.y = y - currentSize.height / 2;
     this.onPositionChange?.(this.position);
   }
 
+  private trackThrowVelocity(x: number, y: number, now: number) {
+    const previous = this.lastDragPoint;
+    this.lastDragPoint = { x, y, time: now };
+    if (!previous) return;
+
+    const elapsed = now - previous.time;
+    if (elapsed <= 0) return;
+
+    // Normalise to a per-frame delta (~16ms) so the throw feels the same
+    // regardless of how often pointer events arrive.
+    const perFrame = 16 / elapsed;
+    const clamp = (value: number) =>
+      Math.max(-MAX_THROW_VELOCITY, Math.min(MAX_THROW_VELOCITY, value));
+
+    this.throwVelocity = {
+      vx: clamp((x - previous.x) * perFrame * THROW_VELOCITY_SCALE),
+      vy: clamp((y - previous.y) * perFrame * THROW_VELOCITY_SCALE),
+    };
+  }
+
   endDrag() {
     this.isDragging = false;
+
+    const sample = this.lastDragPoint;
+    const isStale = !sample || Date.now() - sample.time > THROW_SAMPLE_WINDOW;
+    // Released mid-motion: keep the momentum so it reads as a throw.
+    // Released while holding still: plain drop.
+    this.velocity = isStale ? { vx: 0, vy: 0 } : { ...this.throwVelocity };
+
+    if (this.velocity.vx !== 0) this.facingRight = this.velocity.vx > 0;
+
+    this.throwVelocity = { vx: 0, vy: 0 };
+    this.lastDragPoint = null;
+
     this.state = 'fall';
     this.isOnGround = false;
     this.isOnWall = null;
     this.isOnCeiling = false;
   }
+
+  isBeingDragged(): boolean { return this.isDragging; }
 
   getState(): ShimejiState { return this.state; }
   getPosition(): Position { return { ...this.position }; }

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.vsix
+release/
+
+# Compiled companion. Rebuilt per platform by scripts/build-companion.mjs.
+bin/
+companion/target/
+
+# Bundled by scripts/build.mjs into media/ so the Rust companion can serve it.
+media/companion.js
+
+# Copied from ../src/renderer/public/dora-sprites by scripts/copy-sprites.mjs
+media/dora-sprites/

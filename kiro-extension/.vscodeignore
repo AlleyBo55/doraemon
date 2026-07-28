@@ -1,0 +1,13 @@
+.vscode/**
+node_modules/**
+src/**
+scripts/**
+tsconfig.json
+.gitignore
+.vscodeignore
+**/*.map
+**/*.ts
+
+# Rust sources and build artifacts. The compiled binary is staged into bin/
+# by scripts/build-companion.mjs and shipped from there.
+companion/**

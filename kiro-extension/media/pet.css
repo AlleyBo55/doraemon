@@ -1,0 +1,86 @@
+:root {
+  --dora-sprite: 128px;
+  --dora-bubble-bg: var(--vscode-editorHoverWidget-background, #252526);
+  --dora-bubble-fg: var(--vscode-editorHoverWidget-foreground, #cccccc);
+  --dora-bubble-border: var(--vscode-editorHoverWidget-border, #454545);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+}
+
+#stage {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 240px;
+  overflow: hidden;
+}
+
+#sprite {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--dora-sprite);
+  height: var(--dora-sprite);
+  image-rendering: -webkit-optimize-contrast;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+#sprite:active {
+  cursor: grabbing;
+}
+
+.bubble {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  padding: 8px 10px;
+  border: 1px solid var(--dora-bubble-border);
+  border-radius: 10px;
+  background: var(--dora-bubble-bg);
+  color: var(--dora-bubble-fg);
+  font-size: 0.85em;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+  animation: bubble-in 160ms ease-out;
+}
+
+.bubble[hidden] {
+  display: none;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+}
