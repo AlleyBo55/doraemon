@@ -327,6 +327,11 @@ is not a failure, a repeated window-state event does not re-fire.
 **595 frame references across 107 animations** exist on disk, because a missing
 PNG only shows up as an invisible mascot.
 
+`verify-coverage` asserts the reverse: that **all 40 generated sprite sets can
+actually be triggered** by something. Unreachable artwork is dead weight in the
+VSIX and invisible by definition — nobody notices an animation that never plays.
+The build fails if a set has no route to the screen.
+
 ## Publishing
 
 Kiro installs from Open VSX. One-time: sign in at

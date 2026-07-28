@@ -452,7 +452,8 @@ const fileUri = (p) => ({ ...vscodeStub.Uri.file(p), path: p });
 
 {
   const blurred = fire('windowState', { focused: false });
-  assert.equal(blurred?.emotion, 'calm', 'losing focus must settle him down');
+  assert.equal(blurred?.emotion, 'longing', 'losing focus must read as missing you');
+  assert.equal(blurred?.animation, 'action_walk', 'he wanders off while you are away');
   assert.equal(blurred?.thought, null, 'no chatter while you are away');
 
   const refocused = fire('windowState', { focused: true });
@@ -469,6 +470,7 @@ const fileUri = (p) => ({ ...vscodeStub.Uri.file(p), path: p });
     selections: [{ isEmpty: false, start: { line: 1 }, end: { line: 40 } }],
   });
   assert.equal(bigSelection?.emotion, 'contemplation', 'a large selection reads as reviewing');
+  assert.equal(bigSelection?.animation, 'action_research', 'reviewing plays the research sprite');
 
   const smallSelection = fire('selection', {
     textEditor: { document: doc },
@@ -588,7 +590,8 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
     `an approval prompt must persist, got ${confirm.durationMs}ms`);
 
   const done = await report({ state: 'done', message: 'Kiro finished!' });
-  assert.equal(done?.emotion, 'pride', 'done must read as pride');
+  assert.equal(done?.emotion, 'gratitude', 'done must read as gratitude');
+  assert.equal(done?.animation, 'action_explain_gadget', 'done presents the result');
 
   const failed = await report({ state: 'failed' });
   assert.equal(failed?.emotion, 'frustration', 'failure must read as frustration');
@@ -632,7 +635,7 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
   await watcher.fire({ fsPath: '/ws/x' });
   await new Promise((r) => setTimeout(r, 400));
   assert.equal(posted.length, 2, 'finishing must cancel the stall escalation');
-  assert.equal(posted[1]?.emotion, 'pride', 'the last word must be the completion');
+  assert.equal(posted[1]?.emotion, 'gratitude', 'the last word must be the completion');
 
   config.agentStallSeconds = 25;
   console.log('✓ a stalled agent escalates to "may be waiting", finishing cancels it');
@@ -725,6 +728,39 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
   } else {
     console.log('- bundled companion not built, skipped (run "npm run build-companion")');
   }
+}
+
+/* ── the sprite sets that used to be dead now have routes ──────────────── */
+
+{
+  config.showThoughts = true;
+
+  // Selection is throttled to once a minute and already fired earlier, so its
+  // animation is asserted in that block instead of here.
+  const cases = [
+    ['createFiles', 'action_gadget_surprise', { files: [fileUri('/tmp/new.ts')] }],
+    ['taskStart', 'emotion_hope', { execution: { task: { name: 'build' } } }],
+    ['taskEnd', 'action_chat_answer', { exitCode: 0, execution: { task: { name: 'build' } } }],
+  ];
+
+  for (const [group, expected, payload] of cases) {
+    const reaction = fire(group, payload);
+    assert.equal(reaction?.animation, expected,
+      `${group} should play ${expected}, got ${reaction?.animation}`);
+  }
+
+  // Terminal commands are throttled to one reaction per 8s and an earlier block
+  // already spent this window, so wait it out rather than weaken the assertion.
+  await new Promise((r) => setTimeout(r, 8200));
+
+  const push = fire('shellStart', { execution: { commandLine: { value: 'git push origin main' } } });
+  assert.equal(push?.animation, 'action_take_copter', 'a push should use the take-copter');
+
+  // A failed command is the one place he gets openly cross.
+  const failed = fire('shellEnd', { exitCode: 1, execution: { commandLine: { value: 'npm test' } } });
+  assert.equal(failed?.animation, 'action_angry', 'a failed command should play action_angry');
+
+  console.log('✓ research / gadget_surprise / hope / chat_answer / take_copter / angry all route');
 }
 
 /* ── clean teardown ────────────────────────────────────────────────────── */

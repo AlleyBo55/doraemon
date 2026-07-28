@@ -152,8 +152,10 @@ const WELCOME_BACK = [
   'I kept your seat warm.',
 ] as const;
 
+type CommandReading = { label: string; emotion: EmotionType; animation?: string };
+
 /** Recognises common command families so the terminal reaction reads sensibly. */
-function describeCommand(command: string): { label: string; emotion: EmotionType } {
+function describeCommand(command: string): CommandReading {
   const text = command.trim().toLowerCase();
 
   if (/^(npm|yarn|pnpm|bun)\s+(run\s+)?(test|t)\b/.test(text) || /\b(vitest|jest|pytest|go test|cargo test)\b/.test(text)) {
@@ -162,8 +164,13 @@ function describeCommand(command: string): { label: string; emotion: EmotionType
   if (/\b(build|compile|tsc|webpack|vite build|cargo build|make)\b/.test(text)) {
     return { label: 'Building~ I love this part.', emotion: 'focus' };
   }
-  if (/^git\s+push/.test(text)) {
-    return { label: 'Pushing! Off it goes.', emotion: 'excitement' };
+  if (/^git\s+push/.test(text) || /\b(deploy|publish|vercel|netlify|fly deploy)\b/.test(text)) {
+    // Shipping something outward, so the take-copter comes out.
+    return {
+      label: 'Off it goes! Take-copter time~',
+      emotion: 'excitement',
+      animation: 'action_take_copter',
+    };
   }
   if (/^git\s+(pull|fetch)/.test(text)) {
     return { label: 'Fetching what everyone else did.', emotion: 'curiosity' };
@@ -224,9 +231,10 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
     }
 
     case 'readingCode':
+      // Reading rather than writing, so he researches instead of typing.
       return {
         emotion: 'contemplation',
-        animation: 'action_coding_thinking',
+        animation: 'action_research',
         thought: fromPool('thinking'),
         durationMs: 6000,
       };
@@ -234,7 +242,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
     case 'fileCreated':
       return {
         emotion: 'excitement',
-        animation: 'emotion_excitement',
+        animation: 'action_gadget_surprise',
         thought: context.fileName
           ? `A brand new ${context.fileName}~ exciting!`
           : 'Something new appeared~',
@@ -262,15 +270,30 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
     /* ── correctness ──────────────────────────────────────────────────── */
 
     case 'errorsAppeared': {
+      // A ladder rather than a switch: puzzled, then worried, then fed up.
       const count = context.errorCount ?? 1;
-      const severe = count >= 5;
+
+      if (count >= 5) {
+        return {
+          emotion: 'frustration',
+          animation: 'emotion_frustration',
+          thought: `${count} errors! Deep breath, we will get through them.`,
+          durationMs: 6500,
+        };
+      }
+      if (count >= 3) {
+        return {
+          emotion: 'concern',
+          animation: 'emotion_concern',
+          thought: fromPool('debugging'),
+          durationMs: 6500,
+        };
+      }
       return {
-        emotion: severe ? 'frustration' : 'concern',
-        animation: severe ? 'emotion_frustration' : 'emotion_concern',
-        thought: severe
-          ? `${count} errors! Deep breath, we will get through them.`
-          : fromPool('debugging'),
-        durationMs: 6500,
+        emotion: 'confusion',
+        animation: 'emotion_confusion',
+        thought: fromPool('debugging'),
+        durationMs: 6000,
       };
     }
 
@@ -283,9 +306,10 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
       };
 
     case 'projectClean':
+      // The whole workspace going green deserves more than mild satisfaction.
       return {
-        emotion: 'satisfaction',
-        animation: 'emotion_satisfaction',
+        emotion: 'awe',
+        animation: 'emotion_awe',
         thought: 'Not a single error in the whole project. Look at you.',
         durationMs: 7000,
       };
@@ -330,32 +354,35 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
       const described = describeCommand(context.command ?? '');
       return {
         emotion: described.emotion,
-        animation: 'action_coding_typing',
+        animation: described.animation ?? 'action_coding_typing',
         thought: described.label,
         durationMs: 6000,
       };
     }
 
     case 'terminalFailed':
+      // A command exiting non-zero is the one thing he is allowed to be cross about.
       return {
         emotion: 'frustration',
-        animation: 'emotion_frustration',
+        animation: 'action_angry',
         thought: `That command did not end well. ${fromPool('debugging') ?? ''}`.trim(),
         durationMs: 7000,
       };
 
     case 'taskStarted':
+      // Hoping it passes, before we know either way.
       return {
-        emotion: 'focus',
-        animation: 'emotion_focus',
+        emotion: 'hope',
+        animation: 'emotion_hope',
         thought: context.taskName ? `Running "${context.taskName}"~` : 'A task is running~',
         durationMs: 5500,
       };
 
     case 'taskSucceeded':
+      // Reporting the good news back to you.
       return {
         emotion: 'joy',
-        animation: 'emotion_joy',
+        animation: 'action_chat_answer',
         thought: context.taskName
           ? `"${context.taskName}" passed! ${fromPool('progress') ?? ''}`.trim()
           : (fromPool('progress') ?? 'It worked!'),
@@ -428,9 +455,10 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
       };
 
     case 'agentDone':
+      // Presenting the result, gadget-explanation style.
       return {
-        emotion: 'pride',
-        animation: 'action_chat_answer',
+        emotion: 'gratitude',
+        animation: 'action_explain_gadget',
         thought: context.message ?? 'All done! Click me to see.',
         durationMs: AGENT_HOLD_MS,
       };
@@ -454,9 +482,10 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
       };
 
     case 'windowBlurred':
+      // You left, so he wanders off and misses you. Silently.
       return {
-        emotion: 'calm',
-        animation: 'action_rest',
+        emotion: 'longing',
+        animation: 'action_walk',
         thought: null,
         durationMs: 4000,
       };
@@ -471,9 +500,10 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
 
     case 'breakReminder': {
       const minutes = context.minutes ?? 60;
+      // Suggesting a break lands better with a dorayaki in hand, or asking for one.
       return {
         emotion: 'concern',
-        animation: 'action_protect',
+        animation: Math.random() > 0.5 ? 'action_eating' : 'action_hungry',
         thought: `${minutes} minutes straight. ${fromPool('motivation') ?? 'Stretch a little?'}`,
         durationMs: 10000,
       };
