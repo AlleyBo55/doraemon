@@ -174,27 +174,56 @@ jobs:
 
           gh release upload "$TAG" release/*.vsix --clobber
 
-      # Publishes the moment THIS platform is ready, without waiting for the
-      # others. Only ever runs from a release tag.
+  # Uploading to the registry is an HTTP request, not a build, so it does not need
+  # the platform it targets. Splitting it out buys two things. The secret can live
+  # under a GitHub environment, which is only readable by a job declaring
+  # `environment:`, and no half-published version is possible: Open VSX treats a
+  # version as immutable, so if one platform failed to build after another had
+  # already published, that gap could never be filled, only superseded by a
+  # higher version.
+  publish:
+    name: publish ${{ matrix.target }}
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    # Only needs to read back the build artifact. Stated explicitly so a
+    # restrictive repository default cannot fail the download confusingly.
+    permissions:
+      contents: read
+      actions: read
+
+    # Reads OVSX_PAT from an environment secret. Defaults to an environment named
+    # `open-vsx`; set an OVSX_ENVIRONMENT repository variable to point elsewhere.
+    environment: ${{ vars.OVSX_ENVIRONMENT || 'open-vsx' }}
+
+    strategy:
+      # One platform failing to upload must not strand the others.
+      fail-fast: false
+      matrix:
+        target: [darwin-arm64, darwin-x64, win32-x64, linux-x64]
+
+    defaults:
+      run:
+        working-directory: kiro-extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: kiro-extension/release
+
       - name: Publish ${{ matrix.target }} to Open VSX
-        if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        shell: bash
-        run: |
-          if [ -z "$OVSX_PAT" ]; then
-            echo "OVSX_PAT resolved to an empty string, refusing to publish." >&2
-            echo "" >&2
-            echo "If you added it under Settings > Environments, it is only" >&2
-            echo "visible to a job that declares 'environment:'. This job does" >&2
-            echo "not, deliberately: an environment with protection rules would" >&2
-            echo "also gate every pull request build." >&2
-            echo "" >&2
-            echo "Add it as a repository secret instead:" >&2
-            echo "Settings > Secrets and variables > Actions > New repository secret" >&2
-            exit 1
-          fi
-          node scripts/release.mjs --publish
+        run: node scripts/publish.mjs --target=${{ matrix.target }}
 
   # A platform-specific VSIX declares TargetPlatform, and a mismatched host
   # refuses to install it. This produces one file with every companion binary and
