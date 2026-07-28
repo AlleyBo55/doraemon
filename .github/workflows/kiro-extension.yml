@@ -33,6 +33,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     # A hung runner should fail loudly rather than block the queue for hours.
     timeout-minutes: 40
+    # Needed to attach the VSIX to a GitHub Release. Everything else is read-only.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -120,6 +123,57 @@ jobs:
           path: kiro-extension/bin/${{ matrix.target }}/*
           if-no-files-found: error
 
+      # A workflow artifact expires and needs a GitHub login to fetch. A Release
+      # asset is a permanent public download, which is what someone installing by
+      # hand actually needs. Created as a draft so a half-finished matrix is never
+      # public; the universal job publishes it once every platform has landed.
+      - name: Attach ${{ matrix.target }} to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+
+          # Quoted heredoc: no expansion, so backticks in the markdown are safe.
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          Install in Kiro with `Extensions: Install from VSIX...`, or from the
+          Open VSX marketplace if you would rather it auto-update.
+
+          | file | for |
+          | --- | --- |
+          | `*-darwin-arm64.vsix` | Apple Silicon Mac |
+          | `*-darwin-x64.vsix` | Intel Mac |
+          | `*-win32-x64.vsix` | Windows |
+          | `*-linux-x64.vsix` | Linux |
+          | `*-universal.vsix` | any of the above, if you are unsure |
+
+          The mascot is a native binary, so a platform-specific file is refused
+          outright by a host it was not built for. When in doubt take the
+          universal one: it carries every platform's binary in a single file.
+
+          macOS marks downloaded binaries as quarantined, which stops the mascot
+          before it starts. The extension detects this and offers to clear the
+          flag for its own binary only, with your consent, the first time you
+          enable desktop mode.
+          NOTES
+
+          # All four jobs race to create the same release. Losing that race is
+          # the expected outcome for three of them, so it must not fail the build.
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" \
+            --draft \
+            --title "Doraemon for Kiro ${TAG#kiro-extension-v}" \
+            --notes-file "$RUNNER_TEMP/notes.md" || true
+
+          # The job that won the race may not be visible to the others instantly.
+          for _ in 1 2 3 4 5; do
+            gh release view "$TAG" >/dev/null 2>&1 && break
+            sleep 3
+          done
+
+          gh release upload "$TAG" release/*.vsix --clobber
+
       # Publishes the moment THIS platform is ready, without waiting for the
       # others. Only ever runs from a release tag.
       - name: Publish ${{ matrix.target }} to Open VSX
@@ -129,7 +183,15 @@ jobs:
         shell: bash
         run: |
           if [ -z "$OVSX_PAT" ]; then
-            echo "OVSX_PAT secret is not set; add it in repository settings." >&2
+            echo "OVSX_PAT resolved to an empty string, refusing to publish." >&2
+            echo "" >&2
+            echo "If you added it under Settings > Environments, it is only" >&2
+            echo "visible to a job that declares 'environment:'. This job does" >&2
+            echo "not, deliberately: an environment with protection rules would" >&2
+            echo "also gate every pull request build." >&2
+            echo "" >&2
+            echo "Add it as a repository secret instead:" >&2
+            echo "Settings > Secrets and variables > Actions > New repository secret" >&2
             exit 1
           fi
           node scripts/release.mjs --publish
@@ -142,6 +204,8 @@ jobs:
     needs: release
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    permissions:
+      contents: write
 
     defaults:
       run:
@@ -191,3 +255,18 @@ jobs:
           name: vsix-universal
           path: kiro-extension/release/*universal.vsix
           if-no-files-found: error
+
+      # This job only runs once all four platforms succeeded, so reaching here is
+      # the signal that the release is complete. Publishing the draft is therefore
+      # the last step: if any platform had failed, the release stays a draft,
+      # visible to maintainers and not to users.
+      - name: Publish the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          gh release upload "$TAG" release/*universal.vsix --clobber
+          gh release edit "$TAG" --draft=false --latest
+          echo "released: $(gh release view "$TAG" --json url --jq .url)"
