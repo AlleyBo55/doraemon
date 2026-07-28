@@ -1,0 +1,125 @@
+name: Kiro extension
+
+# The floating mascot is a native binary, so a VSIX is only valid on the platform
+# it was compiled on. Each target is therefore built on its own runner and
+# published under its own --target.
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'kiro-extension/**'
+      - 'src/renderer/core/**'
+      - '.github/workflows/kiro-extension.yml'
+    tags:
+      - 'kiro-extension-v*'
+  pull_request:
+    paths:
+      - 'kiro-extension/**'
+      - 'src/renderer/core/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: kiro-extension
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One broken platform should not hide results for the others.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+          - os: windows-latest
+            target: win32-x64
+          - os: ubuntu-22.04
+            target: linux-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: kiro-extension/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: kiro-extension/companion
+
+      # tao and wry render through the system webview, which on Linux means GTK
+      # and WebKitGTK headers must be present at build time.
+      - name: Install Linux webview dependencies
+        if: matrix.target == 'linux-x64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+        working-directory: .
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Builds the JS bundles, compiles the companion into bin/<target>/,
+      # then asserts every sprite frame the animations reference exists.
+      - name: Build
+        run: npm run build
+
+      - name: Host checks
+        run: npm run smoke
+
+      - name: Package ${{ matrix.target }}
+        run: node scripts/release.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.target }}
+          path: kiro-extension/release/*.vsix
+          if-no-files-found: error
+
+  publish:
+    name: Publish to Open VSX
+    # Only ever publishes from a tag, never from a branch push.
+    if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish every platform build
+        working-directory: .
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "OVSX_PAT secret is not set; add it in repository settings." >&2
+            exit 1
+          fi
+          for vsix in artifacts/vsix-*/*.vsix; do
+            # release.mjs names files <pkg>-<version>-<target>.vsix
+            target="$(basename "$(dirname "$vsix")" | sed 's/^vsix-//')"
+            echo "Publishing $vsix as $target"
+            npx --yes ovsx publish "$vsix" --target "$target"
+          done

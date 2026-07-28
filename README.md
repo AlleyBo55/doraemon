@@ -57,7 +57,68 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ---
 
-## 🆕 What's new — Kiro Gateway
+## 🆕 One more thing — Doraemon now lives in your IDE. In **792 kilobytes.**
+
+Install one Kiro extension. Doraemon walks out of the editor and onto your
+desktop — transparent, always on top, draggable, throwable.
+
+Nothing else to download. No API key. No account. No network call, ever.
+
+### The part nobody else did
+
+Every desktop pet ever built shipped an entire browser just to draw itself.
+Electron alone is **274 MB**.
+
+Ours is **792 KB**.
+
+| | Size |
+|---|---|
+| Electron runtime | 274 MB |
+| **Doraemon companion** | **792 KB** |
+| Whole extension, download | 4.5 MB |
+
+Same 247 sprites. Same physics engine. Same everything.
+
+Because 288 lines of Rust borrow the webview your operating system already
+shipped. macOS has WebKit. Windows has WebView2. Linux has WebKitGTK.
+
+**Nobody needs a second copy of Chromium to animate a cartoon cat.**
+
+### He is paying attention
+
+**33 signals.** Not "detects activity" — thirty-three, each with its own
+reaction, all from first-party editor APIs. No polling. No `ps` scraping. No
+guessing.
+
+Typing. Saves. Errors appearing and clearing. The whole project going green.
+Terminal commands — he knows a test run from a build from a `git push` from an
+`rm -rf`. Tasks passing and failing, by name. Commits. Branch switches. Merge
+conflicts. Breakpoints. Debug sessions. Going idle. Coding too long.
+
+**2,046 written lines**, and the language ones match the file you're actually in.
+
+### And when you walk away
+
+Kiro is running. You went for coffee. It hit a prompt and stopped.
+
+Doraemon holds that on your desktop for **five minutes**. Click the bubble and
+Kiro comes to the front.
+
+An extension cannot un-minimise its own window. The mascot is a separate process,
+so it can ask the OS. *That is the whole reason this works.*
+
+### Honest small print
+
+- Built and verified on **macOS arm64**. CI builds Windows, Linux and Intel Mac; those are unverified by hand.
+- A downloaded build needs Apple notarization to clear Gatekeeper. Measured: a quarantined binary starts and prints nothing.
+- "Waiting on approval" is **inferred** from the agent going quiet, because Kiro has no such hook trigger. A slow tool looks the same from outside.
+- Approving from the bubble is deliberately not built. It would stall the agent while you're away.
+
+📖 Full detail, including everything above: [`kiro-extension/README.md`](kiro-extension/README.md)
+
+---
+
+## 🆕 Kiro Gateway
 
 This release adds a **local gateway tunnel** that routes every Claude call through your Kiro IDE session, so OpenClaw runs Claude **Opus 4.7** as the orchestrator and **Haiku 4.5** for workers — without touching `api.anthropic.com`.
 

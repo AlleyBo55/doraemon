@@ -125,9 +125,11 @@ const App = () => {
   const codingAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codingModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priorityMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDraggingRef = useRef(false);
   
   // Keep refs updated
   useEffect(() => { triggerEmotionRef.current = triggerEmotion; }, [triggerEmotion]);
+  useEffect(() => { isDraggingRef.current = isDragging; }, [isDragging]);
 
   useIdleDetection();
 
@@ -135,6 +137,13 @@ const App = () => {
   const triggerCodingAnimation = useCallback((animation: string, duration = 8000) => {
     if (!getAnimation(animation)) {
       console.warn('[App] Unknown mascot animation:', animation);
+      return;
+    }
+
+    // Direct interaction wins. A locked animation forces a stationary state and
+    // skips physics, which would swallow the drag frames and the drop.
+    if (isDraggingRef.current) {
+      console.log('[App] Skipping animation while dragging:', animation);
       return;
     }
 

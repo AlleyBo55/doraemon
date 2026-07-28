@@ -44,6 +44,12 @@ export interface DoraemonMainConfig {
   deviceSalt: string;
   adminKey: string;
   skipSetup: boolean;
+  /**
+   * Mascot-only mode for the IDE extension companion: renders the floating
+   * window and accepts commands, but starts no OpenClaw gateway, watchers,
+   * memory, experience or voice subsystems.
+   */
+  extensionMode: boolean;
 }
 
 // ── defaults ────────────────────────────────────────────────
@@ -65,6 +71,7 @@ const DEFAULTS: DoraemonMainConfig = {
   deviceSalt: '',
   adminKey: '',
   skipSetup: false,
+  extensionMode: false,
 };
 
 // ── JSON key → config field mapping ─────────────────────────
@@ -116,6 +123,7 @@ const ENV_KEY_MAP: EnvKeyMap = {
   DEVICE_SALT:                 { field: 'deviceSalt',                parse: toStr },
   ADMIN_KEY:                   { field: 'adminKey',                  parse: toStr },
   DORAEMON_SKIP_SETUP:         { field: 'skipSetup',                 parse: toBool },
+  DORAEMON_EXTENSION_MODE:     { field: 'extensionMode',             parse: toBool },
 };
 
 // ── loader ──────────────────────────────────────────────────
@@ -164,6 +172,15 @@ function buildConfig(): DoraemonMainConfig {
   loadEnvOverrides(config);
 
   if (process.argv.includes('--skip-setup')) {
+    config.skipSetup = true;
+  }
+
+  if (process.argv.includes('--extension-mode')) {
+    config.extensionMode = true;
+  }
+
+  // The companion has nothing to set up: there is no gateway to configure.
+  if (config.extensionMode) {
     config.skipSetup = true;
   }
 
