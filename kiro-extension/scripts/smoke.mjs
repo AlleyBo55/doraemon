@@ -61,6 +61,9 @@ const writtenFiles = [];
 const existingFiles = new Set();
 let stateFileContent = '';
 
+/** Windows hosts emit backslashes; assertions compare on forward slashes. */
+const normalisePath = (value) => String(value).replace(/\\/g, '/');
+
 /** Stands in for a webview panel the editor restored after a window reload. */
 const makeRestoredPanel = () => {
   const panel = {
@@ -160,7 +163,8 @@ const vscodeStub = {
     fs: {
       readFile: async () => Buffer.from(stateFileContent, 'utf-8'),
       stat: async (uri) => {
-        const relative = String(uri.fsPath).replace(/^\/ws\//, '');
+        // Windows runners produce backslashes, so compare on one separator.
+        const relative = normalisePath(String(uri.fsPath)).replace(/^\/ws\//, '');
         if (existingFiles.has(relative)) return { type: 1, size: 1 };
         throw new Error('ENOENT');
       },
@@ -647,7 +651,7 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
   assert.ok(writtenFiles.length > 0, 'activation must install the agent hooks');
 
   for (const written of writtenFiles) {
-    assert.match(written.path, /\.kiro\.hook$/,
+    assert.match(normalisePath(written.path), /\.kiro\.hook$/,
       `Kiro only loads *.kiro.hook, got: ${written.path}`);
 
     const hook = JSON.parse(written.content);
@@ -673,16 +677,37 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
 
   console.log(`✓ ${writtenFiles.length} hooks installed as *.kiro.hook, enabled, platform-correct`);
 
-  // An existing hook must never be clobbered.
-  existingFiles.add('.kiro/hooks/doraemon-agent-done.kiro.hook');
-  writtenFiles.length = 0;
-  const { installAgentHooks } = require(path.join(root, 'dist/extension.js'));
-  if (typeof installAgentHooks === 'function') {
-    await installAgentHooks();
-    const clobbered = writtenFiles.some((w) => w.path.includes('agent-done'));
-    assert.equal(clobbered, false, 'an existing hook must not be overwritten');
-    console.log('✓ existing hooks are left alone');
+  /*
+   * An existing hook must never be clobbered. installAgentHooks is internal to
+   * the bundle, so this drives it the only way a user can: by activating again
+   * with the files already on disk, which is what happens on every reload.
+   */
+  for (const written of writtenFiles) {
+    existingFiles.add(normalisePath(written.path).replace(/^\/ws\//, ''));
   }
+
+  writtenFiles.length = 0;
+  const secondSubscriptions = [];
+  extension.activate({
+    subscriptions: secondSubscriptions,
+    extensionUri: vscodeStub.Uri.file(root),
+    globalStorageUri: vscodeStub.Uri.file(path.join(root, '.test-storage')),
+    globalState: {
+      get: (k, d) => (globalStateStore.has(k) ? globalStateStore.get(k) : d),
+      update: async (k, v) => { globalStateStore.set(k, v); },
+    },
+  });
+
+  // Installation is async inside activate, so let it settle.
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(
+    writtenFiles.length,
+    0,
+    `a reload must not rewrite existing hooks, but wrote: ${writtenFiles.map((w) => w.path).join(', ')}`
+  );
+  console.log('✓ existing hooks survive a reload untouched');
+
+  for (const disposable of secondSubscriptions) disposable.dispose?.();
   existingFiles.clear();
 }
 
@@ -784,6 +809,10 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
     ['linux', 'x64', 'bin/linux-x64/doraemon-companion'],
   ];
 
+  // path.join follows the HOST separator, not the stubbed platform, so a Windows
+  // runner reports bin\darwin-arm64\... Compare separator-agnostically.
+  const normalise = (value) => value.replace(/\\/g, '/');
+
   try {
     for (const [platform, arch, expected] of expectations) {
       setPlatform(platform, arch);
@@ -793,7 +822,7 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
       const report = openedDocuments[0]?.content ?? '';
       const line = report.split('\n').find((l) => l.startsWith('bundled companion:')) ?? '';
       assert.ok(
-        line.includes(expected),
+        normalise(line).includes(expected),
         `${platform}-${arch} must resolve ${expected}, got: ${line.trim()}`
       );
     }

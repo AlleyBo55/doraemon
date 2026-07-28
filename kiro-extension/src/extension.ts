@@ -5,7 +5,7 @@ import { AgentStateWatcher } from './agent-state';
 import { installAgentHooks } from './hook-installer';
 import { PetPanel, PetViewProvider } from './pet-view';
 import { reactTo, type ActivityKind, type Reaction } from './reactions';
-import { DesktopCompanion, platformCaveat } from './desktop-companion';
+import { DesktopCompanion, clearQuarantine, platformCaveat } from './desktop-companion';
 import type { EmotionType } from './protocol';
 
 const EMOTION_CHOICES: readonly EmotionType[] = [
@@ -108,6 +108,33 @@ export function activate(context: vscode.ExtensionContext): void {
           caveat ?? 'Doraemon is on your desktop now~'
         );
       }
+      return;
+    }
+
+    // macOS blocked the bundled binary because it arrived quarantined. This is
+    // recoverable, but only with the user's say-so.
+    if (companion.lastBlock === 'quarantine') {
+      const binary = companion.lastResolvedBinary;
+      const choice = await vscode.window.showWarningMessage(
+        'macOS quarantined Doraemon\'s companion because it was downloaded, so the ' +
+          'floating mascot cannot start. The extension is not notarized yet. Allow it?',
+        { modal: false },
+        'Allow and start',
+        'Use window mode'
+      );
+
+      if (choice === 'Allow and start' && binary) {
+        const cleared = await clearQuarantine(binary);
+        if (cleared) {
+          await startCompanion(announce);
+          return;
+        }
+        void vscode.window.showErrorMessage(
+          `Could not clear the quarantine flag. Run: xattr -d com.apple.quarantine "${binary}"`
+        );
+      }
+
+      await openInWindow();
       return;
     }
 
@@ -289,6 +316,7 @@ export function activate(context: vscode.ExtensionContext): void {
         `remembered path:      ${resolution.rememberedValue || '(none)'}`,
         `  exists:             ${resolution.rememberedExists ?? 'n/a'}`,
         `last spawn error:     ${companion.lastError ?? '(none)'}`,
+        `blocked by:           ${companion.lastBlock ?? '(nothing)'}`,
         `platform:             ${process.platform}`,
         '',
         'auto-detect candidates checked:',
