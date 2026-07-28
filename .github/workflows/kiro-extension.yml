@@ -1,45 +1,61 @@
 name: Kiro extension
 
 # The floating mascot is a native binary, so a VSIX is only valid on the platform
-# it was compiled on. Each target is therefore built on its own runner and
-# published under its own --target.
+# it was compiled for. Each target therefore builds, tests, packages and publishes
+# entirely on its own: a slow or broken platform never holds up a healthy one.
 
 on:
+  # Pushes are limited to the default branch and release tags. Without that, a
+  # push to a branch with an open PR fires both `push` and `pull_request` and
+  # every commit runs the whole matrix twice.
   push:
-    branches: ['**']
+    branches: [main, master]
+    tags: ['kiro-extension-v*']
     paths:
       - 'kiro-extension/**'
       - 'src/renderer/core/**'
       - '.github/workflows/kiro-extension.yml'
-    tags:
-      - 'kiro-extension-v*'
   pull_request:
     paths:
       - 'kiro-extension/**'
       - 'src/renderer/core/**'
+      - '.github/workflows/kiro-extension.yml'
   workflow_dispatch:
 
-defaults:
-  run:
-    working-directory: kiro-extension
+# Supersede in-flight runs for the same ref, but never cancel a release.
+concurrency:
+  group: kiro-extension-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
-  build:
+  release:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    # A hung runner should fail loudly rather than block the queue for hours.
+    timeout-minutes: 40
     strategy:
-      # One broken platform should not hide results for the others.
       fail-fast: false
       matrix:
         include:
           - os: macos-14
             target: darwin-arm64
-          - os: macos-13
+          # Cross-compiled from the arm64 runner. Building this on macos-13
+          # instead means waiting on a deprecated, frequently queued image.
+          - os: macos-14
             target: darwin-x64
+            rustTarget: x86_64-apple-darwin
           - os: windows-latest
             target: win32-x64
           - os: ubuntu-22.04
             target: linux-x64
+
+    env:
+      DORAEMON_VSIX_TARGET: ${{ matrix.target }}
+      DORAEMON_RUST_TARGET: ${{ matrix.rustTarget }}
+
+    defaults:
+      run:
+        working-directory: kiro-extension
 
     steps:
       - uses: actions/checkout@v4
@@ -51,15 +67,19 @@ jobs:
           cache-dependency-path: kiro-extension/package-lock.json
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rustTarget }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: kiro-extension/companion
+          key: ${{ matrix.target }}
 
       # tao and wry render through the system webview, which on Linux means GTK
       # and WebKitGTK headers must be present at build time.
       - name: Install Linux webview dependencies
         if: matrix.target == 'linux-x64'
+        working-directory: .
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -67,22 +87,23 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-        working-directory: .
 
       - run: npm ci
 
+      # Also asserts no dependency is borrowed from the parent project, which is
+      # invisible locally and fatal here.
       - name: Typecheck
         run: npm run typecheck
 
-      # Builds the JS bundles, compiles the companion into bin/<target>/,
-      # then asserts every sprite frame the animations reference exists.
+      # Bundles the JS, compiles the companion into bin/<target>/, then checks
+      # every sprite frame exists and every sprite set is reachable.
       - name: Build
         run: npm run build
 
       - name: Host checks
         run: npm run smoke
 
-      - name: Package ${{ matrix.target }}
+      - name: Package
         run: node scripts/release.mjs
 
       - uses: actions/upload-artifact@v4
@@ -91,35 +112,16 @@ jobs:
           path: kiro-extension/release/*.vsix
           if-no-files-found: error
 
-  publish:
-    name: Publish to Open VSX
-    # Only ever publishes from a tag, never from a branch push.
-    if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Publish every platform build
-        working-directory: .
+      # Publishes the moment THIS platform is ready, without waiting for the
+      # others. Only ever runs from a release tag.
+      - name: Publish ${{ matrix.target }} to Open VSX
+        if: startsWith(github.ref, 'refs/tags/kiro-extension-v')
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        shell: bash
         run: |
           if [ -z "$OVSX_PAT" ]; then
             echo "OVSX_PAT secret is not set; add it in repository settings." >&2
             exit 1
           fi
-          for vsix in artifacts/vsix-*/*.vsix; do
-            # release.mjs names files <pkg>-<version>-<target>.vsix
-            target="$(basename "$(dirname "$vsix")" | sed 's/^vsix-//')"
-            echo "Publishing $vsix as $target"
-            npx --yes ovsx publish "$vsix" --target "$target"
-          done
+          node scripts/release.mjs --publish

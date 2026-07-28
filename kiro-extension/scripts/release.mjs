@@ -17,13 +17,27 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf-8'));
 
-/** Matches the folder name the extension looks for at runtime. */
-const target = `${process.platform}-${process.arch}`;
+/**
+ * Matches the folder name the extension looks for at runtime. Overridable so one
+ * runner can cross-compile for a sibling architecture, e.g. darwin-x64 built on
+ * an arm64 mac, which avoids depending on a second runner image.
+ */
+const explicitTarget =
+  process.argv.find((arg) => arg.startsWith('--target='))?.split('=')[1] ||
+  process.env['DORAEMON_VSIX_TARGET'] ||
+  undefined;
+const target = explicitTarget ?? `${process.platform}-${process.arch}`;
 const outDir = path.join(root, 'release');
 const vsix = path.join(outDir, `${manifest.name}-${manifest.version}-${target}.vsix`);
 
 const run = (command, args) => {
-  const result = spawnSync(command, args, { cwd: root, stdio: 'inherit' });
+  const result = spawnSync(command, args, {
+    cwd: root,
+    stdio: 'inherit',
+    // npx is npx.cmd on Windows, and spawnSync cannot exec a .cmd without a
+    // shell. Omitting this fails the whole win32 build with a bare ENOENT.
+    shell: process.platform === 'win32',
+  });
   if (result.status !== 0) {
     console.error(`\n[doraemon] "${command} ${args.join(' ')}" failed`);
     process.exit(result.status ?? 1);
