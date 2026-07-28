@@ -172,6 +172,7 @@
     "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies",
     "release": "npm run build && node scripts/release.mjs",
     "release:publish": "npm run build && node scripts/release.mjs --publish",
+    "release:universal": "npm run build && node scripts/release.mjs --universal",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

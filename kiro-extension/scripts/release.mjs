@@ -22,13 +22,22 @@ const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), '
  * runner can cross-compile for a sibling architecture, e.g. darwin-x64 built on
  * an arm64 mac, which avoids depending on a second runner image.
  */
+/**
+ * Universal mode packages one VSIX with no TargetPlatform, carrying every
+ * companion binary staged in bin/. That single file installs on any OS, which is
+ * what you want when handing someone a download link rather than using a
+ * registry. A platform-specific VSIX is refused outright by a mismatched host.
+ */
+const universal = process.argv.includes('--universal');
+
 const explicitTarget =
   process.argv.find((arg) => arg.startsWith('--target='))?.split('=')[1] ||
   process.env['DORAEMON_VSIX_TARGET'] ||
   undefined;
 const target = explicitTarget ?? `${process.platform}-${process.arch}`;
 const outDir = path.join(root, 'release');
-const vsix = path.join(outDir, `${manifest.name}-${manifest.version}-${target}.vsix`);
+const label = universal ? 'universal' : target;
+const vsix = path.join(outDir, `${manifest.name}-${manifest.version}-${label}.vsix`);
 
 const run = (command, args) => {
   const result = spawnSync(command, args, {
@@ -44,14 +53,46 @@ const run = (command, args) => {
   }
 };
 
-async function assertCompanionPresent() {
-  const name = process.platform === 'win32' ? 'doraemon-companion.exe' : 'doraemon-companion';
-  const binary = path.join(root, 'bin', target, name);
+const ALL_TARGETS = ['darwin-arm64', 'darwin-x64', 'win32-x64', 'linux-x64'];
 
-  try {
-    await fs.access(binary);
-  } catch {
-    console.error(`[doraemon] missing ${path.relative(root, binary)}`);
+const binaryFor = (t) =>
+  path.join(root, 'bin', t, t.startsWith('win32') ? 'doraemon-companion.exe' : 'doraemon-companion');
+
+const staged = async () => {
+  const found = [];
+  for (const t of ALL_TARGETS) {
+    try {
+      await fs.access(binaryFor(t));
+      found.push(t);
+    } catch {
+      // Not built on this machine.
+    }
+  }
+  return found;
+};
+
+async function assertCompanionPresent() {
+  const present = await staged();
+
+  if (universal) {
+    if (present.length === 0) {
+      console.error('[doraemon] no companion binaries staged in bin/.');
+      console.error('[doraemon] a universal VSIX with none of them has no desktop mode at all.');
+      process.exit(1);
+    }
+
+    const missing = ALL_TARGETS.filter((t) => !present.includes(t));
+    console.log(`[doraemon] universal build includes: ${present.join(', ')}`);
+    if (missing.length > 0) {
+      // Not fatal: those users still get window and sidebar mode.
+      console.warn(`[doraemon] WARNING no companion for: ${missing.join(', ')}`);
+      console.warn('[doraemon] those platforms fall back to window mode, not the floating mascot.');
+    }
+    return;
+  }
+
+  if (!present.includes(target)) {
+    console.error(`[doraemon] missing ${path.relative(root, binaryFor(target))}`);
     console.error('[doraemon] run "npm run build-companion" on this platform first.');
     console.error('[doraemon] shipping without it would silently drop desktop mode.');
     process.exit(1);
@@ -61,8 +102,17 @@ async function assertCompanionPresent() {
 await assertCompanionPresent();
 await fs.mkdir(outDir, { recursive: true });
 
-console.log(`[doraemon] packaging for ${target}`);
-run('npx', ['--yes', '@vscode/vsce', 'package', '--no-dependencies', '--target', target, '-o', vsix]);
+console.log(`[doraemon] packaging ${universal ? 'universal (all platforms)' : `for ${target}`}`);
+run('npx', [
+  '--yes',
+  '@vscode/vsce',
+  'package',
+  '--no-dependencies',
+  // Omitting --target leaves TargetPlatform unset, so any host accepts it.
+  ...(universal ? [] : ['--target', target]),
+  '-o',
+  vsix,
+]);
 
 const { size } = await fs.stat(vsix);
 console.log(`[doraemon] packaged ${path.relative(root, vsix)} (${(size / 1024 / 1024).toFixed(2)} MB)`);

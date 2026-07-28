@@ -763,6 +763,47 @@ console.log('✓ closing the window hands the mascot back to the sidebar');
   console.log('✓ research / gadget_surprise / hope / chat_answer / take_copter / angry all route');
 }
 
+/* ── the resolver picks the right binary on every platform ─────────────── */
+
+{
+  // A universal VSIX carries all four binaries in one package, so the only thing
+  // standing between a Windows user and the mascot is this path formula. Drive
+  // the real resolver with each platform rather than trusting it by eye.
+  const realPlatform = process.platform;
+  const realArch = process.arch;
+
+  const setPlatform = (platform, arch) => {
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    Object.defineProperty(process, 'arch', { value: arch, configurable: true });
+  };
+
+  const expectations = [
+    ['darwin', 'arm64', 'bin/darwin-arm64/doraemon-companion'],
+    ['darwin', 'x64', 'bin/darwin-x64/doraemon-companion'],
+    ['win32', 'x64', 'bin/win32-x64/doraemon-companion.exe'],
+    ['linux', 'x64', 'bin/linux-x64/doraemon-companion'],
+  ];
+
+  try {
+    for (const [platform, arch, expected] of expectations) {
+      setPlatform(platform, arch);
+      openedDocuments.length = 0;
+      await commands.get('doraemon.diagnose')();
+
+      const report = openedDocuments[0]?.content ?? '';
+      const line = report.split('\n').find((l) => l.startsWith('bundled companion:')) ?? '';
+      assert.ok(
+        line.includes(expected),
+        `${platform}-${arch} must resolve ${expected}, got: ${line.trim()}`
+      );
+    }
+  } finally {
+    setPlatform(realPlatform, realArch);
+  }
+
+  console.log('✓ bundled binary resolves correctly for darwin arm64/x64, win32, linux');
+}
+
 /* ── clean teardown ────────────────────────────────────────────────────── */
 
 for (const disposable of subscriptions) disposable.dispose?.();
