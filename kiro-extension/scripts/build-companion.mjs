@@ -48,6 +48,13 @@ const hasCargo = () =>
   }).status === 0;
 
 async function main() {
+  // A universal build assembles binaries produced by other platforms, so it must
+  // not rebuild natively and overwrite what was just downloaded.
+  if (process.env['DORAEMON_SKIP_COMPANION'] === '1') {
+    console.log('[doraemon] DORAEMON_SKIP_COMPANION set, leaving bin/ as-is');
+    return;
+  }
+
   if (!hasCargo()) {
     console.warn('[doraemon] cargo not found, skipping the companion binary.');
     console.warn('[doraemon] sidebar and window modes will still work.');

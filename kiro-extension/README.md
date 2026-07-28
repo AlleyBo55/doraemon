@@ -335,17 +335,38 @@ The build fails if a set has no route to the screen.
 ## Publishing
 
 Kiro installs from Open VSX. One-time: sign in at
-[open-vsx.org](https://open-vsx.org), accept the Publisher Agreement, create a
-namespace matching the `publisher` field, then set `OVSX_PAT`.
+[open-vsx.org](https://open-vsx.org), accept the Publisher Agreement, then set
+`OVSX_PAT`. The namespace is created automatically on first publish.
 
 ```bash
 npm run release:publish
 ```
 
-The companion is a native binary, so each platform must be packaged **on** that
+The companion is a native binary, so each platform is packaged **on** that
 platform and published under its own `--target`. The release script refuses to
 package if the binary for the current platform is missing, rather than shipping a
-build with desktop mode silently absent.
+build with desktop mode silently absent. It also refuses to publish when the git
+tag disagrees with the version in `package.json`, since Open VSX will not let a
+published version be replaced.
+
+### Two kinds of VSIX
+
+**Platform-specific** (`-darwin-arm64.vsix`, `-win32-x64.vsix`, ...) declares
+`TargetPlatform` in its manifest. A mismatched host **refuses to install it**.
+This is what a registry wants: each user is served only their own build.
+
+**Universal** (`-universal.vsix`) declares no `TargetPlatform` and carries every
+companion binary that was staged, so one file installs on any OS. This is what
+you want for a direct download link or a GitHub release asset.
+
+```bash
+npm run release:universal
+```
+
+Locally that only bundles what you can compile, and it warns loudly about the
+platforms it had to leave out — those users get window mode rather than the
+floating mascot. CI produces a complete one: each platform job uploads its
+binary, and the `universal` job assembles all four into a single VSIX.
 
 ## Privacy
 
