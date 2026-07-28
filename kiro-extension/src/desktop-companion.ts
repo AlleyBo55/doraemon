@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -71,6 +71,37 @@ const exists = async (candidate: string): Promise<boolean> => {
     return false;
   }
 };
+
+/**
+ * macOS tags anything that arrived inside a downloaded archive with
+ * com.apple.quarantine. Our companion is ad-hoc signed rather than notarized, so
+ * a quarantined copy is killed on launch and prints nothing at all: the mascot
+ * simply never appears, with no error anywhere. Detecting it lets us explain the
+ * situation instead of failing silently.
+ */
+export async function isQuarantined(binary: string): Promise<boolean> {
+  if (process.platform !== 'darwin') return false;
+
+  return new Promise((resolve) => {
+    execFile('xattr', ['-p', 'com.apple.quarantine', binary], (error) => {
+      // A non-zero exit means the attribute is absent, which is what we want.
+      resolve(!error);
+    });
+  });
+}
+
+/**
+ * Removes the quarantine flag from the bundled companion only. Deliberately not
+ * automatic: this relaxes a security control, so it happens on explicit consent
+ * and never as a silent workaround.
+ */
+export async function clearQuarantine(binary: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('xattr', ['-d', 'com.apple.quarantine', binary], (error) => {
+      resolve(!error);
+    });
+  });
+}
 
 export type Resolution = {
   binary: string | null;
@@ -154,6 +185,15 @@ export class DesktopCompanion implements vscode.Disposable {
 
   lastError: string | null = null;
 
+  /**
+   * Why the last start attempt refused to spawn, when the reason is something the
+   * user can act on rather than a plain failure.
+   */
+  lastBlock: 'quarantine' | null = null;
+
+  /** Binary the last attempt would have used, for a follow-up action. */
+  lastResolvedBinary: string | null = null;
+
   constructor(
     private readonly extensionUri: vscode.Uri,
     storageUri: vscode.Uri,
@@ -175,13 +215,22 @@ export class DesktopCompanion implements vscode.Disposable {
     if (this.isRunning) return this.child?.spawnfile ?? null;
 
     this.lastError = null;
+    this.lastBlock = null;
     const resolution = await this.resolve();
     const binary = resolution.binary;
+    this.lastResolvedBinary = binary;
     if (!binary) return null;
 
     // Only the bundled companion understands the asset directory; the Electron
     // desktop app needs its --extension-mode flag instead.
     const isBundled = resolution.source === 'bundled';
+
+    // Spawning a quarantined binary looks like success but the process dies
+    // immediately with no output, so stop here and let the caller ask.
+    if (isBundled && (await isQuarantined(binary))) {
+      this.lastBlock = 'quarantine';
+      return null;
+    }
 
     // Some packaging and transfer paths drop the executable bit. Restoring it is
     // cheaper than failing to launch with a confusing EACCES.
