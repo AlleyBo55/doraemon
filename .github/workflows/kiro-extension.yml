@@ -194,9 +194,10 @@ jobs:
       contents: read
       actions: read
 
-    # Reads OVSX_PAT from an environment secret. Defaults to an environment named
-    # `open-vsx`; set an OVSX_ENVIRONMENT repository variable to point elsewhere.
-    environment: ${{ vars.OVSX_ENVIRONMENT || 'open-vsx' }}
+    # Names the environment holding the OVSX_PAT secret. This must match the
+    # environment exactly or the secret below silently resolves to an empty
+    # string. The environment happens to be named after the secret it carries.
+    environment: OVSX_PAT
 
     strategy:
       # One platform failing to upload must not strand the others.
