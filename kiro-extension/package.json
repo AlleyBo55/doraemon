@@ -1,7 +1,7 @@
 {
   "name": "doraemon-coding-companion",
   "displayName": "Doraemon Coding Companion",
-  "description": "A Doraemon desktop pet that lives in your sidebar and reacts to how you code. Fully offline, zero configuration.",
+  "description": "A real desktop pet, not a sidebar widget. Doraemon walks across your screen and reacts to saves, failing tests, red diagnostics and Kiro's agent. One install, 792 KB, fully offline.",
   "version": "0.1.1",
   "publisher": "AlleyBo55",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "vscode": "^1.84.0"
   },
   "categories": ["Other"],
-  "keywords": ["doraemon", "shimeji", "desktop-pet", "mascot", "companion"],
+  "keywords": ["doraemon", "shimeji", "desktop-pet", "mascot", "companion", "kiro", "agent-status", "floating"],
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "activationEvents": ["onStartupFinished"],

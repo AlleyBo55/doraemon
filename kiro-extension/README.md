@@ -272,14 +272,17 @@ to the IDE's process ID, so a hard kill never leaves an orphaned cat on screen.
 Sidebar and window mode are pure editor APIs and behave identically everywhere.
 Activity detection too.
 
-Desktop mode needs the companion compiled for each platform. Only
-`darwin-arm64` has been built and verified end to end. The resolver looks for
-`bin/<platform>-<arch>/`, so adding a platform is a build step, not a code
-change — but until that build exists, those users silently fall back to window or
-sidebar mode.
+Desktop mode needs the companion compiled for each platform. `darwin-arm64`,
+`darwin-x64`, `win32-x64` and `linux-x64` are built and published. The resolver
+looks for `bin/<platform>-<arch>/`, so adding a platform is a build step rather
+than a code change — but until that build exists, those users fall back to window
+or sidebar mode. `linux-arm64`, `linux-armhf` and `win32-arm64` are not built
+yet.
 
 Linux additionally needs a compositing window manager for transparency, and
-WebKitGTK at runtime.
+WebKitGTK at runtime. On Wayland the mascot appears and animates but cannot walk,
+because the protocol does not let an application position its own window. X11
+sessions have the full range of movement.
 
 ---
 
