@@ -77,6 +77,8 @@
 <body>
   <div id="bubble" class="bubble" hidden></div>
   <img id="sprite" alt="" draggable="false" />
-  <script src="dora://localhost/companion.js"></script>
+  <!-- Origin-relative: the custom protocol origin differs per platform, and
+       naming it here meant this script never loaded on Windows. -->
+  <script src="/companion.js"></script>
 </body>
 </html>

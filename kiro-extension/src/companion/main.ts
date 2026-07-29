@@ -33,7 +33,14 @@ declare global {
 }
 
 const SPRITE_PX = 128;
-const SPRITE_BASE = 'dora://localhost/dora-sprites';
+/*
+ * Origin-relative on purpose. wry serves custom protocols under a different
+ * origin per platform: `dora://localhost` on macOS and Linux, but
+ * `http://dora.localhost` on Windows. Naming the origin here hardcoded it to the
+ * macOS form, so on Windows every sprite request went to a scheme the webview
+ * does not know and the mascot rendered as an empty white window.
+ */
+const SPRITE_BASE = '/dora-sprites';
 const POKE_MAX_DISTANCE = 6;
 const POKE_MAX_DURATION_MS = 400;
 
