@@ -28,6 +28,15 @@ use wry::{http::Response, WebViewBuilder};
 /// sits directly above the mascot and grows upward.
 const WINDOW_W: f64 = 320.0;
 const WINDOW_H: f64 = 240.0;
+
+/// wry maps custom protocols onto a different origin per platform: Windows and
+/// Android rewrite them to `http://<scheme>.<host>`, while macOS and Linux use
+/// `<scheme>://<host>`. Navigating to the wrong form does not error, it just
+/// leaves the webview sitting on a blank page.
+#[cfg(target_os = "windows")]
+const INDEX_URL: &str = "http://dora.localhost/companion.html";
+#[cfg(not(target_os = "windows"))]
+const INDEX_URL: &str = "dora://localhost/companion.html";
 const COMMAND_FILE: &str = "command.json";
 const PARENT_POLL: Duration = Duration::from_secs(4);
 const COMMAND_POLL: Duration = Duration::from_millis(250);
@@ -46,6 +55,21 @@ enum UserEvent {
 
 /// Brings the IDE window back to the front. An extension cannot un-minimise its
 /// own window, but we are a separate process, so we can ask the OS.
+/// Release builds are linked as a GUI subsystem app, so they own no console.
+/// Spawning a console program from one makes Windows allocate a fresh console and
+/// flash it on screen. Repeated on a timer that reads as the mascot window
+/// blinking open and shut, so every child process must opt out explicitly.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[cfg(windows)]
+fn quiet_command(program: &str) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    let mut command = std::process::Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
 fn raise_ide() {
     let app = std::env::var("DORAEMON_IDE_APP").unwrap_or_else(|_| "Kiro".to_string());
 
@@ -53,7 +77,7 @@ fn raise_ide() {
     let spawned = std::process::Command::new("open").arg("-a").arg(&app).spawn();
 
     #[cfg(target_os = "windows")]
-    let spawned = std::process::Command::new("powershell")
+    let spawned = quiet_command("powershell")
         .args([
             "-NoProfile",
             "-Command",
@@ -152,8 +176,10 @@ fn process_alive(pid: u32) -> bool {
 
 #[cfg(windows)]
 fn process_alive(pid: u32) -> bool {
-    use std::process::Command;
-    Command::new("tasklist")
+    // CREATE_NO_WINDOW matters more here than anywhere else: this runs every few
+    // seconds for the whole session, so without it the user sees a console window
+    // flicker on that cadence for as long as the mascot is up.
+    quiet_command("tasklist")
         .args(["/FI", &format!("PID eq {pid}"), "/NH"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
@@ -222,7 +248,7 @@ fn main() -> wry::Result<()> {
     let ipc_proxy = proxy.clone();
     let protocol_dir = asset_dir.clone();
 
-    let webview = WebViewBuilder::new()
+    let webview_builder = WebViewBuilder::new()
         .with_transparent(true)
         .with_initialization_script(&boot)
         .with_custom_protocol("dora".into(), move |_id, request| {
@@ -245,8 +271,22 @@ fn main() -> wry::Result<()> {
                 _ => {}
             }
         })
-        .with_url("dora://localhost/companion.html")
-        .build(&window)?;
+        .with_url(INDEX_URL);
+
+    /*
+     * `build` attaches the webview through the raw window handle, which wry
+     * documents as X11 only. Modern Ubuntu, Fedora and GNOME default to Wayland,
+     * where that path fails and the mascot never appears at all. Going through the
+     * GTK container instead is the documented way to support both.
+     */
+    #[cfg(target_os = "linux")]
+    let webview = {
+        use tao::platform::unix::WindowExtUnix;
+        use wry::WebViewBuilderExtUnix;
+        webview_builder.build_gtk(window.gtk_window())?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let webview = webview_builder.build(&window)?;
 
     if let Some(dir) = env_path("DORAEMON_COMMAND_DIR") {
         let _ = fs::create_dir_all(&dir);

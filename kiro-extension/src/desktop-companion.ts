@@ -54,12 +54,30 @@ function candidateBinaries(): string[] {
  */
 export function platformCaveat(): string | null {
   if (process.platform !== 'linux') return null;
+
   // The bundled companion moves a small window rather than overlaying the whole
   // screen, so it needs no mouse forwarding and stays interactive on Linux.
   // Transparency still depends on the window manager compositing.
-  return (
+  const transparency =
     'On Linux the floating mascot needs a compositing window manager to render ' +
-    'transparently. Without one it will show a solid background.'
+    'transparently. Without one it will show a solid background.';
+
+  /*
+   * Wayland deliberately denies clients the ability to place their own windows,
+   * so the call that walks the mascot across the screen silently does nothing.
+   * It appears and animates, but stays put. Saying so is better than letting it
+   * read as a broken pet.
+   */
+  const wayland =
+    (process.env['XDG_SESSION_TYPE'] ?? '').toLowerCase() === 'wayland' ||
+    Boolean(process.env['WAYLAND_DISPLAY']);
+
+  if (!wayland) return transparency;
+
+  return (
+    `${transparency} On Wayland the mascot also cannot move itself, because the ` +
+    'protocol does not let applications position their own windows, so it will ' +
+    'animate in place. Running Kiro under X11 restores walking.'
   );
 }
 
