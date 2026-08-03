@@ -91,7 +91,8 @@ function hookBody(spec: HookSpec): string {
 
 /**
  * Ensures the hooks exist in every workspace folder.
- * Returns the names of files actually created.
+ * Returns the names of files actually created. Shows an error popup with
+ * guidance if installation fails, rather than failing silently.
  */
 export async function installAgentHooks(): Promise<string[]> {
   const enabled = vscode.workspace
@@ -100,7 +101,17 @@ export async function installAgentHooks(): Promise<string[]> {
   if (!enabled) return [];
 
   const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 0) {
+    // No workspace folder means no path to write hooks into.
+    void vscode.window.showWarningMessage(
+      'Doraemon could not install Kiro agent hooks: no workspace folder is open. ' +
+        'Open a folder first, then reload Kiro so Doraemon can follow the agent.'
+    );
+    return [];
+  }
+
   const created: string[] = [];
+  const errors: string[] = [];
 
   for (const folder of folders) {
     const dir = vscode.Uri.joinPath(folder.uri, ...HOOK_DIR.split('/'));
@@ -120,7 +131,9 @@ export async function installAgentHooks(): Promise<string[]> {
         await vscode.workspace.fs.writeFile(target, Buffer.from(hookBody(spec), 'utf-8'));
         created.push(spec.file);
       } catch (err) {
-        console.warn(`[doraemon] could not install hook ${spec.file}:`, err);
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(`[doraemon] could not install hook ${spec.file}:`, err);
+        errors.push(`${spec.file}: ${reason}`);
       }
     }
   }
@@ -128,5 +141,32 @@ export async function installAgentHooks(): Promise<string[]> {
   if (created.length > 0) {
     console.log(`[doraemon] installed ${created.length} agent hooks:`, created.join(', '));
   }
+
+  if (errors.length > 0) {
+    const detail = errors.join('\n');
+    void vscode.window
+      .showErrorMessage(
+        `Doraemon could not install ${errors.length} Kiro agent hook(s). ` +
+          'Without them, Doraemon cannot follow what the AI agent is doing. ' +
+          'Check that your .kiro/hooks/ directory is writable.',
+        'Show Details',
+        'Open Hooks Folder'
+      )
+      .then((choice) => {
+        if (choice === 'Show Details') {
+          const output = vscode.window.createOutputChannel('Doraemon');
+          output.appendLine('Hook installation errors:');
+          output.appendLine(detail);
+          output.show();
+        } else if (choice === 'Open Hooks Folder') {
+          const folder = vscode.workspace.workspaceFolders?.[0];
+          if (folder) {
+            const hookDir = vscode.Uri.joinPath(folder.uri, ...HOOK_DIR.split('/'));
+            void vscode.commands.executeCommand('revealFileInOS', hookDir);
+          }
+        }
+      });
+  }
+
   return created;
 }

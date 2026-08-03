@@ -68,6 +68,15 @@ export type ActivityDetail = {
 const AGENT_HOLD_MS = 30_000;
 const CONFIRM_HOLD_MS = 5 * 60_000;
 
+/**
+ * Activity reactions were too brief (4–7 seconds) and users missed them between
+ * idle thought cycles. These minimums keep the bubble visible long enough to
+ * register while coding, without being intrusive.
+ */
+const ACTIVITY_SHORT_MS = 8_000;
+const ACTIVITY_MEDIUM_MS = 10_000;
+const ACTIVITY_LONG_MS = 12_000;
+
 const pick = <T>(values: readonly T[]): T =>
   values[Math.floor(Math.random() * values.length)] as T;
 
@@ -201,7 +210,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'focus',
         animation: 'action_coding_typing',
         thought: fromPool(Math.random() > 0.5 ? 'general' : 'progress'),
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'saved':
@@ -209,7 +218,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'satisfaction',
         animation: 'emotion_satisfaction',
         thought: fromPool('progress'),
-        durationMs: 5000,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'switchedFile': {
@@ -219,14 +228,14 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
           emotion: 'curiosity',
           animation: 'action_gadget_search',
           thought: 'A new file to explore~',
-          durationMs: 5500,
+          durationMs: ACTIVITY_SHORT_MS,
         };
       }
       return {
         emotion: 'curiosity',
         animation: 'action_gadget_search',
         thought: lineForLanguage(label) ?? `${label}, is it? Let me have a look~`,
-        durationMs: 5500,
+        durationMs: ACTIVITY_SHORT_MS,
       };
     }
 
@@ -236,7 +245,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'contemplation',
         animation: 'action_research',
         thought: fromPool('thinking'),
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'fileCreated':
@@ -246,7 +255,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         thought: context.fileName
           ? `A brand new ${context.fileName}~ exciting!`
           : 'Something new appeared~',
-        durationMs: 5000,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'fileDeleted':
@@ -256,7 +265,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         thought: context.fileName
           ? `Goodbye, ${context.fileName}. You served well.`
           : 'Something is gone now.',
-        durationMs: 5000,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'fileRenamed':
@@ -264,7 +273,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'wonder',
         animation: 'emotion_wonder',
         thought: 'A new name! I will try to remember it.',
-        durationMs: 4500,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     /* ── correctness ──────────────────────────────────────────────────── */
@@ -278,7 +287,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
           emotion: 'frustration',
           animation: 'emotion_frustration',
           thought: `${count} errors! Deep breath, we will get through them.`,
-          durationMs: 6500,
+          durationMs: ACTIVITY_MEDIUM_MS,
         };
       }
       if (count >= 3) {
@@ -286,14 +295,14 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
           emotion: 'concern',
           animation: 'emotion_concern',
           thought: fromPool('debugging'),
-          durationMs: 6500,
+          durationMs: ACTIVITY_MEDIUM_MS,
         };
       }
       return {
         emotion: 'confusion',
         animation: 'emotion_confusion',
         thought: fromPool('debugging'),
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
     }
 
@@ -302,7 +311,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'pride',
         animation: 'emotion_pride',
         thought: pick(CLEARED_THOUGHTS),
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'projectClean':
@@ -311,7 +320,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'awe',
         animation: 'emotion_awe',
         thought: 'Not a single error in the whole project. Look at you.',
-        durationMs: 7000,
+        durationMs: ACTIVITY_LONG_MS,
       };
 
     /* ── debugging ────────────────────────────────────────────────────── */
@@ -321,7 +330,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'determination',
         animation: 'emotion_determination',
         thought: fromPool('debugging'),
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'debugStopped':
@@ -329,7 +338,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'contemplation',
         animation: 'action_coding_thinking',
         thought: fromPool('thinking'),
-        durationMs: 5000,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'breakpointsChanged':
@@ -337,7 +346,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'curiosity',
         animation: 'action_gadget_use',
         thought: 'A breakpoint~ we will catch it in the act.',
-        durationMs: 4500,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     /* ── terminal and tasks ───────────────────────────────────────────── */
@@ -347,7 +356,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'curiosity',
         animation: 'action_gadget_search',
         thought: 'A terminal! Now we are serious.',
-        durationMs: 4500,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'terminalCommand': {
@@ -356,7 +365,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: described.emotion,
         animation: described.animation ?? 'action_coding_typing',
         thought: described.label,
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
     }
 
@@ -366,7 +375,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'frustration',
         animation: 'action_angry',
         thought: `That command did not end well. ${fromPool('debugging') ?? ''}`.trim(),
-        durationMs: 7000,
+        durationMs: ACTIVITY_LONG_MS,
       };
 
     case 'taskStarted':
@@ -375,7 +384,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'hope',
         animation: 'emotion_hope',
         thought: context.taskName ? `Running "${context.taskName}"~` : 'A task is running~',
-        durationMs: 5500,
+        durationMs: ACTIVITY_SHORT_MS,
       };
 
     case 'taskSucceeded':
@@ -386,7 +395,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         thought: context.taskName
           ? `"${context.taskName}" passed! ${fromPool('progress') ?? ''}`.trim()
           : (fromPool('progress') ?? 'It worked!'),
-        durationMs: 6500,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'taskFailed':
@@ -396,7 +405,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         thought: context.taskName
           ? `"${context.taskName}" failed. Shall we look together?`
           : 'That did not pass. We will fix it.',
-        durationMs: 7000,
+        durationMs: ACTIVITY_LONG_MS,
       };
 
     /* ── source control ───────────────────────────────────────────────── */
@@ -406,7 +415,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'pride',
         animation: 'emotion_pride',
         thought: `Committed! ${fromPool('motivation') ?? 'Progress is progress.'}`,
-        durationMs: 7000,
+        durationMs: ACTIVITY_LONG_MS,
       };
 
     case 'gitBranchSwitch':
@@ -416,7 +425,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         thought: context.branch
           ? `Off to "${context.branch}"~ like a little time machine.`
           : 'A different branch~ hold on tight.',
-        durationMs: 6000,
+        durationMs: ACTIVITY_MEDIUM_MS,
       };
 
     case 'gitConflict':
@@ -424,7 +433,7 @@ export function reactTo(kind: ActivityKind, context: ActivityDetail = {}): React
         emotion: 'concern',
         animation: 'action_protect',
         thought: 'Merge conflicts. Take it slowly, I am right here.',
-        durationMs: 8000,
+        durationMs: ACTIVITY_LONG_MS,
       };
 
     /* ── Kiro agent lifecycle ─────────────────────────────────────────── */

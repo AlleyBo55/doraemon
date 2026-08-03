@@ -58,6 +58,9 @@ export function activate(context: vscode.ExtensionContext): void {
     context.globalState.get<string>(REMEMBERED_PATH_KEY, '')
   );
   let idleThoughtTimer: ReturnType<typeof setInterval> | undefined;
+  /** Prevents idle chatter from overwriting a real activity bubble too soon. */
+  let lastRealReactionAt = 0;
+  const IDLE_GRACE_MS = 15_000;
 
   const settings = () => vscode.workspace.getConfiguration('doraemon');
   const showThoughts = (): boolean => settings().get<boolean>('showThoughts', true);
@@ -91,6 +94,7 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const react = (kind: ActivityKind, detail: Parameters<typeof reactTo>[1] = {}): void => {
+    lastRealReactionAt = Date.now();
     deliver(reactTo(kind, detail));
   };
 
@@ -201,6 +205,8 @@ export function activate(context: vscode.ExtensionContext): void {
       // On the desktop the mascot is always on screen; in the sidebar there is
       // no point talking to a collapsed panel.
       if (!companion.isRunning && !petPanel.isOpen && !petView.isVisible) return;
+      // Do not overwrite a real activity bubble that fired recently.
+      if (Date.now() - lastRealReactionAt < IDLE_GRACE_MS) return;
       const thought = randomIdleThought();
       if (thought) react('idleThought', { thought });
     }, Math.max(10, seconds) * 1000);
