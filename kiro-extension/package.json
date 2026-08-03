@@ -2,7 +2,7 @@
   "name": "doraemon-coding-companion",
   "displayName": "Doraemon Coding Companion",
   "description": "A real desktop pet, not a sidebar widget. Doraemon walks across your screen and reacts to saves, failing tests, red diagnostics and Kiro's agent. One install, 792 KB, fully offline.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "AlleyBo55",
   "license": "MIT",
   "author": "AlleyBo55",
