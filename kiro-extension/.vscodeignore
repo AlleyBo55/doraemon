@@ -11,3 +11,7 @@ tsconfig.json
 # Rust sources and build artifacts. The compiled binary is staged into bin/
 # by scripts/build-companion.mjs and shipped from there.
 companion/**
+
+# Scratch files scripts leave in dist/. Only the two bundles belong in a VSIX,
+# and a stale one from a verification run was shipping before this rule existed.
+dist/.*

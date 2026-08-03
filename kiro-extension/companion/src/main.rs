@@ -49,9 +49,22 @@ enum UserEvent {
     Command(String),
     /// User clicked the bubble; bring the IDE forward.
     RaiseIde,
+    /// Time to force the webview to recomposite. Windows only; the other two
+    /// platforms composite the transparent surface correctly on first paint.
+    #[cfg(target_os = "windows")]
+    Repaint,
     /// The IDE that spawned us is gone.
     ParentGone,
 }
+
+/// WebView2 leaves an opaque surface over a transparent window until something
+/// forces it to recomposite, so the mascot arrives inside a white box that only
+/// clears if the user resizes the window. A one-pixel resize round-trip is the
+/// cheapest way to trigger that ourselves. Scheduled a beat after the renderer
+/// reports its first frame, because nudging before anything has painted has
+/// nothing to recomposite.
+#[cfg(target_os = "windows")]
+const REPAINT_DELAY: Duration = Duration::from_millis(120);
 
 /// Brings the IDE window back to the front. An extension cannot un-minimise its
 /// own window, but we are a separate process, so we can ask the OS.
@@ -268,6 +281,17 @@ fn main() -> wry::Result<()> {
                 Some("openIde") => {
                     let _ = ipc_proxy.send_event(UserEvent::RaiseIde);
                 }
+                // Delayed off the event loop deliberately: sleeping inside the
+                // handler would stall the message pump and prevent the very
+                // paint we are waiting to recomposite.
+                #[cfg(target_os = "windows")]
+                Some("ready") => {
+                    let nudge = ipc_proxy.clone();
+                    thread::spawn(move || {
+                        thread::sleep(REPAINT_DELAY);
+                        let _ = nudge.send_event(UserEvent::Repaint);
+                    });
+                }
                 _ => {}
             }
         })
@@ -283,7 +307,19 @@ fn main() -> wry::Result<()> {
     let webview = {
         use tao::platform::unix::WindowExtUnix;
         use wry::WebViewBuilderExtUnix;
-        webview_builder.build_gtk(window.gtk_window())?
+
+        /*
+         * Hand wry the GtkBox rather than the window. tao fills the window's
+         * single child slot with a vertical box by default, and wry dispatches on
+         * container type: a GtkBox is packed, while anything else falls through to
+         * `add`, which GTK refuses on an already-occupied GtkBin. wry's own
+         * example passes the window, which only holds for windows built without
+         * that default box.
+         */
+        match window.default_vbox() {
+            Some(vbox) => webview_builder.build_gtk(vbox)?,
+            None => webview_builder.build_gtk(window.gtk_window())?,
+        }
     };
     #[cfg(not(target_os = "linux"))]
     let webview = webview_builder.build(&window)?;
@@ -316,6 +352,12 @@ fn main() -> wry::Result<()> {
             }
 
             Event::UserEvent(UserEvent::RaiseIde) => raise_ide(),
+
+            #[cfg(target_os = "windows")]
+            Event::UserEvent(UserEvent::Repaint) => {
+                window.set_inner_size(LogicalSize::new(WINDOW_W + 1.0, WINDOW_H + 1.0));
+                window.set_inner_size(LogicalSize::new(WINDOW_W, WINDOW_H));
+            }
 
             Event::UserEvent(UserEvent::ParentGone) => {
                 println!("[companion] parent exited, shutting down");

@@ -1,6 +1,6 @@
 [package]
 name = "doraemon-companion"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Floating Doraemon mascot window driven by the Kiro extension"
 license = "MIT"

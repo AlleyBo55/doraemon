@@ -57,12 +57,19 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ---
 
-## 🆕 One more thing — Doraemon now lives in your IDE. In **792 kilobytes.**
+## 🆕 One more thing — your Kiro agent has a heartbeat.
+
+### Doraemon Coding Companion: a Shimeji-style Kiro desktop pet in **792 kilobytes**
+
+A spinner tells you to wait. Doraemon tells you what is happening.
 
 Install one Kiro extension. Doraemon walks out of the editor and onto your
-desktop — transparent, always on top, draggable, throwable.
+desktop — always on top, draggable, throwable, and reacting to code, tests,
+errors, Git, terminals, debugging and Kiro's AI agent status.
 
-Nothing else to download. No API key. No account. No network call, ever.
+Nothing else to download. No API key. No account. No telemetry. Fully offline.
+
+[**Install Doraemon Coding Companion from Open VSX →**](https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion)
 
 ### The part nobody else did
 
@@ -79,8 +86,8 @@ Ours is **792 KB**.
 
 Same 247 sprites. Same physics engine. Same everything.
 
-Because 288 lines of Rust borrow the webview your operating system already
-shipped. macOS has WebKit. Windows has WebView2. Linux has WebKitGTK.
+Because a small native Rust companion borrows the webview your operating system
+already shipped. macOS has WebKit. Windows has WebView2. Linux has WebKitGTK.
 
 **Nobody needs a second copy of Chromium to animate a cartoon cat.**
 
@@ -109,8 +116,9 @@ so it can ask the OS. *That is the whole reason this works.*
 
 ### Honest small print
 
-- Built and verified on **macOS arm64**. CI builds Windows, Linux and Intel Mac; those are unverified by hand.
-- A downloaded build needs Apple notarization to clear Gatekeeper. Measured: a quarantined binary starts and prints nothing.
+- CI builds Apple Silicon Mac, Intel Mac, Windows x64 and Linux x64. macOS arm64 is verified end to end; Windows and Linux render, while the 0.1.2 transparency fix still needs field validation.
+- macOS is ad-hoc signed, not notarized. The extension detects quarantine and asks before clearing it from the bundled companion only.
+- Wayland prevents applications from positioning their own windows, so Doraemon animates in place there. X11 restores desktop walking.
 - "Waiting on approval" is **inferred** from the agent going quiet, because Kiro has no such hook trigger. A slow tool looks the same from outside.
 - Approving from the bubble is deliberately not built. It would stall the agent while you're away.
 

@@ -1,12 +1,29 @@
-# Doraemon Coding Companion
+# Doraemon Coding Companion: Kiro Desktop Pet
 
-**A real desktop pet. Inside your IDE. In one install.**
+<p align="center">
+  <a href="https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion"><img src="https://img.shields.io/open-vsx/v/AlleyBo55/doraemon-coding-companion?label=Open%20VSX&color=1677ff" alt="Open VSX version"></a>
+  <a href="https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion"><img src="https://img.shields.io/open-vsx/dt/AlleyBo55/doraemon-coding-companion?label=downloads&color=1f9d55" alt="Open VSX downloads"></a>
+  <a href="#platform-support"><img src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-supported-20232a" alt="macOS, Windows and Linux"></a>
+  <a href="#privacy"><img src="https://img.shields.io/badge/privacy-fully%20offline-f2b84b" alt="Fully offline"></a>
+</p>
 
-Doraemon walks across your desktop, climbs your windows, naps when you go quiet,
-and tells you when Kiro needs you. Transparent. Always on top. Draggable.
-Throwable.
+## Your AI agent got smarter. Its status indicator didn't.
 
-Install the extension. That's the whole setup.
+A spinner tells you to wait. Doraemon tells you what is happening.
+
+**Doraemon Coding Companion is a Shimeji-style Kiro desktop pet, AI coding
+companion and floating desktop mascot for macOS, Windows and Linux.** He walks
+across your screen and reacts to code, saves, tests, errors, Git, terminals,
+debugging and Kiro's agent status.
+
+Most coding extensions ask you to open another panel. Doraemon walks out of Kiro
+and meets you on the desktop: borderless, always on top, draggable and throwable.
+
+**One Kiro extension. No separate app. No account. No telemetry. Fully offline.**
+
+[**Install from Kiro's Open VSX marketplace →**](https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion)
+
+[Download the latest universal VSIX](https://github.com/AlleyBo55/doraemon/releases/latest)
 
 ---
 
@@ -23,8 +40,8 @@ window, the same 247 sprites, the same physics engine.
 | Electron runtime | 274 MB |
 | **Doraemon companion** | **792 KB** |
 
-Not a trick, and not a compromise. The companion is 288 lines of Rust wrapping
-the webview your operating system already has. macOS has WebKit. Windows has
+Not a trick, and not a compromise. A small native Rust companion wraps the
+webview your operating system already has. macOS has WebKit. Windows has
 WebView2. Linux has WebKitGTK. Nobody needs a second copy of Chromium to animate
 a cartoon cat.
 
@@ -32,22 +49,20 @@ The whole extension is **4.5 MB to download**, and 92% of that is the artwork.
 
 ---
 
-## Install
+## Install in Kiro
 
-```bash
-cd kiro-extension
-npm install
-npm run package
-```
+1. Open **Extensions** in Kiro (`Ctrl+Shift+X` on Windows/Linux,
+   `Cmd+Shift+X` on macOS).
+2. Search for **Doraemon Coding Companion** or
+   `AlleyBo55.doraemon-coding-companion`.
+3. Select the extension published by **AlleyBo55** and choose **Install**.
+4. Reload Kiro if it asks. Doraemon launches on your desktop automatically.
 
-```bash
-/Applications/Kiro.app/Contents/Resources/app/bin/code \
-  --install-extension doraemon-coding-companion-0.1.0.vsix
-```
+Prefer a file? Download the
+[latest universal VSIX](https://github.com/AlleyBo55/doraemon/releases/latest),
+then run **Extensions: Install from VSIX...** from Kiro's command palette.
 
-Reload the window. Doraemon appears on your desktop.
-
-No desktop app. No API key. No account. No network call, ever.
+No separate desktop app. No API key. No account. No network call, ever.
 
 ---
 
@@ -201,6 +216,34 @@ the IDE cannot wedge anything. Reliability beat the demo.
 
 ---
 
+## Frequently asked questions
+
+### Is this a Kiro extension or a separate desktop app?
+
+It is one Kiro extension. The tiny native companion that creates the transparent,
+always-on-top window is bundled inside the extension and exits with Kiro. There
+is no second installer or background service.
+
+### Is this a Shimeji desktop pet?
+
+Yes. Doraemon uses Shimeji-style physics: walking, climbing, falling, bouncing,
+dragging and throwing. Unlike a decorative mascot, he also reacts to real editor,
+terminal, Git, debugger, diagnostics and Kiro agent events.
+
+### Does it work on macOS, Windows and Linux?
+
+Platform-specific builds are published for Apple Silicon Mac, Intel Mac, Windows
+x64 and Linux x64. Linux transparency needs a compositing window manager; Wayland
+also prevents applications from positioning their own windows, so Doraemon
+animates in place there. See [Platform support](#platform-support).
+
+### Does Doraemon send my code to an AI service?
+
+No. The extension is fully offline and has no telemetry. It reads local editor
+events only long enough to choose a reaction; nothing leaves your machine.
+
+---
+
 ## Settings
 
 | Setting | Default | Meaning |
@@ -267,48 +310,43 @@ to the IDE's process ID, so a hard kill never leaves an orphaned cat on screen.
 | Sidebar mode | verified | yes | yes | yes |
 | Window mode | verified | yes | yes | yes |
 | All 33 signals | verified | yes | yes | yes |
-| Desktop mode | **verified** | not built | not built | not built |
+| Desktop binary | **verified** | CI-built | CI-built | CI-built |
+| Desktop rendering | **verified** | needs field validation | renders; 0.1.2 transparency fix needs field validation | renders; 0.1.2 transparency fix needs field validation |
 
-Sidebar and window mode are pure editor APIs and behave identically everywhere.
-Activity detection too.
+Sidebar and window mode use editor APIs and behave identically everywhere.
+Activity detection does too.
 
-Desktop mode needs the companion compiled for each platform. `darwin-arm64`,
-`darwin-x64`, `win32-x64` and `linux-x64` are built and published. The resolver
-looks for `bin/<platform>-<arch>/`, so adding a platform is a build step rather
-than a code change — but until that build exists, those users fall back to window
-or sidebar mode. `linux-arm64`, `linux-armhf` and `win32-arm64` are not built
-yet.
+Desktop binaries are built and published for `darwin-arm64`, `darwin-x64`,
+`win32-x64` and `linux-x64`. The resolver looks for
+`bin/<platform>-<arch>/`; users on an architecture without a binary fall back to
+window mode. `linux-arm64`, `linux-armhf` and `win32-arm64` are not built yet.
 
-Linux additionally needs a compositing window manager for transparency, and
-WebKitGTK at runtime. On Wayland the mascot appears and animates but cannot walk,
-because the protocol does not let an application position its own window. X11
-sessions have the full range of movement.
+Linux needs WebKitGTK and a compositing window manager for transparency. On
+Wayland the mascot appears and animates but cannot walk, because the protocol
+does not let applications position their own windows. X11 sessions have the full
+range of movement.
 
 ---
 
 ## Known limits
 
-Read this part before shipping it to anyone.
+**macOS is ad-hoc signed, not notarized.** Downloads can arrive with Apple's
+quarantine flag, which stops the companion before it starts. The extension
+detects this and asks for explicit consent to clear the flag from its bundled
+binary only. Declining keeps the security control intact and falls back to window
+mode. Full notarization still requires an Apple Developer ID.
 
-**macOS Gatekeeper will block a downloaded build.** The companion is ad-hoc
-signed, not notarized. Measured, same binary, same command:
+**Windows and Linux transparency in 0.1.2 needs field validation.** Both native
+branches compile and package in CI. Windows and Linux users confirmed that the
+mascot renders; 0.1.2 changes how each platform composites the transparent
+surface, and still needs confirmation on real machines before it is called
+verified.
 
-| | Output | Started |
-|---|---|---|
-| Local build | `mascot window ready` | yes |
-| With `com.apple.quarantine` | *nothing* | **no** |
-
-A VSIX from a marketplace carries that quarantine flag. It works locally only
-because a locally compiled binary has no flag. Fixing this needs an Apple
-Developer ID with notarization, or stripping the attribute on first run — which
-is deliberately defeating a security control and should be your call.
-
-**Only one platform is built.** See the table above.
+**Wayland cannot provide full movement.** It deliberately prevents applications
+from positioning their own windows, so Doraemon animates in place. Use an X11
+session for desktop walking.
 
 **Approve-in-bubble is not implemented.** By choice, explained above.
-
-**Linux desktop mode has never been compiled or run.** The reasoning is sound
-and the crates support it; that is not the same as working.
 
 ---
 
@@ -318,7 +356,7 @@ and the crates support it; that is not the same as working.
 npm run watch            # rebuild JS on change
 npm run typecheck        # tsc --noEmit
 npm run build-companion  # cargo release build, stages into bin/
-npm test                 # typecheck + build + 29 host checks
+npm test                 # typecheck + build + 34 host checks
 npm run release          # platform-specific VSIX into release/
 ```
 

@@ -1,8 +1,8 @@
 {
   "name": "doraemon-coding-companion",
-  "displayName": "Doraemon Coding Companion",
-  "description": "A real desktop pet, not a sidebar widget. Doraemon walks across your screen and reacts to saves, failing tests, red diagnostics and Kiro's agent. One install, 792 KB, fully offline.",
-  "version": "0.1.1",
+  "displayName": "Doraemon Coding Companion: Kiro Desktop Pet",
+  "description": "A Shimeji-style Kiro desktop pet and AI coding companion for macOS, Windows and Linux. Doraemon reacts to code, tests, errors, Git, terminals, debugging and agent status—offline in one install.",
+  "version": "0.1.2",
   "publisher": "AlleyBo55",
   "license": "MIT",
   "author": "AlleyBo55",
@@ -11,7 +11,7 @@
     "url": "git+https://github.com/AlleyBo55/doraemon.git",
     "directory": "kiro-extension"
   },
-  "homepage": "https://github.com/AlleyBo55/doraemon#readme",
+  "homepage": "https://github.com/AlleyBo55/doraemon/tree/master/kiro-extension#readme",
   "bugs": {
     "url": "https://github.com/AlleyBo55/doraemon/issues"
   },
@@ -19,7 +19,7 @@
     "vscode": "^1.84.0"
   },
   "categories": ["Other"],
-  "keywords": ["doraemon", "shimeji", "desktop-pet", "mascot", "companion", "kiro", "agent-status", "floating"],
+  "keywords": ["doraemon", "kiro", "kiro-extension", "desktop-pet", "desktop-mascot", "coding-companion", "ai-coding-companion", "ai-agent", "ai-agent-monitor", "agent-status", "agent-monitor", "shimeji", "virtual-pet", "coding-pet", "code-mascot", "developer-companion", "developer-tools", "productivity", "coding", "tests", "git", "terminal", "debugging", "diagnostics", "offline", "floating", "always-on-top", "macos", "windows", "linux"],
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "activationEvents": ["onStartupFinished"],
@@ -99,8 +99,8 @@
           "enum": ["auto", "desktop", "window", "sidebar"],
           "default": "auto",
           "enumDescriptions": [
-            "Use the desktop app if installed, otherwise open a detached window.",
-            "Transparent mascot floating freely over the desktop. Requires the Doraemon desktop app.",
+            "Launch the bundled desktop mascot, with a detached-window fallback when unavailable.",
+            "Transparent, borderless, always-on-top desktop mascot. The native companion is bundled; no separate app is required.",
             "A separate OS window outside the IDE frame, movable to any monitor. No extra install needed.",
             "Docked in the sidebar panel."
           ],
@@ -109,7 +109,7 @@
         "doraemon.desktopAppPath": {
           "type": "string",
           "default": "",
-          "description": "Full path to the Doraemon desktop app executable. Leave empty to auto-detect."
+          "description": "Optional path to an external Doraemon executable. Leave empty to use the bundled desktop companion."
         },
         "doraemon.showThoughts": {
           "type": "boolean",
