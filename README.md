@@ -8,6 +8,16 @@
   <em>A Shimeji-style desktop mascot powered by OpenClaw — your AI companion that lives freely on your screen!</em>
 </p>
 
+<p align="center">
+  <a href="https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion"><img src="https://img.shields.io/open-vsx/v/AlleyBo55/doraemon-coding-companion?label=Open%20VSX&color=1677ff" alt="Open VSX version"></a>
+  <a href="https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion"><img src="https://img.shields.io/open-vsx/dt/AlleyBo55/doraemon-coding-companion?label=downloads&color=1f9d55" alt="Open VSX downloads"></a>
+</p>
+
+<p align="center">
+  <strong>🎉 Doraemon is on Open VSX.</strong> Install him in Kiro in three clicks: open <strong>Extensions</strong>, search <strong>Doraemon Coding Companion</strong>, press <strong>Install</strong>.<br/>
+  <a href="https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion"><strong>Get it on Open VSX →</strong></a>
+</p>
+
 ---
 
 ## 💙 A Love Letter to Our Childhood
@@ -57,9 +67,34 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 
 ---
 
+## 🆕 Doraemon now lives on your windows
+
+He used to keep to the floor of your screen. Now every app window is part of his world.
+
+- 🪟 **Stands on title bars.** Drop him above a window and he lands on its top edge, then strolls along it. At the end he turns back or steps off.
+- 🚗 **Rides along.** Drag the window he is standing on and he moves with it.
+- 🪂 **Falls when the floor goes.** Close or minimise that window, or cover his spot with another one, and he drops to whatever is below.
+- 🧗 **Climbs.** Walking into a window's side, he may climb it and pull himself up on top.
+- 🚁 **Travels.** He hops onto low windows, flies to high ones with the Take-copter, and takes the **Anywhere Door** to far ones.
+- 👀 **Only what you can see.** He never stands on a title bar hidden behind another window.
+
+It runs in the desktop app and in the Kiro extension's desktop mode. macOS is tested; the Windows and Linux (X11) versions are built and still need testing on real machines. He reads window positions and sizes, never titles or contents, and needs no Screen Recording permission on macOS.
+
+### 🎨 Every sprite, rebuilt
+
+- **Sharp on Retina.** All 218 frames he uses are now 256×256 masters, shown at the same 128 px.
+- **One Doraemon, one size.** Emotion and action frames used to draw him up to 20% smaller than his walking frames, and 6–7 px above the floor. Every frame now draws him at nearly the same size on one shared baseline, so his feet sit exactly on the edge he stands on.
+- **Readable on dark desktops.** The generated frames got the same dark outline as the rest of the art.
+- **No more squashed ceiling frames.**
+- **Nothing stands still.** 11 animations that were one repeated frame now breathe, chew or bob. 27 sets got small animated manga symbols (music notes, hearts, ?, !, Zzz, sweat drops, anger marks, steam, a lightbulb), so look-alike animations are easy to tell apart.
+- **New Anywhere Door animation**, 28 frames, for travelling between windows.
+- **Reproducible.** `npm run build:sprites` regenerates every frame from the 1x sources in `art/dora-sprites`.
+
+---
+
 ## 🆕 One more thing — your Kiro agent has a heartbeat.
 
-### Doraemon Coding Companion: a Shimeji-style Kiro desktop pet in **792 kilobytes**
+### Doraemon Coding Companion: a Shimeji-style Kiro desktop pet in **826 kilobytes**
 
 A spinner tells you to wait. Doraemon tells you what is happening.
 
@@ -71,18 +106,26 @@ Nothing else to download. No API key. No account. No telemetry. Fully offline.
 
 [**Install Doraemon Coding Companion from Open VSX →**](https://open-vsx.org/extension/AlleyBo55/doraemon-coding-companion)
 
+**Install in Kiro in three clicks:**
+
+1. Open **Extensions** (`Cmd+Shift+X` on macOS, `Ctrl+Shift+X` on Windows and Linux).
+2. Search **Doraemon Coding Companion**.
+3. Press **Install**. Doraemon walks out onto your desktop.
+
+Kiro installs from Open VSX, so updates arrive like any other extension.
+
 ### The part nobody else did
 
 Every desktop pet ever built shipped an entire browser just to draw itself.
 Electron alone is **274 MB**.
 
-Ours is **792 KB**.
+Ours is **826 KB**.
 
 | | Size |
 |---|---|
 | Electron runtime | 274 MB |
-| **Doraemon companion** | **792 KB** |
-| Whole extension, download | 4.5 MB |
+| **Doraemon companion** | **826 KB** |
+| Whole extension, download | 13 MB |
 
 Same 247 sprites. Same physics engine. Same everything.
 
@@ -119,6 +162,7 @@ so it can ask the OS. *That is the whole reason this works.*
 - CI builds Apple Silicon Mac, Intel Mac, Windows x64 and Linux x64. macOS arm64 is verified end to end; Windows and Linux render, while the 0.1.2 transparency fix still needs field validation.
 - macOS is ad-hoc signed, not notarized. The extension detects quarantine and asks before clearing it from the bundled companion only.
 - Wayland prevents applications from positioning their own windows, so Doraemon animates in place there. X11 restores desktop walking.
+- Window walking: window detection is tested on macOS. The Windows and Linux window probes compile but still need testing on real machines. He only stands on top edges at least 128 px below the top of the screen, so a maximised window has no room for him.
 - "Waiting on approval" is **inferred** from the agent going quiet, because Kiro has no such hook trigger. A slow tool looks the same from outside.
 - Approving from the bubble is deliberately not built. It would stall the agent while you're away.
 
@@ -145,6 +189,7 @@ This release adds a **local gateway tunnel** that routes every Claude call throu
 
 ### 🎭 The Living Desktop Companion
 - 🚶 **Walks, climbs, falls** — Full physics-based Shimeji behavior
+- 🪟 **Lives on your windows** — Stands on title bars, rides windows you drag, climbs their sides, and takes the Anywhere Door between them
 - 🎭 **25+ emotions** — Rich emotional expressions with smooth transitions
 - 🎲 **Sentient behavior** — Random emotions and actions even when offline
 - 💤 **Progressive idle states** — Gets sleepy, yawns, falls asleep waiting for you
@@ -254,6 +299,10 @@ npm install
 # Run in development mode
 npm run dev
 
+# Optional: build the window probe (needs Rust) so Doraemon can walk on
+# other apps' windows in dev. `npm run dist` builds and bundles it for you.
+npm run build:probe
+
 # Build for production
 npm run build
 ```
@@ -286,7 +335,7 @@ Doraemon experiences a rich spectrum of emotions, each with unique animations:
   <img src="docs/assets/doraemon-live-sprites-preview.png" alt="Preview of generated transparent Doraemon emotion and action sprites" width="100%">
 </p>
 
-The live sprite set now includes **139 transparent PNG frames**: **79 emotion frames** for the 20 emotional states below, plus **60 action frames** for chat, coding, research, gadget use, eating, rest, anger, hunger, take-copter, time travel, and random thought moments. Each set is normalized to a stable 128x128 frame box so animations keep a consistent scale and anchor.
+The live sprite set now includes **139 transparent PNG frames**: **79 emotion frames** for the 20 emotional states below, plus **60 action frames** for chat, coding, research, gadget use, eating, rest, anger, hunger, take-copter, time travel, and random thought moments. Every frame shares one 128x128 on-screen box, stored as a 256x256 master so it stays sharp on Retina screens, with Doraemon at one scale and his feet on the bottom row so he stands exactly on a window's top edge. Regenerate the frames from the 1x sources in `art/dora-sprites` with `npm run build:sprites`.
 
 | Emotion | Emoji | Animation | Trigger |
 |---------|-------|-----------|---------|
@@ -362,10 +411,12 @@ When you're coding, Doraemon codes with you:
 
 Doraemon moves naturally across your desktop:
 
-- 🚶 **Walking** — Strolls along screen edges
-- 🧗 **Climbing** — Scales window borders
-- 🪂 **Falling** — Gravity-based drops with bounce
-- ✈️ **Flying** — Take-copter for aerial movement
+- 🚶 **Walking** — Strolls along the floor and along the tops of your windows
+- 🧗 **Climbing** — Scales screen edges and window sides
+- 🪂 **Falling** — Gravity-based drops with bounce, landing on whatever window is below
+- 🚗 **Riding** — Moves with the window he stands on, and falls when it closes
+- ✈️ **Flying** — Take-copter for aerial movement and trips to high windows
+- 🚪 **Anywhere Door** — Steps through to a far-away window
 - 🛋️ **Sitting** — Rests on window edges
 - 🔄 **Dragging** — Reacts when you pick him up
 

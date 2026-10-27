@@ -27,25 +27,56 @@ and meets you on the desktop: borderless, always on top, draggable and throwable
 
 ---
 
-## 792 kilobytes
+## New: he lives on your windows
+
+In desktop mode, every app window on your screen is part of his world now.
+
+- **Stands on title bars.** Drop him above a window and he lands on its top
+  edge, then walks along it. At the end he turns back or steps off.
+- **Rides along.** Drag the window he is on, Kiro included, and he moves with it.
+- **Falls when the floor goes.** Close or minimise that window, or cover his spot
+  with another one, and he drops to whatever is below.
+- **Climbs.** Walking into a window's side, he may climb it and pull himself up
+  on top.
+- **Travels.** He hops onto low windows, flies to high ones with the
+  Take-copter, and takes the **Anywhere Door** to far ones.
+- **Only what you can see.** He never stands on a title bar hidden behind another
+  window.
+
+He reads window positions and sizes, never titles or contents, and needs no
+Screen Recording permission on macOS. macOS is tested; Windows and X11 still need
+testing on real machines (see [Known limits](#known-limits)).
+
+**Every sprite, rebuilt.** All 218 frames he uses are now 256×256 masters, so
+they stay sharp on Retina screens at the same 128 px. Emotion frames used to draw
+him up to 20% smaller and 6–7 px above the floor; every frame now draws him at
+nearly the same size on one shared baseline. Eleven animations that were a single repeated frame now
+breathe, chew or bob, and 27 sets got small animated manga symbols so look-alike
+animations are easy to tell apart. The Anywhere Door is a new 28-frame animation.
+
+---
+
+## 826 kilobytes
 
 Every desktop pet you have ever installed shipped a browser to draw itself.
 Electron alone is **274 MB**.
 
-Ours is **792 KB**. Under one megabyte, for the same transparent always-on-top
-window, the same 247 sprites, the same physics engine.
+Ours is **826 KB**. Under one megabyte, for the same transparent always-on-top
+window, the same 247 sprites, the same physics engine, and the window probe that
+lets him walk on your other apps.
 
 | | Size |
 |---|---|
 | Electron runtime | 274 MB |
-| **Doraemon companion** | **792 KB** |
+| **Doraemon companion** | **826 KB** |
 
 Not a trick, and not a compromise. A small native Rust companion wraps the
 webview your operating system already has. macOS has WebKit. Windows has
 WebView2. Linux has WebKitGTK. Nobody needs a second copy of Chromium to animate
 a cartoon cat.
 
-The whole extension is **4.5 MB to download**, and 92% of that is the artwork.
+The whole extension is **about 13 MB to download**, and 95% of that is the
+artwork: every frame is a 256 px master so he stays sharp on Retina screens.
 
 ---
 
@@ -69,9 +100,10 @@ No separate desktop app. No API key. No account. No network call, ever.
 ## Three places he can live
 
 **Desktop.** The real thing: transparent, borderless, always on top, roaming your
-whole screen. Runs as a bundled companion process, because an extension cannot
-create an OS window itself. Appears when you open the IDE, leaves when you close
-it. This is the default whenever the bundled binary exists for your platform.
+whole screen and standing on your other windows. Runs as a bundled companion
+process, because an extension cannot create an OS window itself. Appears when you
+open the IDE, leaves when you close it. This is the default whenever the bundled
+binary exists for your platform.
 
 **Window.** A separate OS window outside the IDE frame, using the editor's
 auxiliary-window support. Park it on a second monitor. It is a real window, so it
@@ -291,15 +323,22 @@ Sprites are served over a custom `dora://` protocol from the extension's own
 `media/` directory. Reactions arrive as JSON on a file channel. Lifetime is tied
 to the IDE's process ID, so a hard kill never leaves an orphaned cat on screen.
 
+The same binary lists other apps' windows: CoreGraphics on macOS, DWM on Windows,
+EWMH properties on X11. It polls every 150 ms, every 40 ms while something is
+moving, and pushes a snapshot to the webview only when it changes. The engine
+turns each window's visible top edge into a ledge. The desktop app reuses it as a
+headless probe: `doraemon-companion --window-probe` prints one JSON line per
+change.
+
 **Size breakdown**
 
 | | |
 |---|---|
-| Installed total | 9.7 MB |
-| 247 sprite PNGs | 8.7 MB |
-| Companion binary | 792 KB |
-| Extension JS | 112 KB |
-| VSIX download | 4.5 MB |
+| Installed total | 14.5 MB |
+| 247 sprite PNGs | 13.3 MB |
+| Companion binary | 826 KB |
+| Extension JS | 157 KB |
+| VSIX download | about 13 MB |
 
 ---
 
@@ -346,6 +385,12 @@ verified.
 from positioning their own windows, so Doraemon animates in place. Use an X11
 session for desktop walking.
 
+**Window walking is tested on macOS only so far.** The Windows and X11 window
+probes compile in CI but still need testing on real machines. On Wayland only
+XWayland apps are visible to him. He stands only on top edges at least 128 px
+below the top of the screen, so a maximised window has no room for him, and
+Mission Control briefly moves every window under him.
+
 **Approve-in-bubble is not implemented.** By choice, explained above.
 
 ---
@@ -365,7 +410,7 @@ reaction and the negatives — a removed breakpoint stays quiet, a zero exit cod
 is not a failure, a repeated window-state event does not re-fire.
 
 `verify-sprites` resolves the real animation table and asserts all
-**595 frame references across 107 animations** exist on disk, because a missing
+**624 frame references across 109 animations** exist on disk, because a missing
 PNG only shows up as an invisible mascot.
 
 `verify-coverage` asserts the reverse: that **all 40 generated sprite sets can
@@ -413,4 +458,6 @@ binary, and the `universal` job assembles all four into a single VSIX.
 
 No telemetry. No network requests. Nothing leaves your machine. Language IDs,
 file paths and diagnostic counts are read only to pick a reaction, and held in
-memory for the session.
+memory for the session. In desktop mode the companion also reads the position and
+size of other windows so he can stand on them. It never reads their titles or
+contents.
