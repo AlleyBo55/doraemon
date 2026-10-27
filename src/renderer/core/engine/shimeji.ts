@@ -1,5 +1,8 @@
-import { PHYSICS } from '../constants/sprites';
+import { PHYSICS, SPRITE_SIZE, getAnimation } from '../constants/sprites';
 import type { EmotionType } from '../types/emotion';
+import { findLedges, type DesktopWindow, type Ledge } from './desktop-surfaces';
+
+export type { DesktopWindow } from './desktop-surfaces';
 
 type GeneratedSpriteState = `emotion_${string}` | `action_${string}`;
 
@@ -15,6 +18,7 @@ export type ShimejiState =
   | 'pull_up' | 'helping' | 'success'
   | 'wave' | 'greet' | 'cheer' | 'celebrate' | 'victory'
   | 'coding' | 'coding_intense' | 'coding_focused' | 'coding_typing' | 'coding_thinking' | 'coding_celebrate'
+  | 'door_exit' | 'door_enter'
   | GeneratedSpriteState;
 
 export type Position = { x: number; y: number };
@@ -34,6 +38,46 @@ const THROW_VELOCITY_SCALE = 0.9;
 const MAX_THROW_VELOCITY = 22;
 // Pointer samples older than this are treated as "let go while holding still".
 const THROW_SAMPLE_WINDOW = 120;
+
+// Other apps' windows. A ledge narrower than this is not worth standing on, and
+// one this close to the floor is the floor for all practical purposes.
+const MIN_LEDGE_WIDTH = SPRITE_SIZE / 2;
+const MIN_LEDGE_HEIGHT = 24;
+// Odds, per behaviour choice, of setting off for a window top.
+const TRIP_CHANCE_FROM_FLOOR = 0.22;
+const TRIP_CHANCE_FROM_WINDOW = 0.1;
+// A trip only aims at ledges at least this far above his feet; going down is walking off.
+const TRIP_MIN_RISE = 48;
+// Low, close ledges are jumped onto; anything else needs the Take-copter or the Anywhere Door.
+const JUMP_MAX_RISE = 150;
+const JUMP_MAX_REACH = 240;
+const JUMP_CLEARANCE = 30;
+const DOOR_MIN_DISTANCE = 480;
+const DOOR_CHANCE = 0.5;
+const FLY_SPEED = 5;
+// The Take-copter stops this far above the ledge and lets gravity finish the landing.
+const FLY_HOVER = 20;
+const FLIGHT_TIMEOUT = 9000;
+// Odds of turning back, rather than stepping off, at the end of a ledge.
+const LEDGE_TURN_CHANCE = 0.55;
+// Odds of climbing a window's side when walking into it.
+const WINDOW_CLIMB_CHANCE = 0.35;
+// The renderer advances a frame on the first tick past its delay, so a
+// one-shot animation runs slightly long; allow a tick per frame.
+const FRAME_SLACK_MS = 17;
+
+// States in which he is not standing on anything.
+const OFF_GROUND_STATES = new Set<ShimejiState>([
+  'fall', 'jump', 'fly', 'climb_wall', 'grab_wall', 'grab_ceiling', 'climb_ceiling',
+]);
+const WALKING_STATES = new Set<ShimejiState>(['walk', 'run', 'dash', 'work_walk', 'carry']);
+
+type TripTarget = { windowId: number; offset: number };
+
+const oneShotDuration = (name: string): number => {
+  const animation = getAnimation(name);
+  return animation ? animation.frames.length * (animation.frameDelay + FRAME_SLACK_MS) : 1000;
+};
 
 type BehaviorDef = { state: ShimejiState; weight: number; duration: [number, number] };
 
@@ -273,8 +317,18 @@ export class ShimejiEngine {
   private screenHeight: number;
   private screenOffsetX: number;
   private screenOffsetY: number;
-  private spriteSize = { width: 128, height: 128 };
-  private codingSpriteSize = { width: 128, height: 128 };
+  private spriteSize = { width: SPRITE_SIZE, height: SPRITE_SIZE };
+  private codingSpriteSize = { width: SPRITE_SIZE, height: SPRITE_SIZE };
+  // Other apps' windows, front-to-back, and the visible top edges they leave.
+  private desktopOrder: DesktopWindow[] = [];
+  private desktopWindows = new Map<number, DesktopWindow>();
+  private ledges: Ledge[] = [];
+  // The window whose top edge is under his feet, or null on the floor or in the air.
+  private standingOn: number | null = null;
+  // The window whose side he is climbing; `left` means its left side, so the window is on his right.
+  private climbingWindow: { id: number; side: 'left' | 'right' } | null = null;
+  private flightTarget: TripTarget | null = null;
+  private doorTrip: TripTarget | null = null;
   private behaviorTimer = 0;
   private behaviorDuration = 0;
   private isDragging = false;
@@ -317,6 +371,20 @@ export class ShimejiEngine {
     this.screenHeight = height;
     this.screenOffsetX = offsetX;
     this.screenOffsetY = offsetY;
+    this.refreshLedges();
+  }
+
+  /**
+   * Other apps' on-screen windows in engine coordinates, front-to-back. Their
+   * top edges become ledges he lands on, walks along and rides when the window
+   * moves; their sides can be climbed. Pass an empty list to forget them.
+   */
+  setDesktopWindows(windows: DesktopWindow[]) {
+    const previous = this.desktopWindows;
+    this.desktopOrder = windows.filter((w) => w.w > 0 && w.h > 0);
+    this.desktopWindows = new Map(this.desktopOrder.map((w) => [w.id, w]));
+    this.refreshLedges();
+    this.rideSupport(previous);
   }
 
   private getCurrentSpriteSize() {
@@ -329,7 +397,9 @@ export class ShimejiEngine {
       this.currentEmotion = emotion;
       this.emotionChangedAt = Date.now();
       
-      if (!this.isDragging && this.isOnGround) {
+      // Half-way through the Anywhere Door is no time for a reaction.
+      const isTeleporting = this.state === 'door_exit' || this.state === 'door_enter';
+      if (!this.isDragging && this.isOnGround && !isTeleporting) {
         this.triggerEmotionReaction(emotion);
       }
     }
@@ -361,8 +431,13 @@ export class ShimejiEngine {
       return;
     }
 
-    // When coding lock is active, force stationary state and stop all movement
-    if (this._codingLock && this._forcedCodingState) {
+    // When coding lock is active, force stationary state and stop all movement.
+    // In the air the lock waits for the landing, so he never freezes mid-flight.
+    const isSupported = this.isOnGround || this.isOnWall !== null || this.isOnCeiling;
+    if (this._codingLock && this._forcedCodingState && !isSupported) {
+      this.flightTarget = null;
+      if (this.state === 'fly') this.state = 'fall';
+    } else if (this._codingLock && this._forcedCodingState) {
       this.state = this._forcedCodingState;
       this.velocity.vx = 0;
       this.velocity.vy = 0;
@@ -375,11 +450,13 @@ export class ShimejiEngine {
     }
 
     this.behaviorTimer += deltaTime;
-    if (this.behaviorTimer >= this.behaviorDuration) this.chooseBehavior();
+    if (this.behaviorTimer >= this.behaviorDuration && !this.advanceDoorTrip()) this.chooseBehavior();
 
+    const before = { x: this.position.x, y: this.position.y };
     this.applyPhysics();
     this.position.x += this.velocity.vx;
     this.position.y += this.velocity.vy;
+    this.followDesktop(before);
     this.checkBoundaries();
 
     // All sprites use the same flip logic: flip when facing right
@@ -397,6 +474,7 @@ export class ShimejiEngine {
       'bounce', 'pocket_search', 'gadget_pull', 'pull_up', 'helping', 'success',
       'work_hold', 'work_throw', 'resist', 'grab_wall', 'grab_ceiling',
       'coding', 'coding_intense', 'coding_focused', 'coding_typing', 'coding_thinking', 'coding_celebrate',
+      'door_exit', 'door_enter',
     ];
 
     if (
@@ -434,6 +512,10 @@ export class ShimejiEngine {
         break;
 
       case 'fly':
+        if (this.flightTarget) {
+          this.steerFlight();
+          break;
+        }
         // Flying sprites face LEFT in original image (like walk sprites)
         // When facingRight=true, sprite is flipped to face right, so move right
         this.velocity.vx = this.facingRight ? RUN_SPEED : -RUN_SPEED;
@@ -486,16 +568,20 @@ export class ShimejiEngine {
       this.velocity.vy = 0;
       this.isOnGround = true;
       this.isOnCeiling = false;
+      this.standingOn = null;
+      this.flightTarget = null;
       if (this.state === 'fall') {
         this.state = 'bounce';
         this.behaviorDuration = 200;
         this.behaviorTimer = 0;
       }
-    } else {
+    } else if (this.standingOn === null) {
       this.isOnGround = false;
     }
 
-    if (this.position.x <= minX) {
+    if (this.climbingWindow) {
+      // Pinned to a window's side by followWindowWall; the screen edges do not apply.
+    } else if (this.position.x <= minX) {
       this.position.x = minX;
       this.isOnWall = 'left';
       this.facingRight = true;
@@ -561,6 +647,7 @@ export class ShimejiEngine {
     } else if (this.isOnWall) {
       behaviors = WALL_BEHAVIORS;
     } else if (this.isOnGround) {
+      if (this.maybeStartWindowTrip()) return;
       behaviors =
         EMOTION_BEHAVIORS[this.currentEmotion] ||
         EMOTION_BEHAVIORS[resolveBehaviorEmotion(this.currentEmotion)] ||
@@ -604,11 +691,13 @@ export class ShimejiEngine {
     // physics entirely, so direct interaction takes the lock back.
     this._codingLock = false;
     this._forcedCodingState = null;
+    this.detachFromDesktop();
   }
 
   setPosition(x: number, y: number) {
     this.position.x = x;
     this.position.y = y;
+    this.detachFromDesktop();
     this.onPositionChange?.(this.position);
   }
 
@@ -674,6 +763,418 @@ export class ShimejiEngine {
     this.isOnGround = false;
     this.isOnWall = null;
     this.isOnCeiling = false;
+  }
+
+  // ─── Other apps' windows ──────────────────────────────────────────────────
+
+  private get centerX(): number { return this.position.x + this.spriteSize.width / 2; }
+  private get feetY(): number { return this.position.y + this.spriteSize.height; }
+
+  private refreshLedges() {
+    const { width, height } = this.spriteSize;
+    const floorFeet = this.screenOffsetY + this.screenHeight - GROUND_MARGIN;
+    this.ledges = findLedges(
+      this.desktopOrder,
+      {
+        left: this.screenOffsetX + width / 2,
+        right: this.screenOffsetX + this.screenWidth - width / 2,
+        // He has to fit between the ledge and the top of the screen.
+        top: this.screenOffsetY + height,
+        bottom: floorFeet - MIN_LEDGE_HEIGHT,
+      },
+      MIN_LEDGE_WIDTH
+    );
+  }
+
+  /** The visible stretch of a window's top edge under centre x `x`, if any. */
+  private ledgeAt(windowId: number, x: number): Ledge | undefined {
+    return this.ledges.find((l) => l.windowId === windowId && x >= l.left && x <= l.right);
+  }
+
+  /** Carries him along with the window he is on or climbing, and drops him when it goes. */
+  private rideSupport(previous: Map<number, DesktopWindow>) {
+    if (this.isDragging) return;
+    const id = this.standingOn ?? this.climbingWindow?.id ?? null;
+    if (id === null) return;
+
+    const current = this.desktopWindows.get(id);
+    if (!current) {
+      this.dropFromDesktop();
+      return;
+    }
+    const before = previous.get(id);
+    if (before) {
+      this.position.x += current.x - before.x;
+      this.position.y += current.y - before.y;
+    }
+    // A climber is re-pinned to the window's side on the next tick.
+    if (this.standingOn === null) return;
+
+    const ledge = this.ledgeAt(id, this.centerX);
+    if (!ledge) {
+      this.dropFromDesktop();
+      return;
+    }
+    this.position.y = ledge.y - this.spriteSize.height;
+  }
+
+  /** Lets go of every window, for when he is picked up or put somewhere by hand. */
+  private detachFromDesktop() {
+    this.standingOn = null;
+    this.climbingWindow = null;
+    this.flightTarget = null;
+    this.doorTrip = null;
+  }
+
+  /** The window under or beside him closed, minimised, moved away or got covered. */
+  private dropFromDesktop() {
+    this.detachFromDesktop();
+    this.isOnGround = false;
+    this.isOnWall = null;
+    this.state = 'fall';
+    this.velocity = { vx: 0, vy: 0 };
+    this.behaviorTimer = 0;
+    // A held reaction skips physics, which would leave him hanging where the window was.
+    this._codingLock = false;
+    this._forcedCodingState = null;
+  }
+
+  /** Runs after each move: keeps him on his ledge, lands him on one, or starts a window climb. */
+  private followDesktop(before: Position) {
+    if (this.climbingWindow) {
+      this.followWindowWall();
+      return;
+    }
+
+    if (this.standingOn !== null) {
+      if (OFF_GROUND_STATES.has(this.state)) {
+        this.standingOn = null;
+        this.isOnGround = false;
+      } else if (!this.keepOnLedge(before.x)) {
+        return;
+      }
+    }
+
+    const isFalling = this.state === 'fall' || this.state === 'jump';
+    if (this.standingOn === null && isFalling && this.velocity.vy > 0) this.landOnLedge(before.y);
+
+    if (this.isOnGround && this.velocity.vx !== 0 && WALKING_STATES.has(this.state)) {
+      this.maybeClimbWindow(before.x);
+    }
+  }
+
+  /** False when he walked off the end of his ledge, or it vanished from under him. */
+  private keepOnLedge(previousX: number): boolean {
+    const id = this.standingOn;
+    if (id === null) return false;
+    const { width, height } = this.spriteSize;
+
+    const ledge = this.ledgeAt(id, this.centerX);
+    if (ledge) {
+      this.position.y = ledge.y - height;
+      this.velocity.vy = 0;
+      this.isOnGround = true;
+      return true;
+    }
+
+    // Walked past the end of the stretch he was on: turn back, or step off.
+    const from = this.ledgeAt(id, previousX + width / 2);
+    if (from && WALKING_STATES.has(this.state) && Math.random() < LEDGE_TURN_CHANCE) {
+      const edge = this.centerX > from.right ? from.right : from.left;
+      this.position.x = edge - width / 2;
+      this.position.y = from.y - height;
+      this.facingRight = !this.facingRight;
+      this.isOnGround = true;
+      return true;
+    }
+
+    this.standingOn = null;
+    this.isOnGround = false;
+    if (!OFF_GROUND_STATES.has(this.state)) this.state = 'fall';
+    return false;
+  }
+
+  /** Catches a falling mascot on the first ledge his feet crossed this tick. */
+  private landOnLedge(previousY: number) {
+    const height = this.spriteSize.height;
+    const previousFeet = previousY + height;
+    const feet = this.feetY;
+    const x = this.centerX;
+
+    let caught: Ledge | null = null;
+    for (const ledge of this.ledges) {
+      if (ledge.y < previousFeet - 0.5 || ledge.y > feet) continue;
+      if (x < ledge.left || x > ledge.right) continue;
+      if (!caught || ledge.y < caught.y) caught = ledge;
+    }
+    if (!caught) return;
+
+    this.position.y = caught.y - height;
+    this.velocity.vy = 0;
+    this.standingOn = caught.windowId;
+    this.isOnGround = true;
+    this.isOnCeiling = false;
+    this.flightTarget = null;
+    this.state = 'bounce';
+    this.behaviorDuration = 200;
+    this.behaviorTimer = 0;
+  }
+
+  /** Walking into the side of a window can turn into climbing it. */
+  private maybeClimbWindow(previousX: number) {
+    const { width, height } = this.spriteSize;
+    const direction = Math.sign(this.velocity.vx);
+    const reach = width * 0.3;
+    const lead = this.centerX + direction * reach;
+    const previousLead = previousX + width / 2 + direction * reach;
+    const feet = this.feetY;
+    const screenLeft = this.screenOffsetX;
+    const screenRight = this.screenOffsetX + this.screenWidth;
+
+    for (let index = 0; index < this.desktopOrder.length; index++) {
+      const win = this.desktopOrder[index];
+      if (!win || win.id === this.standingOn) continue;
+
+      const sideX = direction > 0 ? win.x : win.x + win.w;
+      const crossed = direction > 0
+        ? previousLead < sideX && lead >= sideX
+        : previousLead > sideX && lead <= sideX;
+      if (!crossed) continue;
+      // The window has to rise well above him and reach down to his body.
+      if (win.y > feet - height * 0.8 || win.y + win.h < feet - height * 0.4) continue;
+      // There has to be room beside it to hang on without leaving the screen.
+      if (direction > 0 ? sideX - width < screenLeft : sideX + width > screenRight) continue;
+      if (this.isHiddenBehind(index, sideX, feet - height / 2)) continue;
+      // And a top to climb out onto.
+      if (!this.ledges.some((l) => l.windowId === win.id)) continue;
+
+      if (Math.random() < WINDOW_CLIMB_CHANCE) this.startWindowClimb(win, direction > 0 ? 'left' : 'right');
+      return;
+    }
+  }
+
+  /** True when a window in front of `desktopOrder[index]` covers the point. */
+  private isHiddenBehind(index: number, x: number, y: number): boolean {
+    for (let front = 0; front < index; front++) {
+      const cover = this.desktopOrder[front];
+      if (cover && x >= cover.x && x <= cover.x + cover.w && y >= cover.y && y <= cover.y + cover.h) return true;
+    }
+    return false;
+  }
+
+  private startWindowClimb(win: DesktopWindow, side: 'left' | 'right') {
+    this.climbingWindow = { id: win.id, side };
+    this.standingOn = null;
+    this.isOnGround = false;
+    // Unflipped climbing frames hug the right edge of the sprite, so a window on
+    // his right means no flip.
+    this.facingRight = side === 'right';
+    this.isOnWall = side === 'left' ? 'right' : 'left';
+    this.state = 'climb_wall';
+    this.velocity = { vx: 0, vy: 0 };
+    this.behaviorDuration = 2500 + Math.random() * 3000;
+    this.behaviorTimer = 0;
+    this.pinToWindowSide(win, side);
+  }
+
+  private pinToWindowSide(win: DesktopWindow, side: 'left' | 'right') {
+    this.position.x = side === 'left' ? win.x - this.spriteSize.width : win.x + win.w;
+  }
+
+  /** Keeps him on the side he is climbing, and pulls him up onto the top once he gets there. */
+  private followWindowWall() {
+    const climb = this.climbingWindow;
+    if (!climb) return;
+    const win = this.desktopWindows.get(climb.id);
+    if (!win) {
+      this.dropFromDesktop();
+      return;
+    }
+    if (this.state !== 'climb_wall' && this.state !== 'grab_wall') {
+      // Let go on purpose (the wall behaviours include a fall).
+      this.climbingWindow = null;
+      this.isOnWall = null;
+      if (!OFF_GROUND_STATES.has(this.state)) this.state = 'fall';
+      return;
+    }
+
+    const { width, height } = this.spriteSize;
+    this.pinToWindowSide(win, climb.side);
+    this.isOnWall = climb.side === 'left' ? 'right' : 'left';
+    this.isOnGround = false;
+
+    // The window moved up and away from under his hands.
+    if (this.feetY > win.y + win.h + height * 0.5) {
+      this.dropFromDesktop();
+      return;
+    }
+    if (this.feetY > win.y) return;
+
+    const x = climb.side === 'left' ? win.x + width * 0.3 : win.x + win.w - width * 0.3;
+    const ledge = this.ledgeAt(win.id, x);
+    if (!ledge) {
+      this.dropFromDesktop();
+      return;
+    }
+    this.position.x = x - width / 2;
+    this.position.y = ledge.y - height;
+    this.climbingWindow = null;
+    this.isOnWall = null;
+    this.standingOn = win.id;
+    this.isOnGround = true;
+    this.velocity = { vx: 0, vy: 0 };
+    this.facingRight = climb.side === 'left';
+    this.state = 'stand';
+    this.behaviorDuration = 600;
+    this.behaviorTimer = 0;
+  }
+
+  /** Sometimes, instead of the usual behaviour, he sets off for another window's top. */
+  private maybeStartWindowTrip(): boolean {
+    if (this.ledges.length === 0) return false;
+    const chance = this.standingOn === null ? TRIP_CHANCE_FROM_FLOOR : TRIP_CHANCE_FROM_WINDOW;
+    if (Math.random() >= chance) return false;
+
+    const feet = this.feetY;
+    const candidates = this.ledges.filter((l) => l.windowId !== this.standingOn && feet - l.y >= TRIP_MIN_RISE);
+    const ledge = candidates[Math.floor(Math.random() * candidates.length)];
+    const win = ledge ? this.desktopWindows.get(ledge.windowId) : undefined;
+    if (!ledge || !win) return false;
+
+    const margin = Math.min(24, (ledge.right - ledge.left) / 2);
+    const x = ledge.left + margin + Math.random() * (ledge.right - ledge.left - 2 * margin);
+    const dx = x - this.centerX;
+    const rise = feet - ledge.y;
+    const trip: TripTarget = { windowId: ledge.windowId, offset: x - win.x };
+
+    if (rise <= JUMP_MAX_RISE && Math.abs(dx) <= JUMP_MAX_REACH) this.startTargetedJump(x, ledge.y);
+    else if (Math.hypot(dx, rise) >= DOOR_MIN_DISTANCE && Math.random() < DOOR_CHANCE) this.startDoorTrip(trip);
+    else this.startFlight(trip);
+    return true;
+  }
+
+  /** Where a trip target is now; its window may have moved since it was picked. */
+  private resolveTrip(target: TripTarget | null): Position | null {
+    if (!target) return null;
+    const win = this.desktopWindows.get(target.windowId);
+    if (!win) return null;
+
+    const wanted = win.x + target.offset;
+    let best: Position | null = null;
+    let bestDistance = Infinity;
+    for (const ledge of this.ledges) {
+      if (ledge.windowId !== target.windowId) continue;
+      const margin = Math.min(24, (ledge.right - ledge.left) / 2);
+      const x = Math.max(ledge.left + margin, Math.min(ledge.right - margin, wanted));
+      if (Math.abs(x - wanted) < bestDistance) {
+        best = { x, y: ledge.y };
+        bestDistance = Math.abs(x - wanted);
+      }
+    }
+    return best;
+  }
+
+  /** A jump aimed so his feet come down on the ledge at centre x `targetX`. */
+  private startTargetedJump(targetX: number, ledgeY: number) {
+    const gravity = PHYSICS.GRAVITY;
+    const headroom = ledgeY - this.spriteSize.height - this.screenOffsetY - 1;
+    const apex = this.feetY - ledgeY + Math.max(0, Math.min(JUMP_CLEARANCE, headroom));
+    const launch = -Math.ceil(Math.sqrt(2 * gravity * apex)) - gravity;
+
+    // Replay the integrator (the jump, then the fall with air drag) to learn how
+    // far one unit of horizontal speed carries him by the time he reaches the ledge.
+    let vy = launch;
+    let feet = this.feetY;
+    let drag = 1;
+    let carry = 0;
+    let falling = false;
+    for (let tick = 0; tick < 600; tick++) {
+      if (falling) {
+        vy = Math.min(vy + gravity, PHYSICS.MAX_VELOCITY);
+        drag *= 1 - PHYSICS.RESISTANCE_X;
+      } else {
+        vy += gravity;
+        falling = vy > 0;
+      }
+      feet += vy;
+      carry += drag;
+      if (falling && feet >= ledgeY) break;
+    }
+
+    const vx = (targetX - this.centerX) / Math.max(carry, 1);
+    this.standingOn = null;
+    this.isOnGround = false;
+    this.state = 'jump';
+    this.velocity = { vx, vy: launch };
+    if (vx !== 0) this.facingRight = vx > 0;
+    this.behaviorDuration = FLIGHT_TIMEOUT;
+    this.behaviorTimer = 0;
+  }
+
+  private startFlight(trip: TripTarget) {
+    this.flightTarget = trip;
+    this.standingOn = null;
+    this.isOnGround = false;
+    this.state = 'fly';
+    this.behaviorDuration = FLIGHT_TIMEOUT;
+    this.behaviorTimer = 0;
+  }
+
+  /** Take-copter flight: head for a point just above the ledge, then drop onto it. */
+  private steerFlight() {
+    this.isOnGround = false;
+    const target = this.resolveTrip(this.flightTarget);
+    if (!target || this.behaviorTimer > FLIGHT_TIMEOUT) {
+      this.flightTarget = null;
+      this.state = 'fall';
+      this.velocity = { vx: 0, vy: 0 };
+      return;
+    }
+
+    // Hovering above the top of the screen would read as grabbing the ceiling.
+    const headroom = target.y - this.spriteSize.height - this.screenOffsetY - 1;
+    const hover = Math.max(0, Math.min(FLY_HOVER, headroom));
+    const dx = target.x - this.centerX;
+    const dy = target.y - hover - this.feetY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance <= FLY_SPEED) {
+      this.velocity = { vx: dx, vy: dy };
+      this.flightTarget = null;
+      this.state = 'fall';
+      return;
+    }
+    this.velocity = { vx: (dx / distance) * FLY_SPEED, vy: (dy / distance) * FLY_SPEED };
+    if (Math.abs(dx) > 2) this.facingRight = dx > 0;
+  }
+
+  private startDoorTrip(trip: TripTarget) {
+    this.doorTrip = trip;
+    this.state = 'door_exit';
+    this.velocity = { vx: 0, vy: 0 };
+    this.behaviorDuration = oneShotDuration('door_exit');
+    this.behaviorTimer = 0;
+  }
+
+  /** Moves the Anywhere Door trip on once an animation ends. True if it used the turn. */
+  private advanceDoorTrip(): boolean {
+    if (this.state !== 'door_exit') return false;
+
+    const target = this.resolveTrip(this.doorTrip);
+    const windowId = this.doorTrip?.windowId ?? null;
+    this.doorTrip = null;
+    // With nowhere left to go he steps back out where he went in.
+    if (target && windowId !== null) {
+      this.position.x = target.x - this.spriteSize.width / 2;
+      this.position.y = target.y - this.spriteSize.height;
+      this.standingOn = windowId;
+      this.isOnGround = true;
+      this.velocity = { vx: 0, vy: 0 };
+    }
+    this.state = 'door_enter';
+    this.behaviorDuration = oneShotDuration('door_enter');
+    this.behaviorTimer = 0;
+    return true;
   }
 
   isBeingDragged(): boolean { return this.isDragging; }

@@ -8,6 +8,8 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod desktop_windows;
+
 use std::{
     borrow::Cow,
     fs,
@@ -55,6 +57,10 @@ enum UserEvent {
     Repaint,
     /// The IDE that spawned us is gone.
     ParentGone,
+    /// Other apps' windows moved, opened or closed. A JSON object literal.
+    DesktopWindows(String),
+    /// The page booted and can take the latest window snapshot.
+    PageReady,
 }
 
 /// WebView2 leaves an opaque surface over a transparent window until something
@@ -210,7 +216,22 @@ fn spawn_parent_watchdog(pid: u32, proxy: EventLoopProxy<UserEvent>) {
     });
 }
 
+/// The page defines the hook once its engine boots; anything sent earlier is
+/// dropped, which is why the latest snapshot is sent again on "ready".
+fn push_windows(webview: &wry::WebView, json: &str) {
+    let _ = webview.evaluate_script(&format!(
+        "window.__doraWindows__ && window.__doraWindows__({json})"
+    ));
+}
+
 fn main() -> wry::Result<()> {
+    // The desktop app runs this binary as a headless window probe. That has to
+    // branch off before anything below starts a GUI toolkit, or the probe would
+    // get an event loop, a window and a Dock icon it never uses.
+    if desktop_windows::cli_requested() {
+        desktop_windows::run_cli();
+    }
+
     let asset_dir = env_path("DORAEMON_ASSET_DIR").unwrap_or_else(|| {
         eprintln!("[companion] DORAEMON_ASSET_DIR is required");
         std::process::exit(2);
@@ -223,6 +244,17 @@ fn main() -> wry::Result<()> {
         .primary_monitor()
         .map(|m| m.size().to_logical::<f64>(m.scale_factor()))
         .unwrap_or(LogicalSize::new(1440.0, 900.0));
+
+    let window_space = event_loop
+        .primary_monitor()
+        .map_or(desktop_windows::LogicalSpace::NATIVE, |m| {
+            let origin = m.position();
+            desktop_windows::LogicalSpace::from_primary(
+                origin.x.into(),
+                origin.y.into(),
+                m.scale_factor(),
+            )
+        });
 
     let builder = WindowBuilder::new()
         .with_title("Doraemon")
@@ -281,16 +313,20 @@ fn main() -> wry::Result<()> {
                 Some("openIde") => {
                     let _ = ipc_proxy.send_event(UserEvent::RaiseIde);
                 }
-                // Delayed off the event loop deliberately: sleeping inside the
-                // handler would stall the message pump and prevent the very
-                // paint we are waiting to recomposite.
-                #[cfg(target_os = "windows")]
                 Some("ready") => {
-                    let nudge = ipc_proxy.clone();
-                    thread::spawn(move || {
-                        thread::sleep(REPAINT_DELAY);
-                        let _ = nudge.send_event(UserEvent::Repaint);
-                    });
+                    let _ = ipc_proxy.send_event(UserEvent::PageReady);
+
+                    // Delayed off the event loop deliberately: sleeping inside the
+                    // handler would stall the message pump and prevent the very
+                    // paint we are waiting to recomposite.
+                    #[cfg(target_os = "windows")]
+                    {
+                        let nudge = ipc_proxy.clone();
+                        thread::spawn(move || {
+                            thread::sleep(REPAINT_DELAY);
+                            let _ = nudge.send_event(UserEvent::Repaint);
+                        });
+                    }
                 }
                 _ => {}
             }
@@ -333,7 +369,14 @@ fn main() -> wry::Result<()> {
         spawn_parent_watchdog(pid, proxy.clone());
     }
 
+    let windows_proxy = proxy.clone();
+    desktop_windows::spawn_companion(window_space, move |json| {
+        windows_proxy.send_event(UserEvent::DesktopWindows(json)).is_ok()
+    });
+
     println!("[companion] mascot window ready");
+
+    let mut latest_windows: Option<String> = None;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -362,6 +405,17 @@ fn main() -> wry::Result<()> {
             Event::UserEvent(UserEvent::ParentGone) => {
                 println!("[companion] parent exited, shutting down");
                 *control_flow = ControlFlow::Exit;
+            }
+
+            Event::UserEvent(UserEvent::DesktopWindows(json)) => {
+                push_windows(&webview, &json);
+                latest_windows = Some(json);
+            }
+
+            Event::UserEvent(UserEvent::PageReady) => {
+                if let Some(json) = &latest_windows {
+                    push_windows(&webview, json);
+                }
             }
 
             _ => {}

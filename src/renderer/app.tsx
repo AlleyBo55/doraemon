@@ -5,8 +5,8 @@ import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './u
 import { useEmotion, useIdleDetection, useChat, useRandomThoughts, useExperienceSystem } from './hooks';
 import { animationStore, emotionStore } from './stores';
 import { ShimejiEngine, getAnimationForState } from './core/engine';
-import type { Position } from './core/engine';
-import { getAnimation } from './core/constants/sprites';
+import type { DesktopWindow, Position } from './core/engine';
+import { SPRITE_SIZE, getAnimation } from './core/constants/sprites';
 import { MemoryDashboard } from './pages/MemoryDashboard';
 import './styles/globals.css';
 
@@ -48,6 +48,10 @@ declare global {
       getScreenSize: () => Promise<ScreenBounds>;
       getDisplayAtPoint: (x: number, y: number) => Promise<ScreenBounds>;
       onScreenChange: (callback: (bounds: ScreenBounds) => void) => void;
+      getDesktopWindows?: () => Promise<DesktopWindow[]>;
+      onDesktopWindows?: (callback: (windows: DesktopWindow[]) => void) => void;
+      getOverlayOrigin?: () => Promise<{ x: number; y: number }>;
+      onOverlayOrigin?: (callback: (origin: { x: number; y: number }) => void) => void;
     };
   }
 }
@@ -63,7 +67,9 @@ type ActivityType = 'notification' | 'chat' | 'browser' | null;
 const ACTIVITY_PROTECTION_DURATION = 15000; // 15 seconds protection for activity messages
 
 const App = () => {
-  const [position, setPosition] = useState<Position>({ x: window.innerWidth / 2 - 64, y: window.innerHeight - 200 });
+  const [position, setPosition] = useState<Position>({ x: window.innerWidth / 2 - SPRITE_SIZE / 2, y: window.innerHeight - 200 });
+  // Screen position of the overlay's top-left corner; engine coordinates are screen coordinates.
+  const overlayOriginRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [currentFrame, setCurrentFrame] = useState('shime1.png');
   const [flip, setFlip] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -390,8 +396,15 @@ const App = () => {
       
       const engine = new ShimejiEngine(bounds.width, bounds.height, bounds.x, bounds.y);
       engineRef.current = engine;
+
+      overlayOriginRef.current = (await window.doraemon?.getOverlayOrigin?.()) ?? overlayOriginRef.current;
+      window.doraemon?.onOverlayOrigin?.((origin) => { overlayOriginRef.current = origin; });
+
+      // Other apps' windows: he stands on, rides and climbs them.
+      window.doraemon?.onDesktopWindows?.((windows) => engine.setDesktopWindows(windows));
+      engine.setDesktopWindows((await window.doraemon?.getDesktopWindows?.()) ?? []);
       
-      const startX = bounds.x + bounds.width / 2 - 64;
+      const startX = bounds.x + bounds.width / 2 - SPRITE_SIZE / 2;
       const startY = bounds.y + bounds.height - 200;
       engine.setPosition(startX, startY);
       setPosition({ x: startX, y: startY });
@@ -401,7 +414,7 @@ const App = () => {
           setPosition(pos);
           
           // Check if mascot moved to a different display
-          const newBounds = await window.doraemon?.getDisplayAtPoint(pos.x + 64, pos.y + 64);
+          const newBounds = await window.doraemon?.getDisplayAtPoint(pos.x + SPRITE_SIZE / 2, pos.y + SPRITE_SIZE / 2);
           if (newBounds) {
             const newDisplayKey = `${newBounds.x},${newBounds.y},${newBounds.width},${newBounds.height}`;
             if (newDisplayKey !== currentDisplayRef.current) {
@@ -483,7 +496,8 @@ const App = () => {
   }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (isDragging) engineRef.current?.drag(e.clientX, e.clientY);
+    const origin = overlayOriginRef.current;
+    if (isDragging) engineRef.current?.drag(e.clientX + origin.x, e.clientY + origin.y);
   }, [isDragging]);
 
   const handleMouseUp = useCallback(() => {
@@ -617,7 +631,11 @@ const App = () => {
     <MascotLayout>
       <div
         class={`fixed select-none transition-transform duration-75 ${isDragging ? 'cursor-grabbing scale-105' : 'cursor-grab'}`}
-        style={{ left: `${position.x}px`, top: `${position.y}px`, pointerEvents: 'auto' }}
+        style={{
+          left: `${position.x - overlayOriginRef.current.x}px`,
+          top: `${position.y - overlayOriginRef.current.y}px`,
+          pointerEvents: 'auto',
+        }}
         onMouseDown={handleMouseDown}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -644,8 +662,8 @@ const App = () => {
             class="pointer-events-none"
             style={{ 
               transform: actualFlip ? 'scaleX(-1)' : 'none',
-              width: '128px',
-              height: '128px',
+              width: `${SPRITE_SIZE}px`,
+              height: `${SPRITE_SIZE}px`,
             }}
             draggable={false}
           />

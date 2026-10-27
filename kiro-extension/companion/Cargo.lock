@@ -396,10 +396,14 @@ dependencies = [
 name = "doraemon-companion"
 version = "0.1.2"
 dependencies = [
+ "core-foundation-sys",
+ "core-graphics",
  "libc",
  "serde_json",
  "tao",
+ "windows-sys 0.61.2",
  "wry",
+ "x11-dl",
 ]
 
 [[package]]
