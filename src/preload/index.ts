@@ -17,6 +17,15 @@ contextBridge.exposeInMainWorld('doraemon', {
   onScreenChange: (callback: (size: { width: number; height: number; x: number; y: number }) => void) => {
     ipcRenderer.on('screen-change', (_event: IpcRendererEvent, size: { width: number; height: number; x: number; y: number }) => callback(size));
   },
+  // Other apps' windows in screen coordinates, front-to-back.
+  getDesktopWindows: () => ipcRenderer.invoke('get-desktop-windows'),
+  onDesktopWindows: (callback: (windows: { id: number; x: number; y: number; w: number; h: number }[]) => void) => {
+    ipcRenderer.on('desktop-windows', (_event: IpcRendererEvent, windows: { id: number; x: number; y: number; w: number; h: number }[]) => callback(windows));
+  },
+  getOverlayOrigin: () => ipcRenderer.invoke('get-overlay-origin'),
+  onOverlayOrigin: (callback: (origin: { x: number; y: number }) => void) => {
+    ipcRenderer.on('overlay-origin', (_event: IpcRendererEvent, origin: { x: number; y: number }) => callback(origin));
+  },
 });
 
 // Electron API (for renderer)

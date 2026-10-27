@@ -27,6 +27,14 @@ module.exports = {
     { from: 'assets', to: 'assets' },
     { from: 'browser-extension', to: 'browser-extension' },
     { from: '.env', to: '.env' },
+    // The Kiro companion binary doubles as the window probe that lets Doraemon
+    // walk on other apps' windows. Staged by `npm run build:probe`; when it is
+    // missing the app still runs, he just stays off other windows.
+    {
+      from: 'kiro-extension/bin/${platform}-${arch}',
+      to: 'bin',
+      filter: ['doraemon-companion', 'doraemon-companion.exe'],
+    },
   ],
 
   mac: {

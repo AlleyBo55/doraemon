@@ -5,6 +5,13 @@ export type SpriteAnimation = {
   useNativeSize?: boolean;
 };
 
+/**
+ * On-screen size of every frame, in CSS px. The PNGs are 2x masters (256 px),
+ * so they stay sharp on HiDPI screens. Feet sit on the bottom row of grounded
+ * frames, which is what lets him stand exactly on a window's top edge.
+ */
+export const SPRITE_SIZE = 128;
+
 export const PHYSICS = {
   GRAVITY: 2,
   RESISTANCE_X: 0.05,
@@ -314,6 +321,29 @@ export const SPRITE_ANIMATIONS: Record<string, SpriteAnimation> = {
   work_throw: {
     frames: ['shime37.png'],
     frameDelay: 500,
+    loop: false,
+  },
+
+  // ═══════════════════════════════════════════════════════════════
+  // ANYWHERE DOOR (shime38-50) - teleporting to another window's top
+  // ═══════════════════════════════════════════════════════════════
+  door_exit: {
+    frames: [
+      'shime38.png', 'shime38a.png', 'shime39.png', 'shime40.png', 'shime41.png',
+      'shime41a.png', 'shime41b.png', 'shime41c.png', 'shime41d.png', 'shime41e.png',
+      'shime41f.png', 'shime41g.png', 'shime41h.png', 'shime41i.png', 'shime41j.png',
+      'shime41k.png', 'shime41l.png', 'shime41m.png', 'shime41n.png',
+    ],
+    frameDelay: 90,
+    loop: false,
+  },
+  door_enter: {
+    // The door appears and opens, then he folds it back into his pocket.
+    frames: [
+      'shime47.png', 'shime48.png', 'shime49.png', 'shime50.png', 'shime50.png',
+      'shime46.png', 'shime45.png', 'shime44.png', 'shime43.png', 'shime42.png',
+    ],
+    frameDelay: 100,
     loop: false,
   },
 

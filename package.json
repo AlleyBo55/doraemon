@@ -43,11 +43,13 @@
     "start": "electron .",
     "test": "vitest",
     "test:run": "vitest run",
-    "pack": "electron-vite build && electron-builder --dir",
-    "dist": "electron-vite build && electron-builder",
-    "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:linux": "electron-vite build && electron-builder --linux"
+    "build:probe": "node kiro-extension/scripts/build-companion.mjs",
+    "build:sprites": "node scripts/sprites/build-sprites.mjs",
+    "pack": "npm run build:probe && electron-vite build && electron-builder --dir",
+    "dist": "npm run build:probe && electron-vite build && electron-builder",
+    "dist:mac": "npm run build:probe && electron-vite build && electron-builder --mac",
+    "dist:win": "npm run build:probe && electron-vite build && electron-builder --win",
+    "dist:linux": "npm run build:probe && electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

@@ -65,6 +65,7 @@ import {
 import { setPickerOpener } from './llm-provider/index.js';
 import { bootstrapProvider, stopKiroGateway } from './llm-provider/index.js';
 import { startExtensionBridge, stopExtensionBridge } from './extension-bridge.js';
+import { startDesktopWindowFeed, stopDesktopWindowFeed } from './desktop-windows.js';
 
 let setupWindow: BrowserWindow | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -206,6 +207,9 @@ function createMainWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  // Other apps' windows are part of the mascot's world in every mode.
+  startDesktopWindowFeed(mainWindow);
 
   // Extension companion mode: the IDE extension is the activity source and
   // drives the mascot over the command channel. None of the local watchers,
@@ -726,6 +730,14 @@ ipcMain.handle('get-screen-size', () => {
   };
 });
 
+// The overlay spans every display, so its origin is negative when a display sits
+// left of or above the primary one. The renderer subtracts it to draw the mascot
+// where the engine (in screen coordinates) says he is.
+ipcMain.handle('get-overlay-origin', () => {
+  const bounds = mainWindow?.getBounds();
+  return { x: bounds?.x ?? 0, y: bounds?.y ?? 0 };
+});
+
 ipcMain.handle('get-display-at-point', (_event, { x, y }: { x: number; y: number }) => {
   const bounds = getDisplayBoundsAtPoint(x, y);
   return {
@@ -1022,18 +1034,21 @@ app.whenReady().then(() => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('overlay-origin', { x: combinedBounds.x, y: combinedBounds.y });
   });
 
   screen.on('display-added', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('overlay-origin', { x: combinedBounds.x, y: combinedBounds.y });
   });
 
   screen.on('display-removed', () => {
     const allDisplays = screen.getAllDisplays();
     const combinedBounds = getCombinedDisplayBounds(allDisplays);
     mainWindow?.setBounds(combinedBounds);
+    mainWindow?.webContents.send('overlay-origin', { x: combinedBounds.x, y: combinedBounds.y });
   });
 });
 
@@ -1041,6 +1056,7 @@ app.on('before-quit', async () => {
   console.log('[Main] Graceful shutdown starting...');
 
   stopExtensionBridge();
+  stopDesktopWindowFeed();
 
   try {
     const { stopNotificationWatcher } = await import('./watchers/index.js');

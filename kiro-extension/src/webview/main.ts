@@ -3,7 +3,7 @@ import {
   getAnimationForState,
   type Position,
 } from '../../../src/renderer/core/engine/shimeji';
-import { getAnimation } from '../../../src/renderer/core/constants/sprites';
+import { SPRITE_SIZE, getAnimation } from '../../../src/renderer/core/constants/sprites';
 import type { HostMessage, WebviewMessage } from '../protocol';
 
 declare function acquireVsCodeApi(): { postMessage(message: WebviewMessage): void };
@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-const SPRITE_PX = 128;
+const SPRITE_PX = SPRITE_SIZE;
 // The engine reserves 178px of vertical space (sprite + ground margin), so give
 // it a floor even when the panel is squeezed very short.
 const MIN_STAGE_HEIGHT = 240;

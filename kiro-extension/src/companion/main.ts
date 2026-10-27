@@ -1,9 +1,10 @@
 import {
   ShimejiEngine,
   getAnimationForState,
+  type DesktopWindow,
   type Position,
 } from '../../../src/renderer/core/engine/shimeji';
-import { getAnimation } from '../../../src/renderer/core/constants/sprites';
+import { SPRITE_SIZE, getAnimation } from '../../../src/renderer/core/constants/sprites';
 import type { EmotionType } from '../protocol';
 
 /**
@@ -28,11 +29,13 @@ declare global {
   interface Window {
     __DORA__?: Boot;
     __doraCommand__?: (raw: string) => void;
+    /** Rust pushes other apps' windows here, front-to-back, in the engine's logical px. */
+    __doraWindows__?: (payload: { windows?: DesktopWindow[] }) => void;
     ipc?: { postMessage(message: string): void };
   }
 }
 
-const SPRITE_PX = 128;
+const SPRITE_PX = SPRITE_SIZE;
 /*
  * Origin-relative on purpose. wry serves custom protocols under a different
  * origin per platform: `dora://localhost` on macOS and Linux, but
@@ -211,6 +214,13 @@ window.addEventListener('mouseup', () => {
     movedDistance < POKE_MAX_DISTANCE && Date.now() - pressStartedAt < POKE_MAX_DURATION_MS;
   if (wasPoke) send({ type: 'poked' });
 });
+
+/* ── other apps' windows, so he can stand on and climb them ────────────── */
+
+// Defined before "ready" is posted: Rust re-sends the latest snapshot on ready.
+window.__doraWindows__ = (payload): void => {
+  engine.setDesktopWindows(Array.isArray(payload?.windows) ? payload.windows : []);
+};
 
 /* ── clicking the bubble brings the IDE forward ────────────────────────── */
 

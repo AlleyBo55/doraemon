@@ -35,7 +35,8 @@ body {
   left: 0;
   width: var(--dora-sprite);
   height: var(--dora-sprite);
-  image-rendering: -webkit-optimize-contrast;
+  /* Frames are 2x masters: smooth filtering keeps them clean when a 1x screen scales them down. */
+  image-rendering: auto;
   cursor: grab;
   user-select: none;
   -webkit-user-drag: none;
