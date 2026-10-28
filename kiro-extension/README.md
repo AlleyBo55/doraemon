@@ -351,6 +351,7 @@ change.
 | All 33 signals | verified | yes | yes | yes |
 | Desktop binary | **verified** | CI-built | CI-built | CI-built |
 | Desktop rendering | **verified** | needs field validation | renders; 0.1.2 transparency fix needs field validation | renders; 0.1.2 transparency fix needs field validation |
+| Walking on windows | **verified** | CI-built | CI-built, needs field validation | X11 only; CI-built, needs field validation |
 
 Sidebar and window mode use editor APIs and behave identically everywhere.
 Activity detection does too.
