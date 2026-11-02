@@ -33,7 +33,12 @@ In desktop mode, every app window on your screen is part of his world now.
 
 - **Stands on title bars.** Drop him above a window and he lands on its top
   edge, then walks along it. At the end he turns back or steps off.
-- **Rides along.** Drag the window he is on, Kiro included, and he moves with it.
+- **Follows the active window.** Switch apps and he often heads for the window
+  you are now using, Kiro included.
+- **Hangs from maximised windows.** A window right under the menu bar leaves no
+  room to stand on, so he hangs from its top edge with the Take-copter instead.
+  Drag him to the top of a window and let go, and he grabs it.
+- **Rides along.** Drag the window he is on or hanging from and he moves with it.
 - **Falls when the floor goes.** Close or minimise that window, or cover his spot
   with another one, and he drops to whatever is below.
 - **Climbs.** Walking into a window's side, he may climb it and pull himself up
@@ -351,6 +356,7 @@ change.
 | All 33 signals | verified | yes | yes | yes |
 | Desktop binary | **verified** | CI-built | CI-built | CI-built |
 | Desktop rendering | **verified** | needs field validation | renders; 0.1.2 transparency fix needs field validation | renders; 0.1.2 transparency fix needs field validation |
+| Walking on windows | **verified** | CI-built | CI-built, needs field validation | X11 only; CI-built, needs field validation |
 
 Sidebar and window mode use editor APIs and behave identically everywhere.
 Activity detection does too.
@@ -388,8 +394,9 @@ session for desktop walking.
 **Window walking is tested on macOS only so far.** The Windows and X11 window
 probes compile in CI but still need testing on real machines. On Wayland only
 XWayland apps are visible to him. He stands only on top edges at least 128 px
-below the top of the screen, so a maximised window has no room for him, and
-Mission Control briefly moves every window under him.
+below the top of the screen and hangs from higher ones. He can't press buttons
+or type in other apps, he doesn't appear over full-screen apps, and Mission
+Control briefly moves every window under him.
 
 **Approve-in-bubble is not implemented.** By choice, explained above.
 

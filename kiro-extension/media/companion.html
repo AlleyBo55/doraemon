@@ -71,6 +71,14 @@
       border-top: 6px solid rgba(28, 28, 32, 0.94);
     }
 
+    /* Near the top of the screen there is no room above him, so the bubble hangs below. */
+    .bubble.below::after {
+      top: -5px;
+      bottom: auto;
+      border-top: none;
+      border-bottom: 6px solid rgba(28, 28, 32, 0.94);
+    }
+
     .bubble[hidden] { display: none; }
   </style>
 </head>

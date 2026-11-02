@@ -1,6 +1,7 @@
 import {
   ShimejiEngine,
   getAnimationForState,
+  overridesPinnedAnimation,
   type DesktopWindow,
   type Position,
 } from '../../../src/renderer/core/engine/shimeji';
@@ -70,8 +71,16 @@ const bubble = requireElement<HTMLDivElement>('bubble');
 // Where the sprite sits inside our little window: centred, near the bottom.
 const SPRITE_OFFSET_X = (boot.winW - SPRITE_PX) / 2;
 const SPRITE_OFFSET_Y = boot.winH - SPRITE_PX;
+const BUBBLE_GAP = 6;
 
-const engine = new ShimejiEngine(boot.screenW, boot.screenH);
+/*
+ * macOS keeps windows below the menu bar, so the window cannot follow him all
+ * the way up. The engine's ceiling is put under the menu bar too, and near the
+ * top the sprite moves up inside the stopped window instead.
+ */
+const screenTop = Math.max(0, (window.screen as Screen & { availTop?: number }).availTop ?? 0);
+
+const engine = new ShimejiEngine(boot.screenW, boot.screenH - screenTop, 0, screenTop);
 
 let currentAnimation = 'idle';
 let frameIndex = 0;
@@ -80,11 +89,13 @@ let lastFrameTime = 0;
 let flipped = false;
 let isDragging = false;
 let animationLockUntil = 0;
+let pinnedAnimation: string | null = null;
 let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Last window position we asked Rust for, so pointer maths can go global. */
 let windowX = 0;
 let windowY = 0;
+let spriteTop = -1;
 
 function setAnimation(name: string): void {
   if (name === currentAnimation) return;
@@ -94,10 +105,25 @@ function setAnimation(name: string): void {
   frameTimer = 0;
 }
 
+/** Puts the sprite `top` px down the window, with the bubble above it, or below when there is no room. */
+function layoutSprite(top: number): void {
+  sprite.style.top = `${top}px`;
+  sprite.style.bottom = 'auto';
+  const below = top < SPRITE_OFFSET_Y / 2;
+  bubble.classList.toggle('below', below);
+  bubble.style.top = below ? `${top + SPRITE_PX + BUBBLE_GAP}px` : 'auto';
+  bubble.style.bottom = below ? 'auto' : `${boot.winH - top + BUBBLE_GAP}px`;
+}
+
 /** Converts a mascot position into a window position and asks Rust to move. */
 function placeWindow(position: Position): void {
   const x = Math.round(position.x - SPRITE_OFFSET_X);
-  const y = Math.round(position.y - SPRITE_OFFSET_Y);
+  const y = Math.max(screenTop, Math.round(position.y - SPRITE_OFFSET_Y));
+  const top = Math.round(position.y) - y;
+  if (top !== spriteTop) {
+    spriteTop = top;
+    layoutSprite(top);
+  }
   if (x === windowX && y === windowY) return;
   windowX = x;
   windowY = y;
@@ -109,8 +135,10 @@ engine.setCallbacks(
   (state, _frame, shouldFlip) => {
     flipped = shouldFlip;
     sprite.style.transform = flipped ? 'scaleX(-1)' : 'none';
-    if (!isDragging && Date.now() < animationLockUntil) return;
-    setAnimation(getAnimationForState(state));
+    // A reaction animation owns the sprite until it expires, except while he
+    // travels or hangs off something, or is being dragged.
+    const pinned = !isDragging && Date.now() < animationLockUntil ? pinnedAnimation : null;
+    setAnimation(pinned && !overridesPinnedAnimation(state) ? pinned : getAnimationForState(state));
   }
 );
 
@@ -164,8 +192,10 @@ window.__doraCommand__ = (raw: string): void => {
 
   if (payload.emotion) engine.setEmotion(payload.emotion as EmotionType);
   if (payload.animation && !isDragging) {
-    setAnimation(payload.animation);
+    pinnedAnimation = payload.animation;
     animationLockUntil = Date.now() + 8000;
+    // Mid-trip it waits for the landing; the state callback picks it up then.
+    if (!overridesPinnedAnimation(engine.getState())) setAnimation(payload.animation);
   }
   showThought(payload.thought ?? null, 8000);
 };

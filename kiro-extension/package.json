@@ -1,8 +1,8 @@
 {
   "name": "doraemon-coding-companion",
   "displayName": "Doraemon Coding Companion: Kiro Desktop Pet",
-  "description": "A Shimeji-style Kiro desktop pet and AI coding companion for macOS, Windows and Linux. Doraemon reacts to code, tests, errors, Git, terminals, debugging and agent status—offline in one install.",
-  "version": "0.1.2",
+  "description": "A Shimeji-style Kiro desktop pet and AI coding companion for macOS, Windows and Linux. Doraemon stands on your app windows and reacts to code, tests, errors, Git, terminals, debugging and agent status—offline in one install.",
+  "version": "0.2.0",
   "publisher": "AlleyBo55",
   "license": "MIT",
   "author": "AlleyBo55",
