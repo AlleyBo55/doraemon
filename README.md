@@ -72,7 +72,9 @@ We built this with tears in our eyes, remembering every episode, every gadget, e
 He used to keep to the floor of your screen. Now every app window is part of his world.
 
 - 🪟 **Stands on title bars.** Drop him above a window and he lands on its top edge, then strolls along it. At the end he turns back or steps off.
-- 🚗 **Rides along.** Drag the window he is standing on and he moves with it.
+- 🎯 **Follows the active window.** Switch apps and he often heads for the window you are now using. When he wanders off on his own, he picks the active window most of the time.
+- 🚁 **Hangs from maximised windows.** A window right under the menu bar leaves no room to stand on, so he flies up and hangs from its top edge with the Take-copter instead. Drag him to the top of a window and let go, and he grabs it.
+- 🚗 **Rides along.** Drag the window he is standing on or hanging from and he moves with it.
 - 🪂 **Falls when the floor goes.** Close or minimise that window, or cover his spot with another one, and he drops to whatever is below.
 - 🧗 **Climbs.** Walking into a window's side, he may climb it and pull himself up on top.
 - 🚁 **Travels.** He hops onto low windows, flies to high ones with the Take-copter, and takes the **Anywhere Door** to far ones.
@@ -162,7 +164,7 @@ so it can ask the OS. *That is the whole reason this works.*
 - CI builds Apple Silicon Mac, Intel Mac, Windows x64 and Linux x64. macOS arm64 is verified end to end; Windows and Linux render, while the 0.1.2 transparency fix still needs field validation.
 - macOS is ad-hoc signed, not notarized. The extension detects quarantine and asks before clearing it from the bundled companion only.
 - Wayland prevents applications from positioning their own windows, so Doraemon animates in place there. X11 restores desktop walking.
-- Window walking: window detection is tested on macOS. The Windows and Linux window probes compile but still need testing on real machines. He only stands on top edges at least 128 px below the top of the screen, so a maximised window has no room for him.
+- Window walking: window detection is tested on macOS. The Windows and Linux window probes compile but still need testing on real machines. He stands only on top edges at least 128 px below the top of the screen; higher ones, like a maximised window's, he hangs from instead. He can't press buttons or type in other apps, and he doesn't appear over full-screen apps.
 - "Waiting on approval" is **inferred** from the agent going quiet, because Kiro has no such hook trigger. A slow tool looks the same from outside.
 - Approving from the bubble is deliberately not built. It would stall the agent while you're away.
 
@@ -189,7 +191,7 @@ This release adds a **local gateway tunnel** that routes every Claude call throu
 
 ### 🎭 The Living Desktop Companion
 - 🚶 **Walks, climbs, falls** — Full physics-based Shimeji behavior
-- 🪟 **Lives on your windows** — Stands on title bars, rides windows you drag, climbs their sides, and takes the Anywhere Door between them
+- 🪟 **Lives on your windows** — Stands on title bars, hangs from maximised windows, follows the window you switch to, rides windows you drag, climbs their sides, and takes the Anywhere Door between them
 - 🎭 **25+ emotions** — Rich emotional expressions with smooth transitions
 - 🎲 **Sentient behavior** — Random emotions and actions even when offline
 - 💤 **Progressive idle states** — Gets sleepy, yawns, falls asleep waiting for you

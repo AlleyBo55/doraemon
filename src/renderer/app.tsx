@@ -4,7 +4,7 @@ import { MascotLayout } from './ui/layouts';
 import { ChatBubble, NotificationBubble, EmotionIndicator, ChatInput } from './ui/components/mascot';
 import { useEmotion, useIdleDetection, useChat, useRandomThoughts, useExperienceSystem } from './hooks';
 import { animationStore, emotionStore } from './stores';
-import { ShimejiEngine, getAnimationForState } from './core/engine';
+import { ShimejiEngine, getAnimationForState, overridesPinnedAnimation } from './core/engine';
 import type { DesktopWindow, Position } from './core/engine';
 import { SPRITE_SIZE, getAnimation } from './core/constants/sprites';
 import { MemoryDashboard } from './pages/MemoryDashboard';
@@ -157,10 +157,13 @@ const App = () => {
     
     console.log('[App] Triggering mascot animation:', animation, 'for', duration, 'ms');
     
-    // Lock the animation by setting it directly and preventing engine override
-    currentAnimRef.current = animation;
-    frameIndexRef.current = 0;
-    frameTimerRef.current = 0;
+    // Lock the animation by setting it directly and preventing engine override.
+    // Mid-trip or hanging off a window it waits until he lands (see onStateChange).
+    if (!engineRef.current || !overridesPinnedAnimation(engineRef.current.getState())) {
+      currentAnimRef.current = animation;
+      frameIndexRef.current = 0;
+      frameTimerRef.current = 0;
+    }
     
     // Tell the engine to pause behavior changes AND force stationary state
     if (engineRef.current) {
@@ -425,9 +428,10 @@ const App = () => {
         },
         (state, _frame, shouldFlip) => {
           setFlip(shouldFlip);
-          if ((engine as any)._codingLock) return;
-          
-          const animName = getAnimationForState(state);
+          // A pinned coding animation plays while he is on his feet. Travelling
+          // or hanging off a window, the engine's own animation shows instead.
+          const pinned = engine._codingLock ? engine._forcedCodingState : null;
+          const animName = pinned && !overridesPinnedAnimation(state) ? pinned : getAnimationForState(state);
           if (animName !== currentAnimRef.current) {
             currentAnimRef.current = animName;
             frameIndexRef.current = 0;

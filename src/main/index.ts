@@ -98,29 +98,32 @@ function getCombinedDisplayBounds(displays: Electron.Display[]) {
 }
 
 /**
+ * The area a display gives the mascot. Its top is the work area's top, so the
+ * ceiling sits under the macOS menu bar rather than behind it, where the
+ * overlay cannot draw. The bottom stays the display's, so the floor is unchanged.
+ */
+function getMascotBounds(display: Electron.Display) {
+  const top = Math.max(display.bounds.y, display.workArea.y);
+  return {
+    x: display.bounds.x,
+    y: top,
+    width: display.bounds.width,
+    height: display.bounds.y + display.bounds.height - top,
+  };
+}
+
+/**
  * Get primary display bounds for mascot movement
  */
 function getPrimaryDisplayBounds() {
-  const primary = screen.getPrimaryDisplay();
-  return {
-    x: primary.bounds.x,
-    y: primary.bounds.y,
-    width: primary.bounds.width,
-    height: primary.bounds.height,
-  };
+  return getMascotBounds(screen.getPrimaryDisplay());
 }
 
 /**
  * Get display bounds for a given point (mascot position)
  */
 function getDisplayBoundsAtPoint(x: number, y: number) {
-  const display = screen.getDisplayNearestPoint({ x, y });
-  return {
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-  };
+  return getMascotBounds(screen.getDisplayNearestPoint({ x, y }));
 }
 
 /**
